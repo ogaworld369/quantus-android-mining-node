@@ -406,6 +406,131 @@ public final class StringsTable {
     public static final String AGO_MIN = "ago_min";
     public static final String AGO_HOUR = "ago_hour";
 
+    // Mining (v4.0.0, specification section 3). Every value is a
+    // single paragraph; numbers, file names and state words
+    // arrive as %1$s, already formatted by the caller. "Inner
+    // Hash" is the official key tool's own label and is kept
+    // untranslated in every language, as is the tool's command.
+    /** Settings section heading; also the home card's title. */
+    public static final String MINING_SECTION = "mining_section";
+    public static final String MINING_TOGGLE = "mining_toggle";
+    /** Always-visible note under the mining switch. */
+    public static final String MINING_NOTE = "mining_note";
+    /** Shown when the switch is tapped on with no inner hash saved. */
+    public static final String MINING_NEEDS_REWARDS = "mining_needs_rewards";
+    /** Title of the confirmation shown before mining is switched on. */
+    public static final String MINING_CONFIRM_TITLE = "mining_confirm_title";
+    public static final String MINING_CONFIRM_HEAT = "mining_confirm_heat";
+    public static final String MINING_CONFIRM_ROLE = "mining_confirm_role";
+    public static final String MINING_CONFIRM_PORT = "mining_confirm_port";
+    public static final String MINING_CONFIRM_RESTART = "mining_confirm_restart";
+    public static final String MINING_CONFIRM_BUTTON = "mining_confirm_button";
+    /** Settings row and editor title. "Inner Hash" is the official
+     *  tool's own label and stays untranslated. */
+    public static final String MINING_REWARDS_LABEL = "mining_rewards_label";
+    /** Row value while an inner hash is saved. The value itself is
+     *  never shown. */
+    public static final String MINING_REWARDS_SET = "mining_rewards_set";
+    public static final String MINING_REWARDS_UNSET = "mining_rewards_unset";
+    /** Editor explanation (a): where rewards go. */
+    public static final String MINING_REWARDS_INFO_DEST = "mining_rewards_info_dest";
+    /** Editor explanation (b): how to obtain an inner hash. The command
+     *  is the official node's and stays as written. */
+    public static final String MINING_REWARDS_INFO_HOW = "mining_rewards_info_how";
+    /** Editor explanation (c): where rewards can be seen. */
+    public static final String MINING_REWARDS_INFO_WALLET = "mining_rewards_info_wallet";
+    /** Editor explanation (d): a wrong value cannot be undone. */
+    public static final String MINING_REWARDS_INFO_WRONG = "mining_rewards_info_wrong";
+    /** Editor warning: only the Inner Hash belongs in the field. The
+     *  node writes this value into the header of every block it mines. */
+    public static final String MINING_REWARDS_INFO_ONLY = "mining_rewards_info_only";
+    /** Editor note: how the app itself treats the saved value. */
+    public static final String MINING_REWARDS_INFO_PRIVATE = "mining_rewards_info_private";
+    /** Input hint in the editor. */
+    public static final String MINING_REWARDS_HINT = "mining_rewards_hint";
+    /** Editor error: not 0x + 64 hex digits. */
+    public static final String MINING_REWARDS_ERR_FORMAT = "mining_rewards_err_format";
+    /** Editor error: 64 hex digits that the node itself would reject. */
+    public static final String MINING_REWARDS_ERR_CANONICAL = "mining_rewards_err_canonical";
+    /** Editor note while a value is already saved (the field always
+     *  opens empty). */
+    public static final String MINING_REWARDS_REPLACE_NOTE = "mining_rewards_replace_note";
+    public static final String MINING_REWARDS_DELETE = "mining_rewards_delete";
+    public static final String MINING_REWARDS_DELETE_NOTE = "mining_rewards_delete_note";
+    public static final String MINING_WORKERS_LABEL = "mining_workers_label";
+    public static final String MINING_WORKERS_AUTO = "mining_workers_auto";
+    /** Format: %1$s = the worker count "auto" resolves to on this
+     *  device. */
+    public static final String MINING_WORKERS_AUTO_VALUE = "mining_workers_auto_value";
+    public static final String MINING_WORKERS_NOTE = "mining_workers_note";
+    /** Format: %1$s = the worker count the running miner was started
+     *  with. */
+    public static final String MINING_WORKERS_PENDING = "mining_workers_pending";
+    public static final String MINING_STATE_LABEL = "mining_state_label";
+    public static final String MINING_STATE_OFF = "mining_state_off";
+    /** Mining is on, the node is not running. */
+    public static final String MINING_STATE_NODE_STOPPED = "mining_state_node_stopped";
+    public static final String MINING_STATE_PREPARING = "mining_state_preparing";
+    public static final String MINING_STATE_WAITING = "mining_state_waiting";
+    public static final String MINING_STATE_MINING = "mining_state_mining";
+    /** The miner is not running and something is wrong. */
+    public static final String MINING_STATE_STOPPED = "mining_state_stopped";
+    /** Format: %1$s = the miner's exit code. */
+    public static final String MINING_STATE_STOPPED_CODE = "mining_state_stopped_code";
+    /** Reason line: the node runs, but was launched without mining. */
+    public static final String MINING_REASON_RESTART_TO_ENABLE = "mining_reason_restart_to_enable";
+    /** Reason line: the node was launched with mining, the switch is
+     *  now off. */
+    public static final String MINING_REASON_RESTART_TO_DISABLE = "mining_reason_restart_to_disable";
+    /** Reason line: the saved inner hash differs from the one the node
+     *  was launched with. */
+    public static final String MINING_REASON_REWARDS_CHANGED = "mining_reason_rewards_changed";
+    public static final String MINING_REASON_NODE_STOPPED = "mining_reason_node_stopped";
+    public static final String MINING_REASON_NODE_STARTING = "mining_reason_node_starting";
+    /** Format: %1$s = the name of the file being waited for. */
+    public static final String MINING_REASON_FILES = "mining_reason_files";
+    public static final String MINING_REASON_MINER_STARTING = "mining_reason_miner_starting";
+    public static final String MINING_REASON_WAIT_SYNC = "mining_reason_wait_sync";
+    public static final String MINING_REASON_WAIT_PEERS = "mining_reason_wait_peers";
+    public static final String MINING_REASON_WAIT_JOB = "mining_reason_wait_job";
+    /** Always shown with the mining status: waiting is not a fault. */
+    public static final String MINING_WAITING_NOTE = "mining_waiting_note";
+    public static final String MINING_REASON_RETRYING = "mining_reason_retrying";
+    public static final String MINING_REASON_GAVE_UP = "mining_reason_gave_up";
+    public static final String MINING_REASON_BINARY_MISSING = "mining_reason_binary_missing";
+    public static final String MINING_REASON_START_FAILED = "mining_reason_start_failed";
+    public static final String MINING_REASON_REWARDS_INVALID = "mining_reason_rewards_invalid";
+    /** Shown when a node launched with mining did not stay up. */
+    public static final String MINING_NODE_FAILED_HINT = "mining_node_failed_hint";
+    public static final String MINING_RESTART_MINER = "mining_restart_miner";
+    public static final String MINING_RESTART_MINER_NOTE = "mining_restart_miner_note";
+    public static final String MINING_LABEL_HASHRATE = "mining_label_hashrate";
+    public static final String MINING_LABEL_JOBS = "mining_label_jobs";
+    public static final String MINING_LABEL_SUBMITTED = "mining_label_submitted";
+    public static final String MINING_LABEL_ACCEPTED = "mining_label_accepted";
+    public static final String MINING_STATS_NOTE = "mining_stats_note";
+    /** The address the node itself reports for the configured inner
+     *  hash. */
+    public static final String MINING_LABEL_ADDRESS = "mining_label_address";
+    /** What to compare the address with: the official tool's output.
+     *  The command and its "Address:" label stay as written. */
+    public static final String MINING_ADDRESS_NOTE = "mining_address_note";
+    /** Address row value until the node has reported the address. */
+    public static final String MINING_ADDRESS_PENDING = "mining_address_pending";
+    public static final String MINING_LOG_LABEL = "mining_log_label";
+    /** Format: %1$s = a mining state label. Joined to the notification
+     *  text with " · ". */
+    public static final String MINING_NOTIF_STATE = "mining_notif_state";
+    /** Reason line: the device got too hot, so the miner was stopped
+     *  for the rest of this node session (fix2). */
+    public static final String MINING_STOPPED_THERMAL = "mining_stopped_thermal";
+    /** Home footer: heading over the developer's donation address. */
+    public static final String DONATE_TITLE = "donate_title";
+    /** Home footer: one line saying donations are voluntary. */
+    public static final String DONATE_NOTE = "donate_note";
+    /** Toast shown when the donation address is copied. */
+    public static final String DONATE_COPIED = "donate_copied";
+
     /** Supported language tags, in picker order. "zh" is Simplified Chinese. */
     public static final String[] TAGS = {
             "ja", "en", "zh", "es", "hi", "ar", "ko", "ru", "fr"
@@ -900,7 +1025,78 @@ public final class StringsTable {
                 FIELD_READ_GHOST, "「24時間」では、過去24時間に記録したチェックポイントが残像として表示されます。角度は記録した時刻、明るさはその時点の接続数です。",
                 AGO_SEC, "%1$s秒前",
                 AGO_MIN, "%1$s分前",
-                AGO_HOUR, "%1$s時間前"
+                AGO_HOUR, "%1$s時間前",
+                MINING_SECTION, "マイニング",
+                MINING_TOGGLE, "この端末でマイニングする",
+                MINING_NOTE, "オンにすると、ノードをバリデータとして起動し、アプリに同梱された公式マイナーをこの端末の中で動かします。既定はオフです。オン・オフの変更は、次にノードを起動したときに反映されます。ノードが動いている場合は、ご自身で停止してから開始し直してください。",
+                MINING_NEEDS_REWARDS, "先に報酬の宛先（Inner Hash）を設定してください。",
+                MINING_CONFIRM_TITLE, "マイニングをオンにしますか",
+                MINING_CONFIRM_HEAT, "マイニングはCPUを使い続けます。端末が熱くなり、バッテリーの減りが早くなります。充電しながら、風通しのよい場所で使うことをおすすめします。",
+                MINING_CONFIRM_ROLE, "ノードはバリデータとして起動するようになります。同期と中継に加えて、ブロックの作成にも参加します。",
+                MINING_CONFIRM_PORT, "マイニング中、ノードはマイナーの接続を受けるためにUDPポート9833を開きます。同じネットワーク（Wi-Fi）内の他の機器からも、このポートに届きます。接続には、この端末の中にだけ保存される認証トークンが必要です。",
+                MINING_CONFIRM_RESTART, "この設定は、次にノードを起動したときに反映されます。アプリがノードを勝手に再起動することはありません。",
+                MINING_CONFIRM_BUTTON, "オンにする",
+                MINING_REWARDS_LABEL, "報酬の宛先（Inner Hash）",
+                MINING_REWARDS_SET, "設定済み",
+                MINING_REWARDS_UNSET, "未設定",
+                MINING_REWARDS_INFO_DEST, "マイニングの報酬は、ここで設定した Inner Hash から決まるワームホールアドレスに支払われます。",
+                MINING_REWARDS_INFO_HOW, "Inner Hash は、PC で公式ノードのコマンド「quantus-node key quantus --scheme wormhole」を実行すると表示されます。公式ウォレットのシードフレーズから求めるときは、同じコマンドに「--words」を付けて実行し、求められたらシードフレーズを入力します。シードフレーズを、このアプリに入力することはありません。",
+                MINING_REWARDS_INFO_WALLET, "報酬は、同じシードフレーズを使う公式ウォレットで確認できます。",
+                MINING_REWARDS_INFO_WRONG, "Inner Hash を間違えると、報酬はその誤った宛先に支払われ、取り戻すことはできません。保存する前に、もう一度確かめてください。",
+                MINING_REWARDS_INFO_ONLY, "入力するのは「Inner Hash」の値だけです。シードフレーズや秘密鍵は、絶対に入力しないでください。ここに入力した値は、この端末がブロックを作成したときにブロックの中に記録され、公開されます。",
+                MINING_REWARDS_INFO_PRIVATE, "保存した値は、この端末の中にだけ保存されます。アプリの画面・ログ・共有テキストには表示されません。",
+                MINING_REWARDS_HINT, "0x で始まる64桁の16進数",
+                MINING_REWARDS_ERR_FORMAT, "形式が正しくありません。「Inner Hash:」の行に表示された値（0x と64桁の16進数）をそのまま入力してください。",
+                MINING_REWARDS_ERR_CANONICAL, "この値は Inner Hash として有効ではありません。ノードはこの値では起動しません。別の値（シードやアドレスなど）を貼り付けていないか確かめてください。",
+                MINING_REWARDS_REPLACE_NOTE, "すでに値が保存されています。保存済みの値は表示されません。新しい値を保存すると置き換わります。",
+                MINING_REWARDS_DELETE, "保存した値を削除",
+                MINING_REWARDS_DELETE_NOTE, "削除すると、マイニングはオフになります。",
+                MINING_WORKERS_LABEL, "CPUワーカー数",
+                MINING_WORKERS_AUTO, "自動",
+                MINING_WORKERS_AUTO_VALUE, "自動（%1$s）",
+                MINING_WORKERS_NOTE, "数が多いほど、発熱と電力の消費が増えます。ノードのために1コアを空けておくので、実際に使う数は端末のコア数より1つ少ない数までです。",
+                MINING_WORKERS_PENDING, "マイナーの再起動で反映（実行中：%1$s）",
+                MINING_STATE_LABEL, "マイニングの状態",
+                MINING_STATE_OFF, "オフ",
+                MINING_STATE_NODE_STOPPED, "ノード停止中",
+                MINING_STATE_PREPARING, "準備中",
+                MINING_STATE_WAITING, "待機中",
+                MINING_STATE_MINING, "マイニング中",
+                MINING_STATE_STOPPED, "停止",
+                MINING_STATE_STOPPED_CODE, "停止（終了コード %1$s）",
+                MINING_REASON_RESTART_TO_ENABLE, "ノードを停止して開始し直すと、マイニングが始まります。",
+                MINING_REASON_RESTART_TO_DISABLE, "マイニングはオフに設定されています。ノードを停止して開始し直すと、マイニングが止まります。",
+                MINING_REASON_REWARDS_CHANGED, "報酬の宛先が変更されています。ノードを停止して開始し直すと、新しい宛先が使われます。",
+                MINING_REASON_NODE_STOPPED, "ノードを開始すると、マイニングの準備が始まります。",
+                MINING_REASON_NODE_STARTING, "ノードの起動を待っています。",
+                MINING_REASON_FILES, "ノードが用意するファイルを待っています（%1$s）。",
+                MINING_REASON_MINER_STARTING, "マイナーを起動しています。",
+                MINING_REASON_WAIT_SYNC, "ノードの同期が終わるのを待っています。",
+                MINING_REASON_WAIT_PEERS, "ピアとの接続を待っています。",
+                MINING_REASON_WAIT_JOB, "ノードからの仕事（ジョブ）を待っています。",
+                MINING_WAITING_NOTE, "ブロックの作成に参加できるのは、同期が完了し、ピアとつながっている間だけです。「待機中」は故障ではありません。",
+                MINING_REASON_RETRYING, "マイナーが終了しました。少し待ってから自動で起動し直します。",
+                MINING_REASON_GAVE_UP, "マイナーが繰り返し終了したため、自動での再起動をやめました。ノードは動き続けています。",
+                MINING_REASON_BINARY_MISSING, "このビルドにはマイナーが含まれていません。",
+                MINING_REASON_START_FAILED, "マイナーを起動できませんでした。",
+                MINING_REASON_REWARDS_INVALID, "保存されている Inner Hash が使えません。報酬の宛先を設定し直してください。",
+                MINING_NODE_FAILED_HINT, "マイニングをオンにした起動で、ノードが止まりました。マイニングをオフにすると、これまでと同じ方法で起動します。",
+                MINING_RESTART_MINER, "マイナーを再起動",
+                MINING_RESTART_MINER_NOTE, "マイナーだけを再起動します。ノードは止まりません。",
+                MINING_LABEL_HASHRATE, "ハッシュレート（目安）",
+                MINING_LABEL_JOBS, "受け取ったジョブ",
+                MINING_LABEL_SUBMITTED, "提出した解",
+                MINING_LABEL_ACCEPTED, "ノードが受理したブロック",
+                MINING_STATS_NOTE, "これらの数は、今回ノードを起動してからの値で、マイナーとノードのログから数えた目安です。",
+                MINING_LABEL_ADDRESS, "報酬の宛先アドレス（ノードの報告）",
+                MINING_ADDRESS_NOTE, "このアドレスが、Inner Hash を取得したときに公式ツール（quantus-node key quantus --scheme wormhole）の「Address:」の行に表示されたアドレスと同じであることを確かめてください。違う場合は、マイニングをオフにして Inner Hash を設定し直してください。",
+                MINING_ADDRESS_PENDING, "ノードの起動後に表示されます",
+                MINING_LOG_LABEL, "マイナーのログ（最新の数行）",
+                MINING_NOTIF_STATE, "マイニング：%1$s",
+                MINING_STOPPED_THERMAL, "端末の温度が高いため、マイニングを停止しました。ノードを再起動すると再開します。",
+                DONATE_TITLE, "開発者を支援",
+                DONATE_NOTE, "このアプリは無料のオープンソースです。役に立ったら、開発者への QTC の寄付を歓迎します（任意です）。",
+                DONATE_COPIED, "寄付用アドレスをコピーしました"
         );
     }
 
@@ -1239,7 +1435,78 @@ public final class StringsTable {
                 FIELD_READ_GHOST, "In \"24h\", checkpoints recorded in the last 24 hours appear as ghosts. The angle is the time of day they were recorded; the brightness is how many peers were connected then.",
                 AGO_SEC, "%1$s sec ago",
                 AGO_MIN, "%1$s min ago",
-                AGO_HOUR, "%1$s hr ago"
+                AGO_HOUR, "%1$s hr ago",
+                MINING_SECTION, "Mining",
+                MINING_TOGGLE, "Mine on this device",
+                MINING_NOTE, "When on, the node starts as a validator and the official miner bundled with this app runs on this device. Off by default. Turning this on or off takes effect the next time the node starts; if the node is running, stop it and start it again yourself.",
+                MINING_NEEDS_REWARDS, "Set the rewards destination (Inner Hash) first.",
+                MINING_CONFIRM_TITLE, "Turn mining on?",
+                MINING_CONFIRM_HEAT, "Mining keeps the CPU busy. The device gets hot and the battery drains quickly. Keeping it on a charger, somewhere with good airflow, is recommended.",
+                MINING_CONFIRM_ROLE, "The node will start as a validator: besides syncing and relaying, it takes part in producing blocks.",
+                MINING_CONFIRM_PORT, "While mining, the node opens UDP port 9833 for the miner's connection. Other devices on the same network (Wi-Fi) can also reach this port. Connecting requires an auth token that is kept only on this device.",
+                MINING_CONFIRM_RESTART, "This setting takes effect the next time the node starts. The app never restarts the node on its own.",
+                MINING_CONFIRM_BUTTON, "Turn on",
+                MINING_REWARDS_LABEL, "Rewards destination (Inner Hash)",
+                MINING_REWARDS_SET, "Set",
+                MINING_REWARDS_UNSET, "Not set",
+                MINING_REWARDS_INFO_DEST, "Mining rewards are paid to the wormhole address determined by the Inner Hash you set here.",
+                MINING_REWARDS_INFO_HOW, "To get an Inner Hash, run the official node's command \"quantus-node key quantus --scheme wormhole\" on a PC. To derive it from your official wallet's seed phrase, add \"--words\" to the same command and enter the phrase when asked. The seed phrase is never entered into this app.",
+                MINING_REWARDS_INFO_WALLET, "You can see the rewards in the official wallet that uses the same seed phrase.",
+                MINING_REWARDS_INFO_WRONG, "If the Inner Hash is wrong, rewards are paid to that wrong destination and cannot be recovered. Check it once more before saving.",
+                MINING_REWARDS_INFO_ONLY, "Enter only the \"Inner Hash\" value. Never enter a seed phrase or a secret key: the value entered here is written into every block this device produces, and becomes public.",
+                MINING_REWARDS_INFO_PRIVATE, "The saved value is stored only on this device. The app never shows it on screen, in logs or in shared text.",
+                MINING_REWARDS_HINT, "0x followed by 64 hex digits",
+                MINING_REWARDS_ERR_FORMAT, "That is not the right format. Enter the value shown on the \"Inner Hash:\" line exactly: 0x and 64 hex digits.",
+                MINING_REWARDS_ERR_CANONICAL, "This value is not a valid Inner Hash; the node would refuse to start with it. Make sure you did not paste something else, such as a seed or an address.",
+                MINING_REWARDS_REPLACE_NOTE, "A value is already saved. It is not shown. Saving a new value replaces it.",
+                MINING_REWARDS_DELETE, "Delete the saved value",
+                MINING_REWARDS_DELETE_NOTE, "Deleting it turns mining off.",
+                MINING_WORKERS_LABEL, "CPU workers",
+                MINING_WORKERS_AUTO, "Auto",
+                MINING_WORKERS_AUTO_VALUE, "Auto (%1$s)",
+                MINING_WORKERS_NOTE, "More workers mean more heat and power use. One core is always left for the node, so the number actually used never exceeds the device's core count minus one.",
+                MINING_WORKERS_PENDING, "Applies when the miner restarts (running with %1$s)",
+                MINING_STATE_LABEL, "Mining state",
+                MINING_STATE_OFF, "Off",
+                MINING_STATE_NODE_STOPPED, "Node stopped",
+                MINING_STATE_PREPARING, "Preparing",
+                MINING_STATE_WAITING, "Waiting",
+                MINING_STATE_MINING, "Mining",
+                MINING_STATE_STOPPED, "Stopped",
+                MINING_STATE_STOPPED_CODE, "Stopped (exit code %1$s)",
+                MINING_REASON_RESTART_TO_ENABLE, "Stop the node and start it again to begin mining.",
+                MINING_REASON_RESTART_TO_DISABLE, "Mining is set to off. It stops once you stop the node and start it again.",
+                MINING_REASON_REWARDS_CHANGED, "The rewards destination has been changed. The new one is used once you stop the node and start it again.",
+                MINING_REASON_NODE_STOPPED, "Start the node to begin preparing for mining.",
+                MINING_REASON_NODE_STARTING, "Waiting for the node to come up.",
+                MINING_REASON_FILES, "Waiting for a file the node provides (%1$s).",
+                MINING_REASON_MINER_STARTING, "Starting the miner.",
+                MINING_REASON_WAIT_SYNC, "Waiting for the node to finish syncing.",
+                MINING_REASON_WAIT_PEERS, "Waiting for a peer connection.",
+                MINING_REASON_WAIT_JOB, "Waiting for a job from the node.",
+                MINING_WAITING_NOTE, "The device can take part in producing blocks only while the node is synced and connected to peers. \"Waiting\" is not a fault.",
+                MINING_REASON_RETRYING, "The miner exited. It will be started again automatically after a short pause.",
+                MINING_REASON_GAVE_UP, "The miner kept exiting, so automatic restarts have stopped. The node keeps running.",
+                MINING_REASON_BINARY_MISSING, "This build does not include the miner.",
+                MINING_REASON_START_FAILED, "The miner could not be started.",
+                MINING_REASON_REWARDS_INVALID, "The saved Inner Hash cannot be used. Set the rewards destination again.",
+                MINING_NODE_FAILED_HINT, "The node stopped after a start with mining on. With mining off, it starts the way it always has.",
+                MINING_RESTART_MINER, "Restart the miner",
+                MINING_RESTART_MINER_NOTE, "Restarts only the miner. The node is not stopped.",
+                MINING_LABEL_HASHRATE, "Hashrate (estimate)",
+                MINING_LABEL_JOBS, "Jobs received",
+                MINING_LABEL_SUBMITTED, "Solutions submitted",
+                MINING_LABEL_ACCEPTED, "Blocks accepted by the node",
+                MINING_STATS_NOTE, "These numbers count from this start of the node and are estimates read from the miner's and the node's logs.",
+                MINING_LABEL_ADDRESS, "Rewards address (as reported by the node)",
+                MINING_ADDRESS_NOTE, "Check that this address is the same as the one shown on the \"Address:\" line of the official tool (quantus-node key quantus --scheme wormhole) when you got the Inner Hash. If it differs, turn mining off and set the Inner Hash again.",
+                MINING_ADDRESS_PENDING, "Shown after the node starts",
+                MINING_LOG_LABEL, "Miner log (latest lines)",
+                MINING_NOTIF_STATE, "Mining: %1$s",
+                MINING_STOPPED_THERMAL, "Mining was stopped because the device temperature is high. It resumes when the node is restarted.",
+                DONATE_TITLE, "Support the developer",
+                DONATE_NOTE, "This app is free and open source. If it is useful to you, a QTC donation to the developer is welcome — entirely voluntary.",
+                DONATE_COPIED, "Donation address copied"
         );
     }
 
@@ -1578,7 +1845,78 @@ public final class StringsTable {
                 FIELD_READ_GHOST, "在\"24小时\"视图中，过去24小时内记录的检查点会以残影显示。角度表示记录的时间，亮度表示当时的连接数。",
                 AGO_SEC, "%1$s 秒前",
                 AGO_MIN, "%1$s 分钟前",
-                AGO_HOUR, "%1$s 小时前"
+                AGO_HOUR, "%1$s 小时前",
+                MINING_SECTION, "挖矿",
+                MINING_TOGGLE, "在此设备上挖矿",
+                MINING_NOTE, "开启后，节点将以验证者身份启动，并在此设备上运行本应用内置的官方矿工程序。默认为关闭。开启或关闭将在下次启动节点时生效；如果节点正在运行，请您自行停止后重新启动。",
+                MINING_NEEDS_REWARDS, "请先设置奖励接收地址（Inner Hash）。",
+                MINING_CONFIRM_TITLE, "要开启挖矿吗？",
+                MINING_CONFIRM_HEAT, "挖矿会持续占用 CPU。设备会发热，电量消耗也会加快。建议在充电状态下、通风良好的地方使用。",
+                MINING_CONFIRM_ROLE, "节点将以验证者身份启动：除了同步和中继之外，还会参与出块。",
+                MINING_CONFIRM_PORT, "挖矿期间，节点会开放 UDP 端口 9833 以接受矿工程序的连接。同一网络（Wi-Fi）内的其他设备也可以访问此端口。连接需要仅保存在此设备上的认证令牌。",
+                MINING_CONFIRM_RESTART, "此设置将在下次启动节点时生效。应用不会擅自重启节点。",
+                MINING_CONFIRM_BUTTON, "开启",
+                MINING_REWARDS_LABEL, "奖励接收地址（Inner Hash）",
+                MINING_REWARDS_SET, "已设置",
+                MINING_REWARDS_UNSET, "未设置",
+                MINING_REWARDS_INFO_DEST, "挖矿奖励将支付到由您在此设置的 Inner Hash 所确定的虫洞（wormhole）地址。",
+                MINING_REWARDS_INFO_HOW, "在电脑上运行官方节点的命令“quantus-node key quantus --scheme wormhole”即可显示 Inner Hash。若要从官方钱包的助记词推导，请在同一命令后加上“--words”，并在提示时输入助记词。助记词绝不会输入到本应用中。",
+                MINING_REWARDS_INFO_WALLET, "您可以在使用同一助记词的官方钱包中查看奖励。",
+                MINING_REWARDS_INFO_WRONG, "如果 Inner Hash 有误，奖励将支付到该错误的地址，且无法追回。保存前请再次核对。",
+                MINING_REWARDS_INFO_ONLY, "请只输入“Inner Hash”的值。切勿输入助记词或私钥：此处输入的值会在本设备出块时写入区块并被公开。",
+                MINING_REWARDS_INFO_PRIVATE, "保存的值仅存储在此设备上。应用不会在界面、日志或分享的文本中显示它。",
+                MINING_REWARDS_HINT, "0x 开头的 64 位十六进制数",
+                MINING_REWARDS_ERR_FORMAT, "格式不正确。请原样输入“Inner Hash:”一行显示的值（0x 加 64 位十六进制数）。",
+                MINING_REWARDS_ERR_CANONICAL, "该值不是有效的 Inner Hash，节点无法使用它启动。请确认您没有粘贴其他内容（例如种子或地址）。",
+                MINING_REWARDS_REPLACE_NOTE, "已保存了一个值。已保存的值不会显示。保存新值将替换它。",
+                MINING_REWARDS_DELETE, "删除已保存的值",
+                MINING_REWARDS_DELETE_NOTE, "删除后，挖矿将关闭。",
+                MINING_WORKERS_LABEL, "CPU 工作线程数",
+                MINING_WORKERS_AUTO, "自动",
+                MINING_WORKERS_AUTO_VALUE, "自动（%1$s）",
+                MINING_WORKERS_NOTE, "线程越多，发热和耗电越大。始终为节点保留一个核心，因此实际使用的数量不会超过设备核心数减一。",
+                MINING_WORKERS_PENDING, "重启矿工程序后生效（当前运行：%1$s）",
+                MINING_STATE_LABEL, "挖矿状态",
+                MINING_STATE_OFF, "关闭",
+                MINING_STATE_NODE_STOPPED, "节点已停止",
+                MINING_STATE_PREPARING, "准备中",
+                MINING_STATE_WAITING, "等待中",
+                MINING_STATE_MINING, "挖矿中",
+                MINING_STATE_STOPPED, "已停止",
+                MINING_STATE_STOPPED_CODE, "已停止（退出代码 %1$s）",
+                MINING_REASON_RESTART_TO_ENABLE, "停止并重新启动节点后，挖矿才会开始。",
+                MINING_REASON_RESTART_TO_DISABLE, "挖矿已设置为关闭。停止并重新启动节点后，挖矿才会停止。",
+                MINING_REASON_REWARDS_CHANGED, "奖励接收地址已更改。停止并重新启动节点后，才会使用新地址。",
+                MINING_REASON_NODE_STOPPED, "启动节点后，将开始准备挖矿。",
+                MINING_REASON_NODE_STARTING, "正在等待节点启动。",
+                MINING_REASON_FILES, "正在等待节点生成的文件（%1$s）。",
+                MINING_REASON_MINER_STARTING, "正在启动矿工程序。",
+                MINING_REASON_WAIT_SYNC, "正在等待节点完成同步。",
+                MINING_REASON_WAIT_PEERS, "正在等待与对等节点建立连接。",
+                MINING_REASON_WAIT_JOB, "正在等待节点下发任务。",
+                MINING_WAITING_NOTE, "只有在节点同步完成并与对等节点保持连接时，才能参与出块。“等待中”并不是故障。",
+                MINING_REASON_RETRYING, "矿工程序已退出。稍后将自动重新启动。",
+                MINING_REASON_GAVE_UP, "矿工程序反复退出，已停止自动重启。节点仍在运行。",
+                MINING_REASON_BINARY_MISSING, "此版本不包含矿工程序。",
+                MINING_REASON_START_FAILED, "无法启动矿工程序。",
+                MINING_REASON_REWARDS_INVALID, "已保存的 Inner Hash 无法使用。请重新设置奖励接收地址。",
+                MINING_NODE_FAILED_HINT, "节点在开启挖矿的启动后停止了。关闭挖矿后，节点将按原来的方式启动。",
+                MINING_RESTART_MINER, "重启矿工程序",
+                MINING_RESTART_MINER_NOTE, "仅重启矿工程序，不会停止节点。",
+                MINING_LABEL_HASHRATE, "算力（估算）",
+                MINING_LABEL_JOBS, "已接收的任务",
+                MINING_LABEL_SUBMITTED, "已提交的解",
+                MINING_LABEL_ACCEPTED, "节点已接受的区块",
+                MINING_STATS_NOTE, "这些数值自本次启动节点起累计，是根据矿工程序和节点日志统计的估算值。",
+                MINING_LABEL_ADDRESS, "奖励地址（节点报告）",
+                MINING_ADDRESS_NOTE, "请确认此地址与您获取 Inner Hash 时官方工具（quantus-node key quantus --scheme wormhole）在“Address:”一行显示的地址一致。如果不一致，请关闭挖矿并重新设置 Inner Hash。",
+                MINING_ADDRESS_PENDING, "节点启动后显示",
+                MINING_LOG_LABEL, "矿工程序日志（最新几行）",
+                MINING_NOTIF_STATE, "挖矿：%1$s",
+                MINING_STOPPED_THERMAL, "由于设备温度过高，挖矿已停止。重启节点后将恢复挖矿。",
+                DONATE_TITLE, "支持开发者",
+                DONATE_NOTE, "本应用免费且开源。如果对您有帮助，欢迎向开发者捐赠 QTC（完全自愿）。",
+                DONATE_COPIED, "捐赠地址已复制"
         );
     }
 
@@ -1917,7 +2255,78 @@ public final class StringsTable {
                 FIELD_READ_GHOST, "En «24 h», los puntos de control registrados en las últimas 24 horas aparecen como residuos. El ángulo es la hora de registro; el brillo, cuántos pares había conectados entonces.",
                 AGO_SEC, "hace %1$s s",
                 AGO_MIN, "hace %1$s min",
-                AGO_HOUR, "hace %1$s h"
+                AGO_HOUR, "hace %1$s h",
+                MINING_SECTION, "Minería",
+                MINING_TOGGLE, "Minar en este dispositivo",
+                MINING_NOTE, "Al activarlo, el nodo se inicia como validador y el minero oficial incluido en esta app se ejecuta en este dispositivo. Desactivado por defecto. El cambio se aplica la próxima vez que se inicie el nodo; si el nodo está en marcha, detenlo y vuelve a iniciarlo tú mismo.",
+                MINING_NEEDS_REWARDS, "Configura primero el destino de las recompensas (Inner Hash).",
+                MINING_CONFIRM_TITLE, "¿Activar la minería?",
+                MINING_CONFIRM_HEAT, "La minería mantiene la CPU ocupada. El dispositivo se calienta y la batería se agota rápido. Se recomienda usarlo conectado al cargador y en un lugar bien ventilado.",
+                MINING_CONFIRM_ROLE, "El nodo se iniciará como validador: además de sincronizar y retransmitir, participará en la producción de bloques.",
+                MINING_CONFIRM_PORT, "Mientras se mina, el nodo abre el puerto UDP 9833 para la conexión del minero. Otros dispositivos de la misma red (Wi-Fi) también pueden llegar a este puerto. Para conectarse se necesita un token de autenticación que solo se guarda en este dispositivo.",
+                MINING_CONFIRM_RESTART, "Este ajuste se aplica la próxima vez que se inicie el nodo. La app nunca reinicia el nodo por su cuenta.",
+                MINING_CONFIRM_BUTTON, "Activar",
+                MINING_REWARDS_LABEL, "Destino de las recompensas (Inner Hash)",
+                MINING_REWARDS_SET, "Configurado",
+                MINING_REWARDS_UNSET, "Sin configurar",
+                MINING_REWARDS_INFO_DEST, "Las recompensas de minería se pagan a la dirección wormhole determinada por el Inner Hash que configures aquí.",
+                MINING_REWARDS_INFO_HOW, "Para obtener un Inner Hash, ejecuta en un PC el comando del nodo oficial «quantus-node key quantus --scheme wormhole». Para derivarlo de la frase semilla de tu billetera oficial, añade «--words» al mismo comando e introduce la frase cuando se te pida. La frase semilla nunca se introduce en esta app.",
+                MINING_REWARDS_INFO_WALLET, "Puedes ver las recompensas en la billetera oficial que use la misma frase semilla.",
+                MINING_REWARDS_INFO_WRONG, "Si el Inner Hash es incorrecto, las recompensas se pagan a ese destino equivocado y no se pueden recuperar. Compruébalo una vez más antes de guardar.",
+                MINING_REWARDS_INFO_ONLY, "Introduce solo el valor de «Inner Hash». Nunca introduzcas una frase semilla ni una clave secreta: el valor introducido aquí se escribe en cada bloque que produzca este dispositivo y pasa a ser público.",
+                MINING_REWARDS_INFO_PRIVATE, "El valor guardado se almacena solo en este dispositivo. La app nunca lo muestra en pantalla, en los registros ni en el texto compartido.",
+                MINING_REWARDS_HINT, "0x seguido de 64 dígitos hexadecimales",
+                MINING_REWARDS_ERR_FORMAT, "El formato no es correcto. Introduce tal cual el valor mostrado en la línea «Inner Hash:» (0x y 64 dígitos hexadecimales).",
+                MINING_REWARDS_ERR_CANONICAL, "Este valor no es un Inner Hash válido; el nodo no se iniciaría con él. Comprueba que no hayas pegado otra cosa, como una semilla o una dirección.",
+                MINING_REWARDS_REPLACE_NOTE, "Ya hay un valor guardado. No se muestra. Guardar un valor nuevo lo sustituye.",
+                MINING_REWARDS_DELETE, "Eliminar el valor guardado",
+                MINING_REWARDS_DELETE_NOTE, "Al eliminarlo, la minería se desactiva.",
+                MINING_WORKERS_LABEL, "Hilos de CPU",
+                MINING_WORKERS_AUTO, "Automático",
+                MINING_WORKERS_AUTO_VALUE, "Automático (%1$s)",
+                MINING_WORKERS_NOTE, "Cuantos más hilos, más calor y consumo. Siempre se deja un núcleo libre para el nodo, así que el número realmente usado nunca supera los núcleos del dispositivo menos uno.",
+                MINING_WORKERS_PENDING, "Se aplica al reiniciar el minero (en ejecución con %1$s)",
+                MINING_STATE_LABEL, "Estado de la minería",
+                MINING_STATE_OFF, "Desactivada",
+                MINING_STATE_NODE_STOPPED, "Nodo detenido",
+                MINING_STATE_PREPARING, "Preparando",
+                MINING_STATE_WAITING, "En espera",
+                MINING_STATE_MINING, "Minando",
+                MINING_STATE_STOPPED, "Detenida",
+                MINING_STATE_STOPPED_CODE, "Detenida (código de salida %1$s)",
+                MINING_REASON_RESTART_TO_ENABLE, "Detén el nodo y vuelve a iniciarlo para empezar a minar.",
+                MINING_REASON_RESTART_TO_DISABLE, "La minería está configurada como desactivada. Se detendrá cuando detengas el nodo y vuelvas a iniciarlo.",
+                MINING_REASON_REWARDS_CHANGED, "El destino de las recompensas ha cambiado. El nuevo se usará cuando detengas el nodo y vuelvas a iniciarlo.",
+                MINING_REASON_NODE_STOPPED, "Inicia el nodo para empezar a preparar la minería.",
+                MINING_REASON_NODE_STARTING, "Esperando a que el nodo se inicie.",
+                MINING_REASON_FILES, "Esperando un archivo que proporciona el nodo (%1$s).",
+                MINING_REASON_MINER_STARTING, "Iniciando el minero.",
+                MINING_REASON_WAIT_SYNC, "Esperando a que el nodo termine de sincronizar.",
+                MINING_REASON_WAIT_PEERS, "Esperando la conexión con pares.",
+                MINING_REASON_WAIT_JOB, "Esperando un trabajo del nodo.",
+                MINING_WAITING_NOTE, "El dispositivo solo puede participar en la producción de bloques mientras el nodo está sincronizado y conectado a pares. «En espera» no es un fallo.",
+                MINING_REASON_RETRYING, "El minero se cerró. Se volverá a iniciar automáticamente tras una breve pausa.",
+                MINING_REASON_GAVE_UP, "El minero se cerró repetidamente, así que se han detenido los reinicios automáticos. El nodo sigue funcionando.",
+                MINING_REASON_BINARY_MISSING, "Esta compilación no incluye el minero.",
+                MINING_REASON_START_FAILED, "No se pudo iniciar el minero.",
+                MINING_REASON_REWARDS_INVALID, "El Inner Hash guardado no se puede usar. Vuelve a configurar el destino de las recompensas.",
+                MINING_NODE_FAILED_HINT, "El nodo se detuvo tras un inicio con la minería activada. Con la minería desactivada, se inicia como siempre.",
+                MINING_RESTART_MINER, "Reiniciar el minero",
+                MINING_RESTART_MINER_NOTE, "Reinicia solo el minero. El nodo no se detiene.",
+                MINING_LABEL_HASHRATE, "Tasa de hash (estimada)",
+                MINING_LABEL_JOBS, "Trabajos recibidos",
+                MINING_LABEL_SUBMITTED, "Soluciones enviadas",
+                MINING_LABEL_ACCEPTED, "Bloques aceptados por el nodo",
+                MINING_STATS_NOTE, "Estas cifras cuentan desde este inicio del nodo y son estimaciones leídas de los registros del minero y del nodo.",
+                MINING_LABEL_ADDRESS, "Dirección de recompensas (según el nodo)",
+                MINING_ADDRESS_NOTE, "Comprueba que esta dirección coincide con la que mostró la herramienta oficial (quantus-node key quantus --scheme wormhole) en la línea «Address:» cuando obtuviste el Inner Hash. Si es distinta, desactiva la minería y vuelve a configurar el Inner Hash.",
+                MINING_ADDRESS_PENDING, "Se muestra tras iniciar el nodo",
+                MINING_LOG_LABEL, "Registro del minero (últimas líneas)",
+                MINING_NOTIF_STATE, "Minería: %1$s",
+                MINING_STOPPED_THERMAL, "La minería se ha detenido porque la temperatura del dispositivo es alta. Se reanudará al reiniciar el nodo.",
+                DONATE_TITLE, "Apoya al desarrollador",
+                DONATE_NOTE, "Esta aplicación es gratuita y de código abierto. Si te resulta útil, una donación en QTC al desarrollador es bienvenida, siempre voluntaria.",
+                DONATE_COPIED, "Dirección de donación copiada"
         );
     }
 
@@ -2256,7 +2665,78 @@ public final class StringsTable {
                 FIELD_READ_GHOST, "\"24 घंटे\" में, पिछले 24 घंटों में दर्ज चेकपॉइंट छाया के रूप में दिखते हैं। कोण दर्ज करने का समय है; चमक उस समय जुड़े पीयर की संख्या है।",
                 AGO_SEC, "%1$s सेकंड पहले",
                 AGO_MIN, "%1$s मिनट पहले",
-                AGO_HOUR, "%1$s घंटे पहले"
+                AGO_HOUR, "%1$s घंटे पहले",
+                MINING_SECTION, "माइनिंग",
+                MINING_TOGGLE, "इस डिवाइस पर माइनिंग करें",
+                MINING_NOTE, "चालू करने पर, नोड वैलिडेटर के रूप में शुरू होता है और इस ऐप के साथ आया आधिकारिक माइनर इसी डिवाइस पर चलता है। डिफ़ॉल्ट रूप से बंद है। चालू या बंद करने का बदलाव अगली बार नोड शुरू होने पर लागू होता है; यदि नोड चल रहा है, तो उसे स्वयं रोककर फिर से शुरू करें।",
+                MINING_NEEDS_REWARDS, "पहले इनाम का गंतव्य (Inner Hash) सेट करें।",
+                MINING_CONFIRM_TITLE, "माइनिंग चालू करें?",
+                MINING_CONFIRM_HEAT, "माइनिंग CPU को लगातार व्यस्त रखती है। डिवाइस गर्म होता है और बैटरी तेज़ी से खर्च होती है। इसे चार्जर से जोड़कर और हवादार जगह पर इस्तेमाल करने की सलाह दी जाती है।",
+                MINING_CONFIRM_ROLE, "नोड वैलिडेटर के रूप में शुरू होगा: सिंक और रिले के अलावा, यह ब्लॉक बनाने में भी भाग लेगा।",
+                MINING_CONFIRM_PORT, "माइनिंग के दौरान, नोड माइनर के कनेक्शन के लिए UDP पोर्ट 9833 खोलता है। उसी नेटवर्क (Wi-Fi) के अन्य डिवाइस भी इस पोर्ट तक पहुँच सकते हैं। कनेक्ट करने के लिए एक प्रमाणीकरण टोकन चाहिए, जो केवल इसी डिवाइस पर रखा जाता है।",
+                MINING_CONFIRM_RESTART, "यह सेटिंग अगली बार नोड शुरू होने पर लागू होगी। ऐप कभी भी अपने आप नोड को पुनः आरंभ नहीं करता।",
+                MINING_CONFIRM_BUTTON, "चालू करें",
+                MINING_REWARDS_LABEL, "इनाम का गंतव्य (Inner Hash)",
+                MINING_REWARDS_SET, "सेट है",
+                MINING_REWARDS_UNSET, "सेट नहीं है",
+                MINING_REWARDS_INFO_DEST, "माइनिंग के इनाम उस वर्महोल (wormhole) पते पर भेजे जाते हैं, जो यहाँ सेट किए गए Inner Hash से तय होता है।",
+                MINING_REWARDS_INFO_HOW, "Inner Hash पाने के लिए, PC पर आधिकारिक नोड का कमांड “quantus-node key quantus --scheme wormhole” चलाएँ। इसे अपने आधिकारिक वॉलेट के सीड फ़्रेज़ से निकालने के लिए, उसी कमांड में “--words” जोड़ें और पूछे जाने पर फ़्रेज़ दर्ज करें। सीड फ़्रेज़ इस ऐप में कभी दर्ज नहीं किया जाता।",
+                MINING_REWARDS_INFO_WALLET, "इनाम उसी सीड फ़्रेज़ वाले आधिकारिक वॉलेट में देखे जा सकते हैं।",
+                MINING_REWARDS_INFO_WRONG, "यदि Inner Hash गलत है, तो इनाम उसी गलत गंतव्य पर भेजे जाएँगे और वापस नहीं मिल सकते। सहेजने से पहले एक बार फिर जाँच लें।",
+                MINING_REWARDS_INFO_ONLY, "केवल “Inner Hash” का मान दर्ज करें। सीड फ़्रेज़ या गुप्त कुंजी कभी दर्ज न करें: यहाँ दर्ज किया गया मान इस डिवाइस द्वारा बनाए गए हर ब्लॉक में लिखा जाता है और सार्वजनिक हो जाता है।",
+                MINING_REWARDS_INFO_PRIVATE, "सहेजा गया मान केवल इसी डिवाइस पर रखा जाता है। ऐप इसे स्क्रीन, लॉग या साझा किए गए टेक्स्ट में कभी नहीं दिखाता।",
+                MINING_REWARDS_HINT, "0x के बाद 64 हेक्स अंक",
+                MINING_REWARDS_ERR_FORMAT, "प्रारूप सही नहीं है। “Inner Hash:” पंक्ति में दिखाया गया मान ज्यों का त्यों दर्ज करें (0x और 64 हेक्स अंक)।",
+                MINING_REWARDS_ERR_CANONICAL, "यह मान मान्य Inner Hash नहीं है; नोड इसके साथ शुरू नहीं होगा। जाँच लें कि आपने कुछ और (जैसे सीड या पता) तो पेस्ट नहीं किया है।",
+                MINING_REWARDS_REPLACE_NOTE, "एक मान पहले से सहेजा हुआ है। वह दिखाया नहीं जाता। नया मान सहेजने पर वह बदल जाएगा।",
+                MINING_REWARDS_DELETE, "सहेजा गया मान हटाएँ",
+                MINING_REWARDS_DELETE_NOTE, "हटाने पर माइनिंग बंद हो जाएगी।",
+                MINING_WORKERS_LABEL, "CPU वर्कर",
+                MINING_WORKERS_AUTO, "स्वचालित",
+                MINING_WORKERS_AUTO_VALUE, "स्वचालित (%1$s)",
+                MINING_WORKERS_NOTE, "जितने अधिक वर्कर, उतनी अधिक गर्मी और बिजली की खपत। नोड के लिए हमेशा एक कोर खाली रखा जाता है, इसलिए वास्तव में इस्तेमाल होने वाली संख्या डिवाइस के कोर की संख्या से एक कम तक ही होती है।",
+                MINING_WORKERS_PENDING, "माइनर के पुनः आरंभ होने पर लागू होगा (अभी %1$s के साथ चल रहा है)",
+                MINING_STATE_LABEL, "माइनिंग की स्थिति",
+                MINING_STATE_OFF, "बंद",
+                MINING_STATE_NODE_STOPPED, "नोड बंद है",
+                MINING_STATE_PREPARING, "तैयार हो रहा है",
+                MINING_STATE_WAITING, "प्रतीक्षा में",
+                MINING_STATE_MINING, "माइनिंग जारी",
+                MINING_STATE_STOPPED, "रुकी हुई",
+                MINING_STATE_STOPPED_CODE, "रुकी हुई (निकास कोड %1$s)",
+                MINING_REASON_RESTART_TO_ENABLE, "माइनिंग शुरू करने के लिए नोड को रोककर फिर से शुरू करें।",
+                MINING_REASON_RESTART_TO_DISABLE, "माइनिंग बंद पर सेट है। नोड को रोककर फिर से शुरू करने पर यह रुक जाएगी।",
+                MINING_REASON_REWARDS_CHANGED, "इनाम का गंतव्य बदल दिया गया है। नोड को रोककर फिर से शुरू करने पर नया गंतव्य इस्तेमाल होगा।",
+                MINING_REASON_NODE_STOPPED, "माइनिंग की तैयारी शुरू करने के लिए नोड शुरू करें।",
+                MINING_REASON_NODE_STARTING, "नोड के शुरू होने की प्रतीक्षा है।",
+                MINING_REASON_FILES, "नोड द्वारा बनाई जाने वाली फ़ाइल की प्रतीक्षा है (%1$s)।",
+                MINING_REASON_MINER_STARTING, "माइनर शुरू हो रहा है।",
+                MINING_REASON_WAIT_SYNC, "नोड का सिंक पूरा होने की प्रतीक्षा है।",
+                MINING_REASON_WAIT_PEERS, "पीयर से कनेक्शन की प्रतीक्षा है।",
+                MINING_REASON_WAIT_JOB, "नोड से काम (जॉब) मिलने की प्रतीक्षा है।",
+                MINING_WAITING_NOTE, "ब्लॉक बनाने में भागीदारी तभी हो सकती है जब नोड सिंक हो चुका हो और पीयर से जुड़ा हो। “प्रतीक्षा में” कोई ख़राबी नहीं है।",
+                MINING_REASON_RETRYING, "माइनर बंद हो गया। थोड़ी देर बाद यह अपने आप फिर शुरू होगा।",
+                MINING_REASON_GAVE_UP, "माइनर बार-बार बंद होता रहा, इसलिए स्वचालित पुनः आरंभ रोक दिया गया है। नोड चलता रहेगा।",
+                MINING_REASON_BINARY_MISSING, "इस बिल्ड में माइनर शामिल नहीं है।",
+                MINING_REASON_START_FAILED, "माइनर शुरू नहीं हो सका।",
+                MINING_REASON_REWARDS_INVALID, "सहेजा गया Inner Hash इस्तेमाल नहीं किया जा सकता। इनाम का गंतव्य फिर से सेट करें।",
+                MINING_NODE_FAILED_HINT, "माइनिंग चालू रखकर शुरू करने के बाद नोड रुक गया। माइनिंग बंद करने पर नोड पहले की तरह शुरू होगा।",
+                MINING_RESTART_MINER, "माइनर पुनः आरंभ करें",
+                MINING_RESTART_MINER_NOTE, "केवल माइनर पुनः आरंभ होता है। नोड नहीं रुकता।",
+                MINING_LABEL_HASHRATE, "हैशरेट (अनुमानित)",
+                MINING_LABEL_JOBS, "प्राप्त जॉब",
+                MINING_LABEL_SUBMITTED, "भेजे गए हल",
+                MINING_LABEL_ACCEPTED, "नोड द्वारा स्वीकृत ब्लॉक",
+                MINING_STATS_NOTE, "ये संख्याएँ नोड के इस प्रारंभ से गिनी गई हैं और माइनर तथा नोड के लॉग से लिए गए अनुमान हैं।",
+                MINING_LABEL_ADDRESS, "इनाम का पता (नोड के अनुसार)",
+                MINING_ADDRESS_NOTE, "जाँच लें कि यह पता वही है जो Inner Hash पाते समय आधिकारिक टूल (quantus-node key quantus --scheme wormhole) की “Address:” पंक्ति में दिखाया गया था। यदि अलग है, तो माइनिंग बंद करें और Inner Hash फिर से सेट करें।",
+                MINING_ADDRESS_PENDING, "नोड शुरू होने के बाद दिखेगा",
+                MINING_LOG_LABEL, "माइनर लॉग (नवीनतम पंक्तियाँ)",
+                MINING_NOTIF_STATE, "माइनिंग: %1$s",
+                MINING_STOPPED_THERMAL, "डिवाइस का तापमान अधिक होने के कारण माइनिंग रोक दी गई है। नोड को पुनः आरंभ करने पर यह फिर से शुरू होगी।",
+                DONATE_TITLE, "डेवलपर का समर्थन करें",
+                DONATE_NOTE, "यह ऐप मुफ़्त और ओपन सोर्स है। यदि यह आपके काम आए, तो डेवलपर को QTC दान का स्वागत है — पूरी तरह स्वैच्छिक।",
+                DONATE_COPIED, "दान पता कॉपी किया गया"
         );
     }
 
@@ -2595,7 +3075,78 @@ public final class StringsTable {
                 FIELD_READ_GHOST, "في «24 ساعة» تظهر نقاط التحقق المسجلة في آخر 24 ساعة كآثار. الزاوية هي وقت التسجيل، والسطوع هو عدد النظراء المتصلين آنذاك.",
                 AGO_SEC, "قبل %1$s ث",
                 AGO_MIN, "قبل %1$s د",
-                AGO_HOUR, "قبل %1$s س"
+                AGO_HOUR, "قبل %1$s س",
+                MINING_SECTION, "التعدين",
+                MINING_TOGGLE, "التعدين على هذا الجهاز",
+                MINING_NOTE, "عند التفعيل، تبدأ العقدة بصفتها مدقِّقًا ويعمل المعدِّن الرسمي المضمَّن في هذا التطبيق على هذا الجهاز. معطّل افتراضيًا. يسري التشغيل أو الإيقاف عند بدء العقدة في المرة القادمة؛ إذا كانت العقدة تعمل فأوقفها ثم ابدأها من جديد بنفسك.",
+                MINING_NEEDS_REWARDS, "حدِّد أولًا وجهة المكافآت (Inner Hash).",
+                MINING_CONFIRM_TITLE, "تشغيل التعدين؟",
+                MINING_CONFIRM_HEAT, "التعدين يُبقي المعالج مشغولًا باستمرار. ترتفع حرارة الجهاز وتُستنزف البطارية بسرعة. يُنصح بإبقائه موصولًا بالشاحن وفي مكان جيد التهوية.",
+                MINING_CONFIRM_ROLE, "ستبدأ العقدة بصفتها مدقِّقًا: إضافةً إلى المزامنة والترحيل، ستشارك في إنتاج الكتل.",
+                MINING_CONFIRM_PORT, "أثناء التعدين، تفتح العقدة منفذ UDP رقم 9833 لاتصال المعدِّن. يمكن للأجهزة الأخرى على الشبكة نفسها (Wi-Fi) أيضًا الوصول إلى هذا المنفذ. يتطلب الاتصال رمز مصادقة محفوظًا على هذا الجهاز فقط.",
+                MINING_CONFIRM_RESTART, "يسري هذا الإعداد عند بدء العقدة في المرة القادمة. التطبيق لا يعيد تشغيل العقدة من تلقاء نفسه أبدًا.",
+                MINING_CONFIRM_BUTTON, "تشغيل",
+                MINING_REWARDS_LABEL, "وجهة المكافآت (Inner Hash)",
+                MINING_REWARDS_SET, "تم التحديد",
+                MINING_REWARDS_UNSET, "غير محدَّدة",
+                MINING_REWARDS_INFO_DEST, "تُدفع مكافآت التعدين إلى عنوان wormhole الذي يحدِّده الـ Inner Hash الذي تضبطه هنا.",
+                MINING_REWARDS_INFO_HOW, "للحصول على Inner Hash، شغِّل على حاسوب أمر العقدة الرسمية «quantus-node key quantus --scheme wormhole». لاشتقاقه من عبارة الاسترداد لمحفظتك الرسمية، أضف «--words» إلى الأمر نفسه وأدخِل العبارة عند الطلب. عبارة الاسترداد لا تُدخَل في هذا التطبيق أبدًا.",
+                MINING_REWARDS_INFO_WALLET, "يمكنك رؤية المكافآت في المحفظة الرسمية التي تستخدم عبارة الاسترداد نفسها.",
+                MINING_REWARDS_INFO_WRONG, "إذا كان الـ Inner Hash خاطئًا، تُدفع المكافآت إلى تلك الوجهة الخاطئة ولا يمكن استردادها. تحقَّق منه مرة أخرى قبل الحفظ.",
+                MINING_REWARDS_INFO_ONLY, "أدخِل قيمة «Inner Hash» فقط. لا تُدخِل أبدًا عبارة الاسترداد أو مفتاحًا سريًّا: القيمة المُدخَلة هنا تُكتب في كل كتلة ينتجها هذا الجهاز وتصبح علنية.",
+                MINING_REWARDS_INFO_PRIVATE, "تُحفظ القيمة على هذا الجهاز فقط. لا يعرضها التطبيق أبدًا على الشاشة ولا في السجلات ولا في النص المشارَك.",
+                MINING_REWARDS_HINT, "0x متبوعًا بـ 64 خانة ست عشرية",
+                MINING_REWARDS_ERR_FORMAT, "الصيغة غير صحيحة. أدخِل القيمة الظاهرة في سطر «Inner Hash:» كما هي (0x و64 خانة ست عشرية).",
+                MINING_REWARDS_ERR_CANONICAL, "هذه القيمة ليست Inner Hash صالحًا؛ لن تبدأ العقدة بها. تأكَّد من أنك لم تلصق شيئًا آخر، مثل بذرة أو عنوان.",
+                MINING_REWARDS_REPLACE_NOTE, "توجد قيمة محفوظة بالفعل. لا يتم عرضها. حفظ قيمة جديدة يستبدلها.",
+                MINING_REWARDS_DELETE, "حذف القيمة المحفوظة",
+                MINING_REWARDS_DELETE_NOTE, "حذفها يوقف التعدين.",
+                MINING_WORKERS_LABEL, "عدد عمّال المعالج",
+                MINING_WORKERS_AUTO, "تلقائي",
+                MINING_WORKERS_AUTO_VALUE, "تلقائي (%1$s)",
+                MINING_WORKERS_NOTE, "كلما زاد العدد زادت الحرارة واستهلاك الطاقة. تُترك دائمًا نواة واحدة للعقدة، لذا لا يتجاوز العدد المستخدم فعليًّا عدد أنوية الجهاز ناقص واحد.",
+                MINING_WORKERS_PENDING, "يُطبَّق عند إعادة تشغيل المعدِّن (يعمل الآن بـ %1$s)",
+                MINING_STATE_LABEL, "حالة التعدين",
+                MINING_STATE_OFF, "إيقاف",
+                MINING_STATE_NODE_STOPPED, "العقدة متوقفة",
+                MINING_STATE_PREPARING, "جارٍ التحضير",
+                MINING_STATE_WAITING, "في الانتظار",
+                MINING_STATE_MINING, "جارٍ التعدين",
+                MINING_STATE_STOPPED, "متوقف",
+                MINING_STATE_STOPPED_CODE, "متوقف (رمز الخروج %1$s)",
+                MINING_REASON_RESTART_TO_ENABLE, "أوقف العقدة ثم ابدأها من جديد ليبدأ التعدين.",
+                MINING_REASON_RESTART_TO_DISABLE, "التعدين مضبوط على الإيقاف. سيتوقف عندما توقف العقدة ثم تبدأها من جديد.",
+                MINING_REASON_REWARDS_CHANGED, "تم تغيير وجهة المكافآت. ستُستخدم الوجهة الجديدة عندما توقف العقدة ثم تبدأها من جديد.",
+                MINING_REASON_NODE_STOPPED, "ابدأ العقدة ليبدأ التحضير للتعدين.",
+                MINING_REASON_NODE_STARTING, "في انتظار بدء العقدة.",
+                MINING_REASON_FILES, "في انتظار ملف توفّره العقدة (%1$s).",
+                MINING_REASON_MINER_STARTING, "جارٍ تشغيل المعدِّن.",
+                MINING_REASON_WAIT_SYNC, "في انتظار اكتمال مزامنة العقدة.",
+                MINING_REASON_WAIT_PEERS, "في انتظار الاتصال بالأقران.",
+                MINING_REASON_WAIT_JOB, "في انتظار مهمة من العقدة.",
+                MINING_WAITING_NOTE, "لا يمكن المشاركة في إنتاج الكتل إلا عندما تكون العقدة مُزامَنة ومتصلة بالأقران. «في الانتظار» ليس عطلًا.",
+                MINING_REASON_RETRYING, "توقّف المعدِّن. سيُعاد تشغيله تلقائيًّا بعد توقف قصير.",
+                MINING_REASON_GAVE_UP, "تكرّر توقّف المعدِّن، لذا أُوقفت إعادة التشغيل التلقائية. العقدة ما زالت تعمل.",
+                MINING_REASON_BINARY_MISSING, "هذا الإصدار لا يتضمن المعدِّن.",
+                MINING_REASON_START_FAILED, "تعذّر تشغيل المعدِّن.",
+                MINING_REASON_REWARDS_INVALID, "لا يمكن استخدام الـ Inner Hash المحفوظ. حدِّد وجهة المكافآت من جديد.",
+                MINING_NODE_FAILED_HINT, "توقّفت العقدة بعد بدء والتعدين مفعَّل. عند إيقاف التعدين تبدأ العقدة كما كانت دائمًا.",
+                MINING_RESTART_MINER, "إعادة تشغيل المعدِّن",
+                MINING_RESTART_MINER_NOTE, "يعيد تشغيل المعدِّن فقط. العقدة لا تتوقف.",
+                MINING_LABEL_HASHRATE, "معدل التجزئة (تقديري)",
+                MINING_LABEL_JOBS, "المهام المستلمة",
+                MINING_LABEL_SUBMITTED, "الحلول المُرسَلة",
+                MINING_LABEL_ACCEPTED, "الكتل التي قبلتها العقدة",
+                MINING_STATS_NOTE, "هذه الأرقام محسوبة منذ بدء العقدة هذه المرة، وهي تقديرات مأخوذة من سجلات المعدِّن والعقدة.",
+                MINING_LABEL_ADDRESS, "عنوان المكافآت (كما أفادت العقدة)",
+                MINING_ADDRESS_NOTE, "تأكَّد من أن هذا العنوان مطابق للعنوان الذي ظهر في سطر «Address:» في الأداة الرسمية (quantus-node key quantus --scheme wormhole) عند حصولك على الـ Inner Hash. إذا اختلف، أوقف التعدين وحدِّد الـ Inner Hash من جديد.",
+                MINING_ADDRESS_PENDING, "يظهر بعد بدء العقدة",
+                MINING_LOG_LABEL, "سجل المعدِّن (أحدث الأسطر)",
+                MINING_NOTIF_STATE, "التعدين: %1$s",
+                MINING_STOPPED_THERMAL, "أُوقف التعدين لأن درجة حرارة الجهاز مرتفعة. سيُستأنف عند إعادة تشغيل العقدة.",
+                DONATE_TITLE, "ادعم المطوّر",
+                DONATE_NOTE, "هذا التطبيق مجاني ومفتوح المصدر. إذا كان مفيدًا لك، فالتبرّع بـ QTC للمطوّر مرحّب به — وهو طوعي تمامًا.",
+                DONATE_COPIED, "تم نسخ عنوان التبرع"
         );
     }
 
@@ -2934,7 +3485,78 @@ public final class StringsTable {
                 FIELD_READ_GHOST, "'24시간'에서는 지난 24시간 동안 기록한 체크포인트가 잔상으로 표시됩니다. 각도는 기록한 시각, 밝기는 그 당시의 연결 수입니다.",
                 AGO_SEC, "%1$s초 전",
                 AGO_MIN, "%1$s분 전",
-                AGO_HOUR, "%1$s시간 전"
+                AGO_HOUR, "%1$s시간 전",
+                MINING_SECTION, "채굴",
+                MINING_TOGGLE, "이 기기에서 채굴하기",
+                MINING_NOTE, "켜면 노드가 검증자로 시작되고, 앱에 포함된 공식 채굴기가 이 기기에서 실행됩니다. 기본값은 꺼짐입니다. 켜기·끄기 변경은 다음에 노드를 시작할 때 반영됩니다. 노드가 실행 중이면 직접 정지한 뒤 다시 시작하세요.",
+                MINING_NEEDS_REWARDS, "먼저 보상 수령처(Inner Hash)를 설정하세요.",
+                MINING_CONFIRM_TITLE, "채굴을 켤까요?",
+                MINING_CONFIRM_HEAT, "채굴은 CPU를 계속 사용합니다. 기기가 뜨거워지고 배터리가 빨리 소모됩니다. 충전하면서 통풍이 잘되는 곳에서 사용하는 것을 권장합니다.",
+                MINING_CONFIRM_ROLE, "노드가 검증자로 시작됩니다. 동기화와 중계에 더해 블록 생성에도 참여합니다.",
+                MINING_CONFIRM_PORT, "채굴 중에는 노드가 채굴기 연결을 받기 위해 UDP 포트 9833을 엽니다. 같은 네트워크(Wi-Fi) 내의 다른 기기도 이 포트에 접근할 수 있습니다. 연결하려면 이 기기에만 보관되는 인증 토큰이 필요합니다.",
+                MINING_CONFIRM_RESTART, "이 설정은 다음에 노드를 시작할 때 반영됩니다. 앱이 임의로 노드를 재시작하는 일은 없습니다.",
+                MINING_CONFIRM_BUTTON, "켜기",
+                MINING_REWARDS_LABEL, "보상 수령처(Inner Hash)",
+                MINING_REWARDS_SET, "설정됨",
+                MINING_REWARDS_UNSET, "설정 안 됨",
+                MINING_REWARDS_INFO_DEST, "채굴 보상은 여기에서 설정한 Inner Hash로 정해지는 웜홀(wormhole) 주소로 지급됩니다.",
+                MINING_REWARDS_INFO_HOW, "Inner Hash는 PC에서 공식 노드 명령 “quantus-node key quantus --scheme wormhole”을 실행하면 표시됩니다. 공식 지갑의 시드 문구에서 구하려면 같은 명령에 “--words”를 붙여 실행하고, 요청되면 시드 문구를 입력하세요. 시드 문구는 이 앱에 입력하지 않습니다.",
+                MINING_REWARDS_INFO_WALLET, "보상은 같은 시드 문구를 사용하는 공식 지갑에서 확인할 수 있습니다.",
+                MINING_REWARDS_INFO_WRONG, "Inner Hash가 틀리면 보상은 그 잘못된 수령처로 지급되며 되찾을 수 없습니다. 저장하기 전에 한 번 더 확인하세요.",
+                MINING_REWARDS_INFO_ONLY, "“Inner Hash” 값만 입력하세요. 시드 문구나 비밀 키는 절대 입력하지 마세요. 여기에 입력한 값은 이 기기가 블록을 생성할 때 블록에 기록되어 공개됩니다.",
+                MINING_REWARDS_INFO_PRIVATE, "저장한 값은 이 기기에만 보관됩니다. 앱은 이 값을 화면, 로그, 공유 텍스트에 표시하지 않습니다.",
+                MINING_REWARDS_HINT, "0x로 시작하는 64자리 16진수",
+                MINING_REWARDS_ERR_FORMAT, "형식이 올바르지 않습니다. “Inner Hash:” 줄에 표시된 값(0x와 64자리 16진수)을 그대로 입력하세요.",
+                MINING_REWARDS_ERR_CANONICAL, "이 값은 유효한 Inner Hash가 아니며, 노드가 이 값으로는 시작되지 않습니다. 다른 값(시드나 주소 등)을 붙여 넣지 않았는지 확인하세요.",
+                MINING_REWARDS_REPLACE_NOTE, "이미 값이 저장되어 있습니다. 저장된 값은 표시되지 않습니다. 새 값을 저장하면 교체됩니다.",
+                MINING_REWARDS_DELETE, "저장한 값 삭제",
+                MINING_REWARDS_DELETE_NOTE, "삭제하면 채굴이 꺼집니다.",
+                MINING_WORKERS_LABEL, "CPU 워커 수",
+                MINING_WORKERS_AUTO, "자동",
+                MINING_WORKERS_AUTO_VALUE, "자동(%1$s)",
+                MINING_WORKERS_NOTE, "수가 많을수록 발열과 전력 소모가 커집니다. 노드를 위해 코어 하나를 항상 남겨 두므로, 실제로 사용하는 수는 기기 코어 수보다 하나 적은 수까지입니다.",
+                MINING_WORKERS_PENDING, "채굴기를 재시작하면 반영(실행 중: %1$s)",
+                MINING_STATE_LABEL, "채굴 상태",
+                MINING_STATE_OFF, "꺼짐",
+                MINING_STATE_NODE_STOPPED, "노드 정지",
+                MINING_STATE_PREPARING, "준비 중",
+                MINING_STATE_WAITING, "대기 중",
+                MINING_STATE_MINING, "채굴 중",
+                MINING_STATE_STOPPED, "정지",
+                MINING_STATE_STOPPED_CODE, "정지(종료 코드 %1$s)",
+                MINING_REASON_RESTART_TO_ENABLE, "노드를 정지한 뒤 다시 시작하면 채굴이 시작됩니다.",
+                MINING_REASON_RESTART_TO_DISABLE, "채굴이 꺼짐으로 설정되어 있습니다. 노드를 정지한 뒤 다시 시작하면 채굴이 멈춥니다.",
+                MINING_REASON_REWARDS_CHANGED, "보상 수령처가 변경되었습니다. 노드를 정지한 뒤 다시 시작하면 새 수령처가 사용됩니다.",
+                MINING_REASON_NODE_STOPPED, "노드를 시작하면 채굴 준비가 시작됩니다.",
+                MINING_REASON_NODE_STARTING, "노드가 시작되기를 기다리고 있습니다.",
+                MINING_REASON_FILES, "노드가 준비하는 파일을 기다리고 있습니다(%1$s).",
+                MINING_REASON_MINER_STARTING, "채굴기를 시작하고 있습니다.",
+                MINING_REASON_WAIT_SYNC, "노드 동기화가 끝나기를 기다리고 있습니다.",
+                MINING_REASON_WAIT_PEERS, "피어 연결을 기다리고 있습니다.",
+                MINING_REASON_WAIT_JOB, "노드의 작업을 기다리고 있습니다.",
+                MINING_WAITING_NOTE, "블록 생성에는 노드가 동기화를 마치고 피어와 연결되어 있는 동안에만 참여할 수 있습니다. “대기 중”은 고장이 아닙니다.",
+                MINING_REASON_RETRYING, "채굴기가 종료되었습니다. 잠시 후 자동으로 다시 시작합니다.",
+                MINING_REASON_GAVE_UP, "채굴기가 반복해서 종료되어 자동 재시작을 중단했습니다. 노드는 계속 실행 중입니다.",
+                MINING_REASON_BINARY_MISSING, "이 빌드에는 채굴기가 포함되어 있지 않습니다.",
+                MINING_REASON_START_FAILED, "채굴기를 시작할 수 없습니다.",
+                MINING_REASON_REWARDS_INVALID, "저장된 Inner Hash를 사용할 수 없습니다. 보상 수령처를 다시 설정하세요.",
+                MINING_NODE_FAILED_HINT, "채굴을 켠 상태로 시작한 뒤 노드가 멈췄습니다. 채굴을 끄면 이전과 같은 방식으로 시작됩니다.",
+                MINING_RESTART_MINER, "채굴기 재시작",
+                MINING_RESTART_MINER_NOTE, "채굴기만 재시작합니다. 노드는 멈추지 않습니다.",
+                MINING_LABEL_HASHRATE, "해시레이트(추정)",
+                MINING_LABEL_JOBS, "받은 작업",
+                MINING_LABEL_SUBMITTED, "제출한 해",
+                MINING_LABEL_ACCEPTED, "노드가 수락한 블록",
+                MINING_STATS_NOTE, "이 수치는 이번에 노드를 시작한 이후의 값이며, 채굴기와 노드의 로그에서 읽은 추정치입니다.",
+                MINING_LABEL_ADDRESS, "보상 주소(노드 보고)",
+                MINING_ADDRESS_NOTE, "Inner Hash를 구할 때 공식 도구(quantus-node key quantus --scheme wormhole)의 “Address:” 줄에 표시된 주소와 이 주소가 같은지 확인하세요. 다르면 채굴을 끄고 Inner Hash를 다시 설정하세요.",
+                MINING_ADDRESS_PENDING, "노드 시작 후 표시됩니다",
+                MINING_LOG_LABEL, "채굴기 로그(최근 몇 줄)",
+                MINING_NOTIF_STATE, "채굴: %1$s",
+                MINING_STOPPED_THERMAL, "기기 온도가 높아 채굴을 정지했습니다. 노드를 재시작하면 채굴이 재개됩니다.",
+                DONATE_TITLE, "개발자 후원하기",
+                DONATE_NOTE, "이 앱은 무료 오픈 소스입니다. 도움이 되셨다면 개발자에게 QTC 기부를 환영합니다(전적으로 자발적입니다).",
+                DONATE_COPIED, "기부 주소가 복사되었습니다"
         );
     }
 
@@ -3273,7 +3895,78 @@ public final class StringsTable {
                 FIELD_READ_GHOST, "В режиме «24 ч» контрольные точки за последние 24 часа показаны как следы. Угол — время записи, яркость — сколько пиров было подключено тогда.",
                 AGO_SEC, "%1$s с назад",
                 AGO_MIN, "%1$s мин назад",
-                AGO_HOUR, "%1$s ч назад"
+                AGO_HOUR, "%1$s ч назад",
+                MINING_SECTION, "Майнинг",
+                MINING_TOGGLE, "Майнить на этом устройстве",
+                MINING_NOTE, "Если включено, узел запускается как валидатор, а официальный майнер, входящий в это приложение, работает на этом устройстве. По умолчанию выключено. Включение или выключение вступает в силу при следующем запуске узла; если узел работает, остановите его и запустите снова самостоятельно.",
+                MINING_NEEDS_REWARDS, "Сначала укажите получателя вознаграждений (Inner Hash).",
+                MINING_CONFIRM_TITLE, "Включить майнинг?",
+                MINING_CONFIRM_HEAT, "Майнинг постоянно нагружает процессор. Устройство нагревается, а батарея быстро разряжается. Рекомендуется держать его на зарядке и в хорошо проветриваемом месте.",
+                MINING_CONFIRM_ROLE, "Узел будет запускаться как валидатор: помимо синхронизации и ретрансляции он участвует в создании блоков.",
+                MINING_CONFIRM_PORT, "Во время майнинга узел открывает UDP-порт 9833 для подключения майнера. Другие устройства в той же сети (Wi-Fi) также могут обращаться к этому порту. Для подключения нужен токен аутентификации, который хранится только на этом устройстве.",
+                MINING_CONFIRM_RESTART, "Эта настройка вступит в силу при следующем запуске узла. Приложение никогда не перезапускает узел само.",
+                MINING_CONFIRM_BUTTON, "Включить",
+                MINING_REWARDS_LABEL, "Получатель вознаграждений (Inner Hash)",
+                MINING_REWARDS_SET, "Задан",
+                MINING_REWARDS_UNSET, "Не задан",
+                MINING_REWARDS_INFO_DEST, "Вознаграждения за майнинг выплачиваются на wormhole-адрес, который определяется указанным здесь Inner Hash.",
+                MINING_REWARDS_INFO_HOW, "Чтобы получить Inner Hash, выполните на компьютере команду официального узла «quantus-node key quantus --scheme wormhole». Чтобы вывести его из сид-фразы вашего официального кошелька, добавьте к той же команде «--words» и введите фразу по запросу. Сид-фраза никогда не вводится в это приложение.",
+                MINING_REWARDS_INFO_WALLET, "Вознаграждения можно увидеть в официальном кошельке с той же сид-фразой.",
+                MINING_REWARDS_INFO_WRONG, "Если Inner Hash указан неверно, вознаграждения будут выплачены этому неверному получателю, и вернуть их нельзя. Проверьте его ещё раз перед сохранением.",
+                MINING_REWARDS_INFO_ONLY, "Вводите только значение «Inner Hash». Никогда не вводите сид-фразу или секретный ключ: введённое здесь значение записывается в каждый блок, созданный этим устройством, и становится публичным.",
+                MINING_REWARDS_INFO_PRIVATE, "Сохранённое значение хранится только на этом устройстве. Приложение никогда не показывает его на экране, в журналах или в тексте для отправки.",
+                MINING_REWARDS_HINT, "0x и 64 шестнадцатеричные цифры",
+                MINING_REWARDS_ERR_FORMAT, "Неверный формат. Введите значение из строки «Inner Hash:» без изменений (0x и 64 шестнадцатеричные цифры).",
+                MINING_REWARDS_ERR_CANONICAL, "Это значение не является допустимым Inner Hash; с ним узел не запустится. Убедитесь, что вы не вставили что-то другое, например сид или адрес.",
+                MINING_REWARDS_REPLACE_NOTE, "Значение уже сохранено. Оно не отображается. Сохранение нового значения заменит его.",
+                MINING_REWARDS_DELETE, "Удалить сохранённое значение",
+                MINING_REWARDS_DELETE_NOTE, "После удаления майнинг будет выключен.",
+                MINING_WORKERS_LABEL, "Потоки CPU",
+                MINING_WORKERS_AUTO, "Авто",
+                MINING_WORKERS_AUTO_VALUE, "Авто (%1$s)",
+                MINING_WORKERS_NOTE, "Чем больше потоков, тем сильнее нагрев и расход энергии. Одно ядро всегда остаётся узлу, поэтому фактически используется не больше, чем число ядер устройства минус одно.",
+                MINING_WORKERS_PENDING, "Применится при перезапуске майнера (сейчас работает с %1$s)",
+                MINING_STATE_LABEL, "Состояние майнинга",
+                MINING_STATE_OFF, "Выключен",
+                MINING_STATE_NODE_STOPPED, "Узел остановлен",
+                MINING_STATE_PREPARING, "Подготовка",
+                MINING_STATE_WAITING, "Ожидание",
+                MINING_STATE_MINING, "Идёт майнинг",
+                MINING_STATE_STOPPED, "Остановлен",
+                MINING_STATE_STOPPED_CODE, "Остановлен (код завершения %1$s)",
+                MINING_REASON_RESTART_TO_ENABLE, "Остановите узел и запустите его снова, чтобы начать майнинг.",
+                MINING_REASON_RESTART_TO_DISABLE, "Майнинг выключен в настройках. Он остановится, когда вы остановите узел и запустите его снова.",
+                MINING_REASON_REWARDS_CHANGED, "Получатель вознаграждений изменён. Новый будет использоваться после того, как вы остановите узел и запустите его снова.",
+                MINING_REASON_NODE_STOPPED, "Запустите узел, чтобы начать подготовку к майнингу.",
+                MINING_REASON_NODE_STARTING, "Ожидание запуска узла.",
+                MINING_REASON_FILES, "Ожидание файла, который создаёт узел (%1$s).",
+                MINING_REASON_MINER_STARTING, "Запуск майнера.",
+                MINING_REASON_WAIT_SYNC, "Ожидание завершения синхронизации узла.",
+                MINING_REASON_WAIT_PEERS, "Ожидание подключения к пирам.",
+                MINING_REASON_WAIT_JOB, "Ожидание задания от узла.",
+                MINING_WAITING_NOTE, "Участвовать в создании блоков можно только тогда, когда узел синхронизирован и подключён к пирам. «Ожидание» — не неисправность.",
+                MINING_REASON_RETRYING, "Майнер завершил работу. Он будет автоматически запущен снова после короткой паузы.",
+                MINING_REASON_GAVE_UP, "Майнер неоднократно завершал работу, поэтому автоматические перезапуски прекращены. Узел продолжает работать.",
+                MINING_REASON_BINARY_MISSING, "Эта сборка не содержит майнера.",
+                MINING_REASON_START_FAILED, "Не удалось запустить майнер.",
+                MINING_REASON_REWARDS_INVALID, "Сохранённый Inner Hash нельзя использовать. Укажите получателя вознаграждений заново.",
+                MINING_NODE_FAILED_HINT, "Узел остановился после запуска с включённым майнингом. С выключенным майнингом он запускается как обычно.",
+                MINING_RESTART_MINER, "Перезапустить майнер",
+                MINING_RESTART_MINER_NOTE, "Перезапускается только майнер. Узел не останавливается.",
+                MINING_LABEL_HASHRATE, "Хешрейт (оценка)",
+                MINING_LABEL_JOBS, "Получено заданий",
+                MINING_LABEL_SUBMITTED, "Отправлено решений",
+                MINING_LABEL_ACCEPTED, "Блоков принято узлом",
+                MINING_STATS_NOTE, "Эти числа считаются с текущего запуска узла и являются оценками по журналам майнера и узла.",
+                MINING_LABEL_ADDRESS, "Адрес вознаграждений (по данным узла)",
+                MINING_ADDRESS_NOTE, "Убедитесь, что этот адрес совпадает с адресом из строки «Address:», которую официальный инструмент (quantus-node key quantus --scheme wormhole) показал, когда вы получали Inner Hash. Если он отличается, выключите майнинг и укажите Inner Hash заново.",
+                MINING_ADDRESS_PENDING, "Появится после запуска узла",
+                MINING_LOG_LABEL, "Журнал майнера (последние строки)",
+                MINING_NOTIF_STATE, "Майнинг: %1$s",
+                MINING_STOPPED_THERMAL, "Майнинг остановлен из-за высокой температуры устройства. Он возобновится после перезапуска узла.",
+                DONATE_TITLE, "Поддержать разработчика",
+                DONATE_NOTE, "Это приложение бесплатное и с открытым исходным кодом. Если оно вам полезно, пожертвование в QTC разработчику приветствуется — полностью добровольно.",
+                DONATE_COPIED, "Адрес для пожертвований скопирован"
         );
     }
 
@@ -3612,7 +4305,78 @@ public final class StringsTable {
                 FIELD_READ_GHOST, "En mode « 24 h », les points de contrôle des dernières 24 heures apparaissent en traces. L'angle est l'heure d'enregistrement ; la luminosité, le nombre de pairs connectés à ce moment-là.",
                 AGO_SEC, "il y a %1$s s",
                 AGO_MIN, "il y a %1$s min",
-                AGO_HOUR, "il y a %1$s h"
+                AGO_HOUR, "il y a %1$s h",
+                MINING_SECTION, "Minage",
+                MINING_TOGGLE, "Miner sur cet appareil",
+                MINING_NOTE, "Si activé, le nœud démarre en tant que validateur et le mineur officiel fourni avec cette application s'exécute sur cet appareil. Désactivé par défaut. Le changement prend effet au prochain démarrage du nœud ; si le nœud est en cours d'exécution, arrêtez-le puis redémarrez-le vous-même.",
+                MINING_NEEDS_REWARDS, "Définissez d'abord la destination des récompenses (Inner Hash).",
+                MINING_CONFIRM_TITLE, "Activer le minage ?",
+                MINING_CONFIRM_HEAT, "Le minage sollicite le processeur en continu. L'appareil chauffe et la batterie se vide rapidement. Il est recommandé de le laisser branché sur secteur, dans un endroit bien aéré.",
+                MINING_CONFIRM_ROLE, "Le nœud démarrera en tant que validateur : en plus de synchroniser et de relayer, il participera à la production de blocs.",
+                MINING_CONFIRM_PORT, "Pendant le minage, le nœud ouvre le port UDP 9833 pour la connexion du mineur. D'autres appareils du même réseau (Wi-Fi) peuvent aussi atteindre ce port. La connexion exige un jeton d'authentification conservé uniquement sur cet appareil.",
+                MINING_CONFIRM_RESTART, "Ce réglage prend effet au prochain démarrage du nœud. L'application ne redémarre jamais le nœud d'elle-même.",
+                MINING_CONFIRM_BUTTON, "Activer",
+                MINING_REWARDS_LABEL, "Destination des récompenses (Inner Hash)",
+                MINING_REWARDS_SET, "Définie",
+                MINING_REWARDS_UNSET, "Non définie",
+                MINING_REWARDS_INFO_DEST, "Les récompenses de minage sont versées à l'adresse wormhole déterminée par l'Inner Hash défini ici.",
+                MINING_REWARDS_INFO_HOW, "Pour obtenir un Inner Hash, exécutez sur un PC la commande du nœud officiel « quantus-node key quantus --scheme wormhole ». Pour le dériver de la phrase de récupération de votre portefeuille officiel, ajoutez « --words » à la même commande et saisissez la phrase lorsqu'elle est demandée. La phrase de récupération n'est jamais saisie dans cette application.",
+                MINING_REWARDS_INFO_WALLET, "Les récompenses sont visibles dans le portefeuille officiel qui utilise la même phrase de récupération.",
+                MINING_REWARDS_INFO_WRONG, "Si l'Inner Hash est erroné, les récompenses sont versées à cette mauvaise destination et ne peuvent pas être récupérées. Vérifiez-le encore une fois avant d'enregistrer.",
+                MINING_REWARDS_INFO_ONLY, "Saisissez uniquement la valeur « Inner Hash ». Ne saisissez jamais une phrase de récupération ni une clé secrète : la valeur saisie ici est inscrite dans chaque bloc produit par cet appareil et devient publique.",
+                MINING_REWARDS_INFO_PRIVATE, "La valeur enregistrée n'est conservée que sur cet appareil. L'application ne l'affiche jamais à l'écran, dans les journaux ni dans le texte partagé.",
+                MINING_REWARDS_HINT, "0x suivi de 64 chiffres hexadécimaux",
+                MINING_REWARDS_ERR_FORMAT, "Le format est incorrect. Saisissez telle quelle la valeur affichée sur la ligne « Inner Hash: » (0x et 64 chiffres hexadécimaux).",
+                MINING_REWARDS_ERR_CANONICAL, "Cette valeur n'est pas un Inner Hash valide ; le nœud refuserait de démarrer avec elle. Vérifiez que vous n'avez pas collé autre chose, comme une graine ou une adresse.",
+                MINING_REWARDS_REPLACE_NOTE, "Une valeur est déjà enregistrée. Elle n'est pas affichée. Enregistrer une nouvelle valeur la remplace.",
+                MINING_REWARDS_DELETE, "Supprimer la valeur enregistrée",
+                MINING_REWARDS_DELETE_NOTE, "La supprimer désactive le minage.",
+                MINING_WORKERS_LABEL, "Threads CPU",
+                MINING_WORKERS_AUTO, "Auto",
+                MINING_WORKERS_AUTO_VALUE, "Auto (%1$s)",
+                MINING_WORKERS_NOTE, "Plus il y a de threads, plus l'appareil chauffe et consomme. Un cœur est toujours laissé au nœud : le nombre réellement utilisé ne dépasse jamais le nombre de cœurs de l'appareil moins un.",
+                MINING_WORKERS_PENDING, "S'applique au redémarrage du mineur (en cours avec %1$s)",
+                MINING_STATE_LABEL, "État du minage",
+                MINING_STATE_OFF, "Désactivé",
+                MINING_STATE_NODE_STOPPED, "Nœud arrêté",
+                MINING_STATE_PREPARING, "Préparation",
+                MINING_STATE_WAITING, "En attente",
+                MINING_STATE_MINING, "Minage en cours",
+                MINING_STATE_STOPPED, "Arrêté",
+                MINING_STATE_STOPPED_CODE, "Arrêté (code de sortie %1$s)",
+                MINING_REASON_RESTART_TO_ENABLE, "Arrêtez le nœud puis redémarrez-le pour commencer à miner.",
+                MINING_REASON_RESTART_TO_DISABLE, "Le minage est réglé sur désactivé. Il s'arrêtera lorsque vous arrêterez le nœud puis le redémarrerez.",
+                MINING_REASON_REWARDS_CHANGED, "La destination des récompenses a été modifiée. La nouvelle sera utilisée lorsque vous arrêterez le nœud puis le redémarrerez.",
+                MINING_REASON_NODE_STOPPED, "Démarrez le nœud pour lancer la préparation du minage.",
+                MINING_REASON_NODE_STARTING, "En attente du démarrage du nœud.",
+                MINING_REASON_FILES, "En attente d'un fichier fourni par le nœud (%1$s).",
+                MINING_REASON_MINER_STARTING, "Démarrage du mineur.",
+                MINING_REASON_WAIT_SYNC, "En attente de la fin de la synchronisation du nœud.",
+                MINING_REASON_WAIT_PEERS, "En attente d'une connexion à des pairs.",
+                MINING_REASON_WAIT_JOB, "En attente d'une tâche du nœud.",
+                MINING_WAITING_NOTE, "L'appareil ne peut participer à la production de blocs que lorsque le nœud est synchronisé et connecté à des pairs. « En attente » n'est pas une panne.",
+                MINING_REASON_RETRYING, "Le mineur s'est arrêté. Il sera relancé automatiquement après une courte pause.",
+                MINING_REASON_GAVE_UP, "Le mineur s'est arrêté à plusieurs reprises ; les redémarrages automatiques ont cessé. Le nœud continue de fonctionner.",
+                MINING_REASON_BINARY_MISSING, "Cette version ne contient pas le mineur.",
+                MINING_REASON_START_FAILED, "Impossible de démarrer le mineur.",
+                MINING_REASON_REWARDS_INVALID, "L'Inner Hash enregistré est inutilisable. Définissez à nouveau la destination des récompenses.",
+                MINING_NODE_FAILED_HINT, "Le nœud s'est arrêté après un démarrage avec le minage activé. Minage désactivé, il démarre comme il l'a toujours fait.",
+                MINING_RESTART_MINER, "Redémarrer le mineur",
+                MINING_RESTART_MINER_NOTE, "Redémarre uniquement le mineur. Le nœud n'est pas arrêté.",
+                MINING_LABEL_HASHRATE, "Taux de hachage (estimation)",
+                MINING_LABEL_JOBS, "Tâches reçues",
+                MINING_LABEL_SUBMITTED, "Solutions soumises",
+                MINING_LABEL_ACCEPTED, "Blocs acceptés par le nœud",
+                MINING_STATS_NOTE, "Ces chiffres sont comptés depuis ce démarrage du nœud et sont des estimations lues dans les journaux du mineur et du nœud.",
+                MINING_LABEL_ADDRESS, "Adresse des récompenses (indiquée par le nœud)",
+                MINING_ADDRESS_NOTE, "Vérifiez que cette adresse est identique à celle affichée sur la ligne « Address: » de l'outil officiel (quantus-node key quantus --scheme wormhole) lorsque vous avez obtenu l'Inner Hash. Si elle diffère, désactivez le minage et définissez à nouveau l'Inner Hash.",
+                MINING_ADDRESS_PENDING, "Affichée après le démarrage du nœud",
+                MINING_LOG_LABEL, "Journal du mineur (dernières lignes)",
+                MINING_NOTIF_STATE, "Minage : %1$s",
+                MINING_STOPPED_THERMAL, "Le minage a été arrêté car la température de l'appareil est élevée. Il reprendra au redémarrage du nœud.",
+                DONATE_TITLE, "Soutenir le développeur",
+                DONATE_NOTE, "Cette application est gratuite et open source. Si elle vous est utile, un don en QTC au développeur est le bienvenu — toujours volontaire.",
+                DONATE_COPIED, "Adresse de don copiée"
         );
     }
 }

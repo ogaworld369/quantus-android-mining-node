@@ -52,11 +52,25 @@ import java.util.concurrent.atomic.AtomicBoolean;
  *     notification and the on-device track record,
  *   - if the node process exits, records the exit code and stops. It does
  *     NOT restart it in a loop.
+ *   - mining (v4.0.0) is an opt-in, off by default. Only while the
+ *     user has it switched on does a launch add the validator and
+ *     miner-endpoint arguments, and only then does a second child
+ *     process — the bundled miner — run beside the node, under
+ *     {@link MinerSupervisor}. With the setting off, nothing in the
+ *     mining code adds an argument, starts a process or writes a log
+ *     line: the launch is the v3.0.1 launch. The miner never decides
+ *     anything about the node — it is started after the node and
+ *     stopped with it, and its failures stay its own.
  *
  * The app holds no wallet secrets: no wallet, no seed phrase. Its only
  * secrets stay on the device — the node's own key material in the
  * app-private directory and, with DePIN recording on, the DePIN
- * identity seed in its encrypted vault (see SECURITY.md).
+ * identity seed in its encrypted vault (see SECURITY.md). With mining
+ * on there are two more, held the same way: the rewards inner hash
+ * (app-private settings; it reaches the node as one argument and is
+ * redacted from the launch line) and the node's miner auth token (a
+ * file in the node's app-private directory, passed to the miner by
+ * path). Neither is ever logged, displayed or shared.
  */
 public class NodeService extends Service {
 
@@ -64,6 +78,12 @@ public class NodeService extends Service {
     public static final String ACTION_STOP = "app.quantusnode.node.action.STOP";
 
     private static final String NODE_LIB = "libquantus_node.so";
+    /** The bundled miner (v4.0.0), packaged the same way as the node. */
+    private static final String MINER_LIB = MiningLogic.MINER_LIB;
+    /** The miner's own bounded log, kept beside node.log. */
+    private static final String MINER_LOG_FILE_NAME = "miner.log";
+    /** See {@link MinerSupervisor.Config#markerFile}. */
+    private static final String MINER_MARKER_FILE_NAME = "miner-used.marker";
     /** The one chain this app runs; also read by the share summary. */
     static final String CHAIN_NAME = "mainnet";
     private static final String CHANNEL_ID = "node_status";
@@ -399,6 +419,19 @@ public class NodeService extends Service {
     private int sessionStopId = -1;
 
     private volatile long sessionStartElapsedMs = -1;
+
+    /**
+     * Stamp the accepted session's end (once) so the "current
+     * uptime" display freezes at the length the session actually
+     * ran instead of counting on after the stop.
+     */
+    private void markSessionEnded() {
+        NodeState st = NodeState.get();
+        if (st.sessionEndedElapsedMs < 0
+                && st.sessionAcceptedElapsedMs >= 0) {
+            st.sessionEndedElapsedMs = SystemClock.elapsedRealtime();
+        }
+    }
     private volatile long baseUptimeMs = 0;
     private volatile long lastUptimeSaveElapsedMs = 0;
     private volatile long lastAppDriversElapsedMs = 0;
@@ -470,6 +503,16 @@ public class NodeService extends Service {
     private LogSink logSink;
     private Thread workerThread;
     private Thread pollerThread;
+
+    /**
+     * The miner supervisor of the node process that is running now
+     * (v4.0.0) — null at all times unless that process was launched
+     * with mining. Read and written only under {@link #stateLock}.
+     * Every stop path detaches it there and tells it to stop; the
+     * worker does the same when it sees the node process exit, so a
+     * miner never outlives its node whichever side notices first.
+     */
+    private MinerSupervisor minerSupervisor;
 
     /**
      * The network-type watch (versionCode 28, spec B): the
@@ -720,6 +763,7 @@ public class NodeService extends Service {
             // accrual keeps its own spawn anchor, finding F-05).
             st.lastStopKind = NodeState.StopKind.NONE;
             st.sessionAcceptedElapsedMs = SystemClock.elapsedRealtime();
+            st.sessionEndedElapsedMs = -1;
             st.lastObservedBestBlock = -1;
             st.lastObservedElapsedMs = -1;
             // versionCode 28: no response yet in this session, and
@@ -735,6 +779,13 @@ public class NodeService extends Service {
             // a previous run.
             st.launchedTelemetry = null;
             st.launchedNodeName = null;
+            // v4.0.0: the mining launch snapshot follows the same
+            // rule, and no miner belongs to a session that has not
+            // launched anything yet.
+            st.launchedMining = null;
+            st.launchedMiningSkip = MiningLogic.SkipReason.NONE;
+            st.launchedRewardsTag = null;
+            st.minerView = null;
             baseUptimeMs = TrackStore.uptimeMs(this);
             // versionCode 25 (audit finding F-05): the uptime anchor
             // is NOT set here. Uptime accrues from the moment a node
@@ -797,6 +848,9 @@ public class NodeService extends Service {
         // it holds no lifecycle state, so it stops first, outside
         // the teardown lock below.
         stopNetworkWatch();
+        // v4.0.0: the thermal watch ends with the service too, even
+        // where the miner was already detached by another path.
+        unregisterAnyThermalWatch();
         // The whole teardown runs under the lifecycle lock, in B-2
         // order: clear `started` FIRST, then bump the generation, then
         // destroy the process. The worker is blocked in waitFor() and
@@ -806,11 +860,13 @@ public class NodeService extends Service {
         // With the generation bumped under the same lock, the worker's
         // own finish path is generation-stale and writes nothing (N-2).
         Process destroyedProcess = null;
+        MinerSupervisor stoppedMiner;
         synchronized (stateLock) {
             started.set(false);
             sessionGen.incrementAndGet();
             pollerOn.set(false);
             disconnectInFlightRpc();
+            stoppedMiner = takeMinerLocked();
             Process p = nodeProcess;
             if (p != null) {
                 p.destroy();
@@ -818,10 +874,13 @@ public class NodeService extends Service {
             }
             saveUptimeLocked();
             sessionStartElapsedMs = -1; // no live session any more
+            markSessionEnded();
             NodeState st = NodeState.get();
             st.status = NodeState.Status.STOPPED;
             st.serviceRunning = false;
         }
+        // v4.0.0: the miner goes with the node (null without mining).
+        stopMiner(stoppedMiner, "service destroyed");
         // versionCode 25 (audit finding F-03): the destroy above is
         // delivered immediately, as before — onDestroy runs during
         // teardown on the main thread, where a bounded wait does not
@@ -879,6 +938,9 @@ public class NodeService extends Service {
             // the system's time limit, not a failure (spec A (c)).
             markStopKindLocked(NodeState.StopKind.TIME_LIMIT);
             disconnectInFlightRpc();
+            // v4.0.0: the miner goes with the node (null without
+            // mining). requestStop() only signals; it never blocks.
+            stopMiner(takeMinerLocked(), "foreground service timed out");
             Process p = nodeProcess;
             if (p != null) {
                 p.destroy();
@@ -905,6 +967,7 @@ public class NodeService extends Service {
         // in-flight poll (P-1) nor the worker's delayed finish (N-2)
         // can write state after this stop is settled.
         Process stoppedProcess = null;
+        MinerSupervisor stoppedMiner;
         synchronized (stateLock) {
             // This STOP is the newest command the service has seen, so
             // its startId takes over as the session's stop authority
@@ -916,8 +979,10 @@ public class NodeService extends Service {
             pollerOn.set(false);
             disconnectInFlightRpc();
             stoppedProcess = nodeProcess;
+            stoppedMiner = takeMinerLocked();
             saveUptimeLocked();
             sessionStartElapsedMs = -1; // no live session any more
+            markSessionEnded();
             // versionCode 26: display classification — a user stop,
             // even when the destroyed child exits non-zero (spec A (d)).
             markStopKindLocked(NodeState.StopKind.USER);
@@ -944,9 +1009,40 @@ public class NodeService extends Service {
         // ownership is certain through its Process object — and the
         // worker's ordinary exit path then clears the reference and
         // the record, un-wedging the next start.
+        // v4.0.0: the miner is told to stop first — it is the node's
+        // client, and a miner whose node is going away has nothing
+        // left to do. Null without mining; its own bounded
+        // destroy-then-destroyForcibly runs inside the supervisor.
+        stopMiner(stoppedMiner, "node stop requested");
         if (stoppedProcess != null) {
             stoppedProcess.destroy();
             escalateAfterDestroyAsync(stoppedProcess);
+        }
+    }
+
+    /**
+     * Detach the running node's miner supervisor (v4.0.0) so the
+     * caller can stop it. Caller holds {@link #stateLock}. Returns
+     * null — and touches nothing — whenever the session runs
+     * without mining.
+     */
+    private MinerSupervisor takeMinerLocked() {
+        MinerSupervisor m = minerSupervisor;
+        if (m == null) {
+            return null;
+        }
+        minerSupervisor = null;
+        NodeState st = NodeState.get();
+        if (st.minerView == m) {
+            st.minerView = null;
+        }
+        unregisterThermalWatch(m);
+        return m;
+    }
+
+    private static void stopMiner(MinerSupervisor m, String why) {
+        if (m != null) {
+            m.requestStop(why);
         }
     }
 
@@ -1079,6 +1175,9 @@ public class NodeService extends Service {
         }
         // App-private dirs only: the node DB / keys stay under filesDir.
         new File(getFilesDir(), "node").mkdirs();
+        // v4.0.0: a no-op unless a miner has ever been started by
+        // this install AND this session will run without one.
+        reapStrayMinersIfMarked();
 
         // This session's per-attempt records, oldest first. Only this
         // worker thread appends; publication into NodeState happens
@@ -1091,11 +1190,17 @@ public class NodeService extends Service {
             long resolvedPid = -1;
             long t0 = SystemClock.elapsedRealtime();
             AttemptCapture capture = new AttemptCapture();
+            // v4.0.0: what this attempt's launch decided about mining.
+            // OFF (and no scrubber) for every launch without mining.
+            MiningLogic.LaunchPlan miningPlan = MiningLogic.LaunchPlan.OFF;
+            MiningLogic.SecretScrubber launchScrubber = null;
             try {
                 LaunchOutcome outcome = launch(bin, triedLinker, gen);
                 proc = outcome.process;
                 spawnElapsedMs = outcome.spawnElapsedMs;
                 resolvedPid = outcome.resolvedPid;
+                miningPlan = outcome.miningPlan;
+                launchScrubber = outcome.scrubber;
                 if (!outcome.pidRecorded) {
                     // Finding 4: a launch whose pid never got recorded
                     // is one a future service instance cannot wait
@@ -1306,7 +1411,27 @@ public class NodeService extends Service {
             }
             logApp("node started (" + (triedLinker ? "via linker64" : "direct") + ")");
 
-            Thread drain = new Thread(() -> drainOutput(running, capture), "node-output");
+            // v4.0.0: the miner belongs to THIS node process and
+            // exists only when this launch carried the mining
+            // arguments. Its supervisor waits for the node to come up
+            // and for the node's token / certificate-pin files before
+            // it starts anything, so creating it here — before the
+            // node has printed a line — races nothing. Without mining
+            // both references stay null and the drain below is the
+            // v3.0.1 drain.
+            final MinerSupervisor miner;
+            final NodeOutputTap nodeTap;
+            if (miningPlan.active) {
+                MiningLogic.MinerStats minerStats = new MiningLogic.MinerStats();
+                miner = startMinerFor(gen, launchScrubber, minerStats);
+                nodeTap = new NodeOutputTap(launchScrubber, miner, minerStats);
+            } else {
+                miner = null;
+                nodeTap = null;
+            }
+
+            Thread drain = new Thread(
+                    () -> drainOutput(running, capture, nodeTap), "node-output");
             drain.setDaemon(true);
             drain.start();
 
@@ -1345,6 +1470,24 @@ public class NodeService extends Service {
                 // pid record are cross-instance courtesies on top of
                 // the registry, not replacements for it.
                 LIVE_CHILD_PROCESSES.remove(running);
+                // v4.0.0: the node is gone, so its miner has nothing
+                // left to connect to. requestStop() only signals (the
+                // bounded destroy / destroyForcibly runs inside the
+                // supervisor); a stop path that got here first has
+                // already done this, and a second request is ignored.
+                if (miner != null) {
+                    miner.requestStop("node process exited");
+                    unregisterThermalWatch(miner);
+                    synchronized (stateLock) {
+                        if (minerSupervisor == miner) {
+                            minerSupervisor = null;
+                        }
+                        NodeState st = NodeState.get();
+                        if (st.minerView == miner) {
+                            st.minerView = null;
+                        }
+                    }
+                }
                 // F-1 + third-audit ownership race: clear the
                 // reference only if it still points at THIS session's
                 // process, with the check-and-clear indivisible under
@@ -1491,13 +1634,29 @@ public class NodeService extends Service {
          * again on exactly the runtimes that needed the fallback.
          */
         final long resolvedPid;
+        /**
+         * What this launch decided about mining (v4.0.0):
+         * {@link MiningLogic.LaunchPlan#OFF} for every launch
+         * without it.
+         */
+        final MiningLogic.LaunchPlan miningPlan;
+        /**
+         * The scrubber for this process's output: the inner hash it
+         * was launched with (and the miner token, when its file
+         * already existed). Null for a launch without mining.
+         */
+        final MiningLogic.SecretScrubber scrubber;
 
         LaunchOutcome(Process process, long spawnElapsedMs,
-                      boolean pidRecorded, long resolvedPid) {
+                      boolean pidRecorded, long resolvedPid,
+                      MiningLogic.LaunchPlan miningPlan,
+                      MiningLogic.SecretScrubber scrubber) {
             this.process = process;
             this.spawnElapsedMs = spawnElapsedMs;
             this.pidRecorded = pidRecorded;
             this.resolvedPid = resolvedPid;
+            this.miningPlan = miningPlan;
+            this.scrubber = scrubber;
         }
     }
 
@@ -1543,6 +1702,29 @@ public class NodeService extends Service {
         if (!telemetry) {
             cmd.add("--no-telemetry");
         }
+        // Mining (v4.0.0) — an opt-in, read fresh at each launch like
+        // the settings above. With the setting off the plan is
+        // LaunchPlan.OFF: nothing is appended, no file is looked at,
+        // and the command above is the whole command, exactly as in
+        // v3.0.1. With it on (and usable — see MiningLogic.planLaunch)
+        // the node is launched as a validator with its miner endpoint
+        // on the fixed port and the user's rewards inner hash:
+        //   --validator --miner-listen-port 9833 --rewards-inner-hash <hash>
+        // The hash travels as one argv element (no shell) and is never
+        // written to the log (see the launch line below). Besides
+        // the command itself, the only things that hold it are the
+        // plan and the scrubber built here, which exist to keep it
+        // OUT of text: neither is ever printed.
+        final MiningLogic.LaunchPlan miningPlan = miningLaunchPlan();
+        final MiningLogic.SecretScrubber scrubber;
+        if (miningPlan.active) {
+            cmd.addAll(miningPlan.nodeArgs);
+            scrubber = MiningLogic.SecretScrubber.of(miningPlan.innerHash,
+                    MiningLogic.readSmallTextFile(
+                            minerConfig().tokenFile, MINER_TOKEN_MAX_BYTES));
+        } else {
+            scrubber = null;
+        }
 
         // The "what was this process launched with" snapshot is NOT
         // written here: it is recorded at the end of this method,
@@ -1580,8 +1762,26 @@ public class NodeService extends Service {
         }
         pb.environment().put("SSL_CERT_DIR", "/system/etc/security/cacerts");
         pb.redirectErrorStream(true);
-        logApp("launch: " + String.join(" ", cmd)
-                + " [telemetry " + (telemetry ? "ON (user opt-in)" : "off") + "]");
+        if (miningPlan.active) {
+            // The argument list now holds the rewards inner hash, so
+            // this line is built by the redacting formatter — never
+            // by a plain join.
+            logApp("launch: " + MiningLogic.redactCommandForLog(cmd)
+                    + " [telemetry " + (telemetry ? "ON (user opt-in)" : "off") + "]"
+                    + " [mining ON (user opt-in)]");
+        } else {
+            logApp("launch: " + String.join(" ", cmd)
+                    + " [telemetry " + (telemetry ? "ON (user opt-in)" : "off") + "]");
+            if (miningPlan.skip != MiningLogic.SkipReason.NONE) {
+                // The setting is on but this launch cannot mine; the
+                // node starts as it does without mining and the
+                // status screen says why — or, where all that was
+                // missing is the node's network key, that stopping
+                // and starting the node begins mining.
+                logApp("WARN mining is switched on, but this launch runs"
+                        + " without it (" + miningPlan.skip + ")");
+            }
+        }
         // F-2 + audit finding 4: before spawning, give the PREVIOUS
         // session's process a bounded window to finish exiting.
         // Teardown only destroys it — if the user restarts immediately,
@@ -1737,9 +1937,351 @@ public class NodeService extends Service {
                 NodeState st = NodeState.get();
                 st.launchedTelemetry = telemetry;
                 st.launchedNodeName = nodeName;
+                // v4.0.0: the same snapshot for mining. Only a tag of
+                // the inner hash is kept — enough to tell whether the
+                // stored value still matches this launch, useless for
+                // anything else.
+                st.launchedMining = miningPlan.active;
+                st.launchedMiningSkip = miningPlan.skip;
+                st.launchedRewardsTag = miningPlan.rewardsTag;
             }
         }
-        return new LaunchOutcome(proc, spawnElapsedMs, pidRecorded, resolvedPid);
+        return new LaunchOutcome(proc, spawnElapsedMs, pidRecorded, resolvedPid,
+                miningPlan, scrubber);
+    }
+
+    // ------------------------------------------------------------------
+    // Mining (v4.0.0)
+    // ------------------------------------------------------------------
+
+    /** The token file is 64 characters; anything this large is not it. */
+    private static final int MINER_TOKEN_MAX_BYTES = 4096;
+
+    /**
+     * The mining decision for a launch. The setting is read first and
+     * alone: while it is off, neither the miner binary nor the node's
+     * network key is even looked for. With it on, a node that has
+     * never run here has no network key yet and would refuse to start
+     * as a validator, so that launch runs without mining (and creates
+     * the key); the status screen then says that stopping and
+     * starting the node begins mining.
+     */
+    private MiningLogic.LaunchPlan miningLaunchPlan() {
+        if (!NodeSettings.miningEnabled(this)) {
+            return MiningLogic.LaunchPlan.OFF;
+        }
+        boolean minerPresent = new File(
+                getApplicationInfo().nativeLibraryDir, MINER_LIB).isFile();
+        boolean networkKeyPresent = MiningLogic.networkKeyExists(
+                new File(getFilesDir(), "node"), CHAIN_NAME);
+        return MiningLogic.planLaunch(true,
+                NodeSettings.rewardsInnerHash(this), minerPresent,
+                networkKeyPresent);
+    }
+
+    /** The miner log's place under the app's log directory. */
+    static File minerLogFile(File logDir) {
+        return new File(logDir, MINER_LOG_FILE_NAME);
+    }
+
+    private MinerSupervisor.Config minerConfig() {
+        MinerSupervisor.Config c = new MinerSupervisor.Config();
+        File basePath = new File(getFilesDir(), "node");
+        c.minerBinary = new File(getApplicationInfo().nativeLibraryDir, MINER_LIB);
+        // The node writes both files into its chain directory
+        // (<base-path>/chains/<chain>/) when it is launched with
+        // --miner-listen-port; the app only ever passes their paths on.
+        c.tokenFile = MiningLogic.minerTokenFile(basePath, CHAIN_NAME);
+        c.fingerprintFile = MiningLogic.minerFingerprintFile(basePath, CHAIN_NAME);
+        c.logFile = minerLogFile(new File(getFilesDir(), "logs"));
+        c.markerFile = new File(getFilesDir(), MINER_MARKER_FILE_NAME);
+        c.quickExitMs = QUICK_EXIT_MS;
+        c.stopWaitMs = DESTROY_EXIT_WAIT_MS;
+        return c;
+    }
+
+    private MinerSupervisor.Env minerEnv() {
+        return new MinerSupervisor.Env() {
+            @Override
+            public long elapsedMs() {
+                return SystemClock.elapsedRealtime();
+            }
+
+            @Override
+            public void log(String message) {
+                logApp(message);
+            }
+
+            @Override
+            public boolean nodeUp() {
+                // "Up" is the poller's own judgement: the node's RPC
+                // has answered in this session.
+                NodeState.Status s = NodeState.get().status;
+                return s == NodeState.Status.SYNCING
+                        || s == NodeState.Status.SYNCED;
+            }
+
+            @Override
+            public int cpuWorkers() {
+                // The setting, resolved against the core count. The
+                // session's thermal cap is applied by the supervisor
+                // itself, which owns the governor (fix2 audit L-6).
+                return MiningLogic.effectiveCpuWorkers(
+                        NodeSettings.miningCpuWorkers(NodeService.this),
+                        Runtime.getRuntime().availableProcessors());
+            }
+
+            @Override
+            public void killStrayProcess(long pid) {
+                // Only ever called for a pid that passed the strict
+                // identity test (MinerSupervisor.findOwnMinerPids),
+                // as for an orphaned node.
+                android.os.Process.killProcess((int) pid);
+            }
+
+            @Override
+            public long selfPid() {
+                return android.os.Process.myPid();
+            }
+        };
+    }
+
+    /**
+     * Create, register and start the supervisor for the node process
+     * the worker has just accepted. Registration is a
+     * {@link #stateLock} decision, like the node process's own: the
+     * supervisor becomes the session's only while the session is
+     * still the live one. A session that ended in between gets no
+     * miner at all — the returned supervisor is then already stopped
+     * and never starts a process.
+     */
+    private MinerSupervisor startMinerFor(int gen,
+                                          MiningLogic.SecretScrubber scrubber,
+                                          MiningLogic.MinerStats stats) {
+        MinerSupervisor created = new MinerSupervisor(
+                minerConfig(), minerEnv(), scrubber, stats);
+        MinerSupervisor previous = null;
+        boolean live;
+        synchronized (stateLock) {
+            live = started.get() && gen == sessionGen.get();
+            if (live) {
+                created.setThermalGovernor(
+                        thermalGovernorForLocked(gen));
+                previous = minerSupervisor;
+                minerSupervisor = created;
+                NodeState.get().minerView = created;
+            }
+        }
+        // A previous supervisor here would be one whose node process
+        // has already exited (a relaunch inside the session); its
+        // worker has stopped it, and this is only the belt to that
+        // pair of braces.
+        stopMiner(previous, "replaced by a new node process");
+        if (previous != null) {
+            unregisterThermalWatch(previous);
+        }
+        if (live) {
+            created.start();
+            registerThermalWatch(created);
+        } else {
+            created.requestStop("session ended while the node was starting");
+        }
+        return created;
+    }
+
+    // ---------------------------------------------------------------
+    // Thermal protection for the miner (fix2). The governor and the
+    // decisions live in MiningLogic; this is only the platform feed:
+    // while a mining supervisor is the session's, the device's
+    // thermal status is applied to it, once at registration (the
+    // status the device is already in) and on every change. Every
+    // step is guarded: a thermal failure must never reach the node.
+
+    /** The session generation's thermal governor, shared by every
+     *  supervisor the generation creates (fix2 audit L-2): the cap
+     *  and the stop survive the app's own in-session restarts (the
+     *  sync-stall restart, the linker retry) and reset only when a
+     *  new generation begins — the user's own stop → start, or a
+     *  fresh service. Guarded by stateLock. */
+    private MiningLogic.ThermalGovernor sessionThermalGovernor;
+    private int sessionThermalGovernorGen = -1;
+
+    private MiningLogic.ThermalGovernor thermalGovernorForLocked(
+            int gen) {
+        if (sessionThermalGovernor == null
+                || sessionThermalGovernorGen != gen) {
+            sessionThermalGovernor = new MiningLogic.ThermalGovernor();
+            sessionThermalGovernorGen = gen;
+        }
+        return sessionThermalGovernor;
+    }
+
+    /** The supervisor the thermal listener currently feeds. */
+    private MinerSupervisor thermalWatched;
+    private android.os.PowerManager.OnThermalStatusChangedListener
+            thermalListener;
+
+    private void registerThermalWatch(MinerSupervisor supervisor) {
+        try {
+            // Only the session's installed supervisor gets a watch;
+            // a caller overtaken by a newer session touches nothing.
+            synchronized (stateLock) {
+                if (minerSupervisor != supervisor) {
+                    return;
+                }
+            }
+            // A watch left over from a supervisor whose node exited
+            // on its own (that path stops the miner without taking
+            // it) is removed first, so listeners never accumulate
+            // across sessions.
+            MinerSupervisor old;
+            synchronized (stateLock) {
+                old = thermalWatched;
+            }
+            if (old != null && old != supervisor) {
+                unregisterThermalWatch(old);
+            }
+            android.os.PowerManager pm = (android.os.PowerManager)
+                    getSystemService(POWER_SERVICE);
+            if (pm == null) {
+                return;
+            }
+            android.os.PowerManager.OnThermalStatusChangedListener l =
+                    status -> applyThermalStatus(supervisor, status);
+            pm.addThermalStatusListener(getMainExecutor(), l);
+            boolean stillInstalled;
+            synchronized (stateLock) {
+                thermalWatched = supervisor;
+                thermalListener = l;
+                stillInstalled = minerSupervisor == supervisor;
+            }
+            if (!stillInstalled) {
+                // The session ended while the listener was being
+                // added; takeMinerLocked saw nothing to remove.
+                unregisterThermalWatch(supervisor);
+                return;
+            }
+            applyThermalStatus(supervisor,
+                    pm.getCurrentThermalStatus());
+        } catch (Throwable t) {
+            logApp("miner: thermal watch unavailable");
+        }
+    }
+
+    /** Remove the registered thermal watch, whichever supervisor
+     *  it feeds (onDestroy's belt to the per-path removals). */
+    private void unregisterAnyThermalWatch() {
+        MinerSupervisor watched;
+        synchronized (stateLock) {
+            watched = thermalWatched;
+        }
+        if (watched != null) {
+            unregisterThermalWatch(watched);
+        }
+    }
+
+    private void unregisterThermalWatch(MinerSupervisor supervisor) {
+        android.os.PowerManager.OnThermalStatusChangedListener l;
+        synchronized (stateLock) {
+            if (thermalWatched != supervisor) {
+                return;
+            }
+            thermalWatched = null;
+            l = thermalListener;
+            thermalListener = null;
+        }
+        if (l == null) {
+            return;
+        }
+        try {
+            android.os.PowerManager pm = (android.os.PowerManager)
+                    getSystemService(POWER_SERVICE);
+            if (pm != null) {
+                pm.removeThermalStatusListener(l);
+            }
+        } catch (Throwable t) {
+            // A listener that could not be removed feeds a stopped
+            // supervisor at worst; its decisions are no-ops there.
+        }
+    }
+
+    private void applyThermalStatus(MinerSupervisor supervisor,
+                                    int status) {
+        try {
+            int resolved = MiningLogic.effectiveCpuWorkers(
+                    NodeSettings.miningCpuWorkers(this),
+                    Runtime.getRuntime().availableProcessors());
+            supervisor.thermalGovernor()
+                    .apply(status, resolved, supervisor);
+        } catch (Throwable t) {
+            logApp("miner: thermal status handling failed");
+        }
+    }
+
+    /**
+     * A miner left behind by an app process that was killed while
+     * mining would keep running with no node to mine for. A session
+     * WITH mining clears that itself (the supervisor checks before it
+     * starts anything). This is the same check for a session WITHOUT
+     * mining, and it is gated twice so that an install that never
+     * mined never runs it: the marker file exists only once a miner
+     * has been started, and it is removed again here as soon as no
+     * stray is left.
+     */
+    private void reapStrayMinersIfMarked() {
+        File marker = new File(getFilesDir(), MINER_MARKER_FILE_NAME);
+        if (!marker.isFile()) {
+            return;
+        }
+        if (miningLaunchPlan().active) {
+            return;
+        }
+        try {
+            MinerSupervisor.Config c = minerConfig();
+            MinerSupervisor.Env env = minerEnv();
+            MinerSupervisor.reapStrayMiners(c, env);
+            if (MinerSupervisor.findOwnMinerPids(c.procRoot,
+                    c.minerBinary.getAbsolutePath(), env.selfPid()).isEmpty()) {
+                if (!marker.delete()) {
+                    logApp("miner marker could not be removed");
+                }
+            }
+        } catch (RuntimeException e) {
+            logApp("stray-miner check failed: " + e.getClass().getName());
+        }
+    }
+
+    /**
+     * What the node-output drain does differently for a node launched
+     * with mining (v4.0.0): every line is scrubbed of the session's
+     * secrets before it is stored anywhere, and the scrubbed line is
+     * shown to the session's mining statistics (blocks accepted,
+     * seals rejected, the rewards address the node reports). A node
+     * launched without mining has no tap.
+     */
+    private static final class NodeOutputTap {
+        private final MiningLogic.SecretScrubber base;
+        private final MinerSupervisor miner;
+        private final MiningLogic.MinerStats stats;
+
+        NodeOutputTap(MiningLogic.SecretScrubber base, MinerSupervisor miner,
+                      MiningLogic.MinerStats stats) {
+            this.base = base;
+            this.miner = miner;
+            this.stats = stats;
+        }
+
+        String clean(String line, boolean truncated) {
+            // The supervisor's scrubber is the launch's own plus the
+            // miner token, once the node has written its file (on a
+            // first run that is after the launch).
+            MiningLogic.SecretScrubber s = miner != null ? miner.scrubber() : base;
+            return s == null ? line : s.apply(line, truncated);
+        }
+
+        void observe(String cleanLine) {
+            stats.onNodeLine(cleanLine, SystemClock.elapsedRealtime());
+        }
     }
 
     // ------------------------------------------------------------------
@@ -2880,8 +3422,13 @@ public class NodeService extends Service {
             sessionGen.incrementAndGet();
             pollerOn.set(false);
             disconnectInFlightRpc();
+            // v4.0.0: normally the worker has already stopped the
+            // miner when it saw the node exit; this covers every
+            // other way a session can finish. Null without mining.
+            stopMiner(takeMinerLocked(), "session finished");
             saveUptimeLocked();
             sessionStartElapsedMs = -1; // no live session any more
+            markSessionEnded();
             NodeState st = NodeState.get();
             st.status = NodeState.Status.STOPPED;
             // bestBlock / highestBlock / peers keep their last known
@@ -2933,10 +3480,11 @@ public class NodeService extends Service {
         void onLine(String line, boolean truncated);
     }
 
-    private void drainOutput(Process proc, AttemptCapture capture) {
+    private void drainOutput(Process proc, AttemptCapture capture,
+                             NodeOutputTap tap) {
         InputStream in = proc.getInputStream();
         try {
-            drainLines(in, DRAIN_LINE_MAX_BYTES, (line, truncated) -> {
+            drainLines(in, DRAIN_LINE_MAX_BYTES, (rawLine, truncated) -> {
                 // F-3: the per-line work (log encode/write, attempt
                 // capture) must never kill this thread. If it died,
                 // logging and per-attempt evidence would stop — and
@@ -2946,10 +3494,20 @@ public class NodeService extends Service {
                 // is best-effort.) Stream-level IOException from the
                 // read still ends the thread, in the catch below.
                 try {
+                    // v4.0.0: for a node launched with mining, the
+                    // line is scrubbed BEFORE the log and the attempt
+                    // capture (which the details screen shows) see
+                    // it. Without mining there is no tap and the line
+                    // is used exactly as it came.
+                    String line = tap == null
+                            ? rawLine : tap.clean(rawLine, truncated);
                     if (logSink != null) {
                         logSink.write(line, truncated);
                     }
                     capture.add(line, truncated);
+                    if (tap != null) {
+                        tap.observe(line);
+                    }
                 } catch (Exception e) {
                     try {
                         logApp("output drain: line dropped after error: " + e);
@@ -4095,6 +4653,13 @@ public class NodeService extends Service {
         if (st.peers >= 0) {
             text.append(" · ").append(I18n.format(this, StringsTable.NOTIF_PEERS, st.peers));
         }
+        // v4.0.0: a node launched with mining also says what the
+        // miner is doing. Null — nothing appended — for every node
+        // launched without it.
+        String mining = miningNotifText();
+        if (mining != null) {
+            text.append(" · ").append(mining);
+        }
         Intent open = new Intent(this, MainActivity.class);
         open.setFlags(Intent.FLAG_ACTIVITY_SINGLE_TOP);
         PendingIntent content = PendingIntent.getActivity(this, 0, open,
@@ -4112,6 +4677,25 @@ public class NodeService extends Service {
                 .addAction(new Notification.Action.Builder(
                         null, I18n.get(this, StringsTable.NOTIF_ACTION_STOP), stopPi).build())
                 .build();
+    }
+
+    /**
+     * The mining part of the status notification (v4.0.0), or null
+     * when the running node was not launched with mining — which
+     * leaves the notification exactly as it was in v3.0.1.
+     */
+    private String miningNotifText() {
+        NodeState st = NodeState.get();
+        if (!Boolean.TRUE.equals(st.launchedMining)) {
+            return null;
+        }
+        long now = SystemClock.elapsedRealtime();
+        MiningLogic.MinerView view = st.minerView;
+        MiningLogic.Presentation p = MiningLogic.present(true, true, true,
+                Boolean.TRUE, MiningLogic.SkipReason.NONE,
+                st.status == NodeState.Status.SYNCED, st.peers,
+                view == null ? null : view.snapshot(now), now);
+        return MiningLogic.notificationText(I18n.effectiveTag(this), p);
     }
 
     private void startForegroundWith(Notification n) {
@@ -4157,6 +4741,13 @@ public class NodeService extends Service {
             }
             String label = NodeState.label(this, st.status);
             String key = label + "|" + st.bestBlock + "|" + st.peers;
+            // v4.0.0: with mining, a change of the miner's state is a
+            // reason to re-post as well. Without, the key is exactly
+            // the v3.0.1 key.
+            String mining = miningNotifText();
+            if (mining != null) {
+                key = key + "|" + mining;
+            }
             if (key.equals(lastNotifText)) {
                 return;
             }

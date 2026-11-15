@@ -38,6 +38,8 @@ import android.text.TextWatcher;
 import android.view.Gravity;
 import android.view.View;
 import android.view.WindowInsets;
+import android.view.WindowManager;
+import android.view.inputmethod.EditorInfo;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.EditText;
@@ -103,6 +105,14 @@ public class MainActivity extends Activity {
      *  hides newer notes. */
     private static final long ATTEMPT_RESET_NOTE_WINDOW_SEC =
             7L * 24 * 3600;
+
+    /** The developer's public QTC receive address for voluntary
+     *  donations, shown at the bottom of the Home screen (v4.0.0).
+     *  A receive address is public information; nothing about it
+     *  is a secret, and the app never sends anything to it on its
+     *  own — donating is an action the user takes in a wallet. */
+    private static final String DONATE_ADDRESS =
+            "qzoqy3pcLsBcPpGFqj9BTv3UyvRB9o8ScnKqcQfSbQTR6odnu";
 
     private static final int BG = Color.rgb(0x0E, 0x0E, 0x0E);
     private static final int SURFACE = Color.rgb(0x18, 0x18, 0x18);
@@ -218,6 +228,11 @@ public class MainActivity extends Activity {
     private FrameLayout homeTodayTrack;
     private View homeTodayFill;
 
+    // Home (vision): the mining card (v4.0.0). Shown only while
+    // mining is in use; an install with mining off never sees it.
+    private LinearLayout homeMiningBox;
+    private TextView homeMiningText;
+
     // Home (vision): age of the last block observation.
     private TextView vhBestAgoView;
 
@@ -277,6 +292,36 @@ public class MainActivity extends Activity {
     // so each affected section also says WHY while locked.
     private TextView telemetryLockedView;
     private TextView depinLockedView;
+    // Mining (v4.0.0): the opt-in switch with its pending lines,
+    // the two rows that open an editor (rewards inner hash, CPU
+    // workers), and the status block that exists on screen only
+    // while mining is in use. The inner hash itself is never held
+    // in a field or shown by any of these views.
+    private LinearLayout miningRow;
+    private ToggleView miningSwitch;
+    private TextView miningPendingView;
+    private TextView miningAppliedView;
+    private TextView miningLockedView;
+    private LinearLayout miningRewardsRow;
+    private TextView miningRewardsValue;
+    private TextView miningRewardsPendingView;
+    private LinearLayout miningWorkersRow;
+    private TextView miningWorkersValue;
+    private TextView miningWorkersPendingView;
+    private LinearLayout miningStatusBox;
+    private TextView miningStateValue;
+    private TextView miningReasonView;
+    private TextView miningPendingNoteView;
+    private TextView miningNodeFailedView;
+    private LinearLayout miningStatsBox;
+    private TextView miningHashrateValue;
+    private TextView miningJobsValue;
+    private TextView miningSubmittedValue;
+    private TextView miningAcceptedValue;
+    private TextView miningAddressValue;
+    private Button miningRestartButton;
+    private TextView miningLogView;
+    private AlertDialog miningDialog;
     private Button depinExportButton;
     private Button depinAttemptResetButton;
     private TextView depinExportNoteView;
@@ -492,6 +537,7 @@ public class MainActivity extends Activity {
     // activity instance, which is what makes an anchor recorded
     // before recreate() findable after it.
     private static final int ID_ANCHOR_TELEMETRY = View.generateViewId();
+    private static final int ID_ANCHOR_MINING = View.generateViewId();
     private static final int ID_ANCHOR_DEPIN = View.generateViewId();
     private static final int ID_ANCHOR_NAME = View.generateViewId();
     private static final int ID_ANCHOR_LANGUAGE = View.generateViewId();
@@ -1146,6 +1192,25 @@ public class MainActivity extends Activity {
         homeTodayBox.setVisibility(View.GONE);
         root.addView(homeTodayBox, matchLpTop(16));
 
+        // Mining (v4.0.0): a thin card of the same kind, shown only
+        // while mining is in use (the switch is on, or the running
+        // node was launched with it). It says what the miner is
+        // doing and leads to the mining settings; with mining off
+        // it stays GONE and the home screen is the v3.0.1 one.
+        homeMiningBox = new LinearLayout(this);
+        homeMiningBox.setOrientation(LinearLayout.VERTICAL);
+        homeMiningBox.setBackground(ripple(cardBg()));
+        homeMiningBox.setPadding(dp(26), dp(18), dp(26), dp(18));
+        homeMiningBox.addView(cardLabel(
+                I18n.get(this, StringsTable.MINING_SECTION)), matchLp());
+        homeMiningText = text("", 13, LABEL2, false);
+        homeMiningBox.addView(homeMiningText, matchLpTop(8));
+        homeMiningBox.setClickable(true);
+        homeMiningBox.setFocusable(true);
+        homeMiningBox.setOnClickListener(v -> openMiningSettings());
+        homeMiningBox.setVisibility(View.GONE);
+        root.addView(homeMiningBox, matchLpTop(16));
+
         // The one primary action (pill dress, vision spec 4.1).
         mainButton = new Button(this);
         mainButton.setTextSize(15);
@@ -1181,6 +1246,42 @@ public class MainActivity extends Activity {
                 v -> showScreen(SCREEN_DETAILS));
         navRow(root, I18n.get(this, StringsTable.SECTION_TRACK), 0,
                 v -> showScreen(SCREEN_TRACK));
+
+        // Support (v4.0.0): the developer's QTC donation address
+        // at the bottom of Home. Quiet text, no card: a label, one
+        // line saying donations are voluntary, and the address
+        // itself in mono — tapping it copies it, with a toast as
+        // the receipt. Always shown; it asks for nothing and the
+        // app never acts on it.
+        LinearLayout donateBox = new LinearLayout(this);
+        donateBox.setOrientation(LinearLayout.VERTICAL);
+        donateBox.setPadding(dp(26), 0, dp(26), 0);
+        donateBox.addView(cardLabel(
+                I18n.get(this, StringsTable.DONATE_TITLE)), matchLp());
+        TextView donateNote = text(
+                I18n.get(this, StringsTable.DONATE_NOTE), 12, LABEL3, false);
+        donateBox.addView(donateNote, matchLpTop(6));
+        TextView donateAddr = text(DONATE_ADDRESS, 12, LABEL2, false);
+        donateAddr.setTypeface(VisionFonts.mono(this));
+        donateAddr.setBackground(ripple(null));
+        donateAddr.setClickable(true);
+        donateAddr.setFocusable(true);
+        donateAddr.setPadding(0, dp(8), 0, dp(8));
+        donateAddr.setOnClickListener(v -> {
+            android.content.ClipboardManager cm =
+                    (android.content.ClipboardManager)
+                            getSystemService(Context.CLIPBOARD_SERVICE);
+            if (cm != null) {
+                cm.setPrimaryClip(android.content.ClipData.newPlainText(
+                        I18n.get(this, StringsTable.DONATE_TITLE),
+                        DONATE_ADDRESS));
+                android.widget.Toast.makeText(this,
+                        I18n.get(this, StringsTable.DONATE_COPIED),
+                        android.widget.Toast.LENGTH_SHORT).show();
+            }
+        });
+        donateBox.addView(donateAddr, matchLpTop(2));
+        root.addView(donateBox, matchLpTop(24));
         return (ScrollView) screens[SCREEN_HOME];
     }
 
@@ -1395,7 +1496,7 @@ public class MainActivity extends Activity {
                 ? timeHhMmSs(st.lastRpcOkWallMs) : "\u2014";
         String upText = st.sessionAcceptedElapsedMs >= 0
                 ? UiLogic.durationText(tag,
-                        now - st.sessionAcceptedElapsedMs, false)
+                        sessionUptimeMs(st, now), false)
                 : "\u2014";
         readSheetFactsView.setText(I18n.format(this,
                 StringsTable.FIELD_FACTS_FMT,
@@ -1828,6 +1929,12 @@ public class MainActivity extends Activity {
 
         root.addView(hairline(24));
 
+        // Mining (v4.0.0): the second node-launch opt-in, placed
+        // with the first. Off by default.
+        buildMiningSection(root);
+
+        root.addView(hairline(24));
+
         // DePIN: opt-in observation of this node's uptime, kept
         // entirely separate from node operation (integration step 2).
         // The toggle talks only to the DepinModule facade; the rows
@@ -2143,6 +2250,763 @@ public class MainActivity extends Activity {
         return (ScrollView) screens[SCREEN_SETTINGS];
     }
 
+    // ------------------------------------------------------------------
+    // Mining (v4.0.0)
+    // ------------------------------------------------------------------
+
+    /**
+     * The mining section of the settings screen (specification
+     * sections 3.1 and 3.3 to 3.5). Always present: the opt-in
+     * switch with its note, and the two rows a user needs BEFORE
+     * mining can be switched on — the rewards inner hash and the
+     * worker count. Everything that reports on mining (state,
+     * reasons, counters, the address the node reports, the miner's
+     * log) sits in one block that is shown only while mining is in
+     * use, so with mining off this section is the switch, the note
+     * and the two rows, and nothing else on any screen changes.
+     *
+     * Every decision shown here is made in {@link MiningLogic};
+     * this method only builds views, and {@link #refreshMining}
+     * only fills them.
+     */
+    private void buildMiningSection(LinearLayout root) {
+        TextView heading = text(I18n.get(
+                this, StringsTable.MINING_SECTION), 16, LABEL2, true);
+        root.addView(heading, matchLpTop(8));
+        miningSwitch = settingsSwitch(root, 8, ID_ANCHOR_MINING,
+                I18n.get(this, StringsTable.MINING_TOGGLE),
+                NodeSettings.miningEnabled(this),
+                (view, isChecked) -> {
+                    if (syncingSettings) {
+                        return;
+                    }
+                    onMiningToggled(isChecked);
+                });
+        miningRow = (LinearLayout) miningSwitch.getParent();
+        miningPendingView = text("", 14, ACCENT, false);
+        miningPendingView.setVisibility(View.GONE);
+        root.addView(miningPendingView, matchLpTop(4));
+        miningAppliedView = text("", 14, LABEL3, false);
+        miningAppliedView.setVisibility(View.GONE);
+        root.addView(miningAppliedView, matchLpTop(4));
+        root.addView(text(I18n.get(this, StringsTable.MINING_NOTE),
+                14, LABEL3, false), matchLpTop(4));
+        miningLockedView = text(I18n.get(
+                this, StringsTable.SETTINGS_LOCKED_NOTICE), 14, LABEL3, false);
+        miningLockedView.setVisibility(View.GONE);
+        root.addView(miningLockedView, matchLpTop(4));
+
+        // Rewards: the row says only whether a value is saved.
+        miningRewardsValue = valueRow(root,
+                I18n.get(this, StringsTable.MINING_REWARDS_LABEL), 8, v -> {
+                    if (!NodeSettings.settingsLocked(this)) {
+                        showRewardsDialog();
+                    }
+                });
+        miningRewardsRow = (LinearLayout) miningRewardsValue.getParent();
+        miningRewardsPendingView = text("", 14, ACCENT, false);
+        miningRewardsPendingView.setVisibility(View.GONE);
+        root.addView(miningRewardsPendingView, matchLpTop(0));
+
+        miningWorkersValue = valueRow(root,
+                I18n.get(this, StringsTable.MINING_WORKERS_LABEL), 0, v -> {
+                    if (!NodeSettings.settingsLocked(this)) {
+                        showWorkersDialog();
+                    }
+                });
+        miningWorkersRow = (LinearLayout) miningWorkersValue.getParent();
+        miningWorkersPendingView = text("", 14, ACCENT, false);
+        miningWorkersPendingView.setVisibility(View.GONE);
+        root.addView(miningWorkersPendingView, matchLpTop(0));
+
+        // The status block: on screen only while mining is in use.
+        miningStatusBox = new LinearLayout(this);
+        miningStatusBox.setOrientation(LinearLayout.VERTICAL);
+        miningStatusBox.setVisibility(View.GONE);
+        root.addView(miningStatusBox, matchLpTop(8));
+        miningStateValue = infoRow(miningStatusBox,
+                I18n.get(this, StringsTable.MINING_STATE_LABEL), true);
+        miningReasonView = text("", 14, LABEL2, false);
+        miningReasonView.setVisibility(View.GONE);
+        miningStatusBox.addView(miningReasonView, matchLpTop(0));
+        miningPendingNoteView = text("", 14, ACCENT, false);
+        miningPendingNoteView.setVisibility(View.GONE);
+        miningStatusBox.addView(miningPendingNoteView, matchLpTop(4));
+        miningNodeFailedView = text(I18n.get(
+                this, StringsTable.MINING_NODE_FAILED_HINT),
+                14, STATE_FAILED, false);
+        miningNodeFailedView.setVisibility(View.GONE);
+        miningStatusBox.addView(miningNodeFailedView, matchLpTop(4));
+        // Waiting is the normal picture while the node catches up;
+        // the sentence that says so is always there with the state.
+        miningStatusBox.addView(text(I18n.get(
+                this, StringsTable.MINING_WAITING_NOTE), 14, LABEL3, false),
+                matchLpTop(8));
+
+        // What a node launched with mining reports.
+        miningStatsBox = new LinearLayout(this);
+        miningStatsBox.setOrientation(LinearLayout.VERTICAL);
+        miningStatsBox.setVisibility(View.GONE);
+        miningStatusBox.addView(miningStatsBox, matchLpTop(8));
+        miningHashrateValue = infoRow(miningStatsBox,
+                I18n.get(this, StringsTable.MINING_LABEL_HASHRATE), true);
+        miningJobsValue = infoRow(miningStatsBox,
+                I18n.get(this, StringsTable.MINING_LABEL_JOBS), true);
+        miningSubmittedValue = infoRow(miningStatsBox,
+                I18n.get(this, StringsTable.MINING_LABEL_SUBMITTED), true);
+        miningAcceptedValue = infoRow(miningStatsBox,
+                I18n.get(this, StringsTable.MINING_LABEL_ACCEPTED), true);
+        miningStatsBox.addView(text(I18n.get(
+                this, StringsTable.MINING_STATS_NOTE), 14, LABEL3, false),
+                matchLpTop(4));
+        // The address is the node's own report for the inner hash it
+        // was launched with — public information, shown in full so it
+        // can be compared, character for character, with the address
+        // the official key tool printed next to that inner hash.
+        miningAddressValue = infoRow(miningStatsBox,
+                I18n.get(this, StringsTable.MINING_LABEL_ADDRESS), true);
+        miningAddressValue.setTextIsSelectable(true);
+        miningStatsBox.addView(text(I18n.get(
+                this, StringsTable.MINING_ADDRESS_NOTE), 14, LABEL3, false),
+                matchLpTop(4));
+
+        miningRestartButton = linkButton(
+                I18n.get(this, StringsTable.MINING_RESTART_MINER), v -> {
+                    if (NodeSettings.settingsLocked(this)) {
+                        return;
+                    }
+                    // The miner alone: the supervisor has no way to
+                    // touch the node.
+                    MiningLogic.MinerView view = NodeState.get().minerView;
+                    if (view != null) {
+                        view.requestRestart();
+                    }
+                    refresh();
+                });
+        miningStatsBox.addView(miningRestartButton, matchLpTop(8));
+        miningStatsBox.addView(text(I18n.get(
+                this, StringsTable.MINING_RESTART_MINER_NOTE),
+                14, LABEL3, false), matchLpTop(2));
+
+        miningStatsBox.addView(text(I18n.get(
+                this, StringsTable.MINING_LOG_LABEL), 14, LABEL2, true),
+                matchLpTop(12));
+        miningLogView = text("", 11, LABEL2, false);
+        miningLogView.setTypeface(Typeface.MONOSPACE);
+        miningLogView.setTextIsSelectable(true);
+        miningStatsBox.addView(miningLogView, matchLpTop(4));
+    }
+
+    /**
+     * A tappable settings row with a value: label at the start, the
+     * current value and a chevron at the end — the display-name
+     * row's layout. Returns the value view; the row is its parent.
+     */
+    private TextView valueRow(LinearLayout parent, String label, int topDp,
+                              View.OnClickListener click) {
+        LinearLayout r = new LinearLayout(this);
+        r.setOrientation(LinearLayout.HORIZONTAL);
+        r.setGravity(Gravity.CENTER_VERTICAL);
+        r.setMinimumHeight(dp(56));
+        r.setPadding(0, dp(12), 0, dp(12));
+        r.setBackground(ripple(null));
+        r.setClickable(true);
+        r.setFocusable(true);
+        r.setOnClickListener(click);
+        TextView l = text(label, 16, LABEL2, false);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        lp.setMarginEnd(dp(24));
+        r.addView(l, lp);
+        TextView v = text("", 16, LABEL1, false);
+        v.setGravity(Gravity.END);
+        r.addView(v);
+        TextView chev = text(I18n.isRtl(this) ? "‹" : "›", 22, LABEL3, false);
+        LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT);
+        clp.setMarginStart(dp(12));
+        r.addView(chev, clp);
+        parent.addView(r, matchLpTop(topDp));
+        return v;
+    }
+
+    /** A text-style action button (the DePIN export button's dress). */
+    private Button linkButton(String label, View.OnClickListener click) {
+        Button b = new Button(this);
+        b.setText(label);
+        b.setTextSize(15);
+        b.setTextColor(ACCENT);
+        b.setAllCaps(false);
+        b.setBackground(ripple(null));
+        b.setStateListAnimator(null);
+        b.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
+        b.setMinHeight(dp(44));
+        b.setOnClickListener(click);
+        return b;
+    }
+
+    /**
+     * The mining switch was used. Switching OFF is immediate.
+     * Switching ON is never done by the tap alone: the switch goes
+     * straight back to off, and only the confirmation dialog's own
+     * button stores the setting — after the heat, battery and role
+     * warnings have been on screen (specification section 3.5).
+     * Either way the running node is not touched: the change is
+     * picked up at its next start, which the user performs.
+     */
+    private void onMiningToggled(boolean isChecked) {
+        if (NodeSettings.settingsLocked(this)) {
+            syncSwitch(miningSwitch, NodeSettings.miningEnabled(this));
+            return;
+        }
+        if (!isChecked) {
+            NodeSettings.setMiningEnabled(this, false);
+            refresh();
+            return;
+        }
+        syncSwitch(miningSwitch, false);
+        if (!NodeSettings.hasRewardsInnerHash(this)) {
+            Toast.makeText(this,
+                    I18n.get(this, StringsTable.MINING_NEEDS_REWARDS),
+                    Toast.LENGTH_LONG).show();
+            return;
+        }
+        showMiningConfirmDialog();
+    }
+
+    private void showMiningConfirmDialog() {
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(24), dp(8), dp(24), dp(8));
+        box.addView(text(I18n.get(this, StringsTable.MINING_CONFIRM_HEAT),
+                14, LABEL1, false), matchLp());
+        box.addView(text(I18n.get(this, StringsTable.MINING_CONFIRM_ROLE),
+                14, LABEL1, false), matchLpTop(12));
+        box.addView(text(I18n.get(this, StringsTable.MINING_CONFIRM_PORT),
+                14, LABEL2, false), matchLpTop(12));
+        box.addView(text(I18n.get(this, StringsTable.MINING_CONFIRM_RESTART),
+                14, LABEL2, false), matchLpTop(12));
+        ScrollView scroll = new ScrollView(this);
+        scroll.addView(box);
+        miningDialog = new AlertDialog.Builder(this)
+                .setTitle(I18n.get(this, StringsTable.MINING_CONFIRM_TITLE))
+                .setView(scroll)
+                .setNegativeButton(android.R.string.cancel, null)
+                .setPositiveButton(
+                        I18n.get(this, StringsTable.MINING_CONFIRM_BUTTON),
+                        (d, which) -> {
+                            if (NodeSettings.settingsLocked(this)) {
+                                return;
+                            }
+                            // Refused by the setter itself while no
+                            // valid inner hash is stored.
+                            if (!NodeSettings.setMiningEnabled(this, true)) {
+                                Toast.makeText(this, I18n.get(this,
+                                        StringsTable.MINING_NEEDS_REWARDS),
+                                        Toast.LENGTH_LONG).show();
+                            }
+                            refresh();
+                        })
+                .create();
+        miningDialog.show();
+        styleDialog(miningDialog);
+    }
+
+    /**
+     * The rewards inner hash editor (specification section 3.3).
+     *
+     * The value is a secret as far as this app is concerned, and the
+     * editor is built around that: the field always opens EMPTY (a
+     * saved value is never shown again — the row only says "set"),
+     * the keyboard is asked not to learn or suggest from it, autofill
+     * is told to stay away, the dialog's window is flagged secure so
+     * the typed value stays out of screenshots, screen recordings
+     * and the recents thumbnail, and the field is cleared when the
+     * dialog closes. Nothing here logs.
+     *
+     * Validation is the official node's own rule
+     * ({@link MiningLogic#checkInnerHash}): a value the node would
+     * refuse cannot be saved.
+     */
+    private void showRewardsDialog() {
+        float density = getResources().getDisplayMetrics().density;
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(24), dp(8), dp(24), dp(8));
+        box.addView(text(I18n.get(this, StringsTable.MINING_REWARDS_INFO_DEST),
+                14, LABEL1, false), matchLp());
+        box.addView(text(I18n.get(this, StringsTable.MINING_REWARDS_INFO_HOW),
+                14, LABEL2, false), matchLpTop(10));
+        box.addView(text(I18n.get(this, StringsTable.MINING_REWARDS_INFO_WALLET),
+                14, LABEL2, false), matchLpTop(10));
+        box.addView(text(I18n.get(this, StringsTable.MINING_REWARDS_INFO_WRONG),
+                14, STATE_FAILED, false), matchLpTop(10));
+        box.addView(text(I18n.get(this, StringsTable.MINING_REWARDS_INFO_ONLY),
+                14, STATE_FAILED, false), matchLpTop(10));
+        box.addView(text(I18n.get(this, StringsTable.MINING_REWARDS_INFO_PRIVATE),
+                14, LABEL3, false), matchLpTop(10));
+        final boolean hadValue = NodeSettings.hasRewardsInnerHash(this);
+        if (hadValue) {
+            box.addView(text(I18n.get(
+                    this, StringsTable.MINING_REWARDS_REPLACE_NOTE),
+                    14, LABEL2, false), matchLpTop(10));
+        }
+
+        final EditText input = new EditText(this);
+        input.setSingleLine(true);
+        input.setHorizontallyScrolling(true);
+        input.setInputType(InputType.TYPE_CLASS_TEXT
+                | InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
+                | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+        input.setImeOptions(EditorInfo.IME_ACTION_DONE
+                | EditorInfo.IME_FLAG_NO_EXTRACT_UI
+                | EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING);
+        input.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
+        input.setHint(I18n.get(this, StringsTable.MINING_REWARDS_HINT));
+        input.setTypeface(Typeface.MONOSPACE);
+        input.setTextSize(14);
+        input.setTextColor(LABEL1);
+        input.setHintTextColor(LABEL3);
+        input.setBackground(rounded(SURFACE, 12, density, FIELD_BORDER, 1));
+        input.setPadding(dp(16), dp(12), dp(16), dp(12));
+        input.setMinHeight(dp(56));
+        box.addView(input, matchLpTop(12));
+        final TextView error = text("", 14, STATE_FAILED, false);
+        error.setVisibility(View.GONE);
+        box.addView(error, matchLpTop(4));
+
+        ScrollView scroll = new ScrollView(this);
+        scroll.addView(box);
+        final AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle(I18n.get(this, StringsTable.MINING_REWARDS_LABEL))
+                .setView(scroll)
+                .setNegativeButton(android.R.string.cancel, null)
+                .setPositiveButton(
+                        I18n.get(this, StringsTable.BUTTON_SAVE), null)
+                .create();
+        miningDialog = dialog;
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().addFlags(
+                    WindowManager.LayoutParams.FLAG_SECURE);
+        }
+
+        if (hadValue) {
+            box.addView(linkButton(
+                    I18n.get(this, StringsTable.MINING_REWARDS_DELETE),
+                    v -> confirmRewardsDelete(dialog)), matchLpTop(8));
+            box.addView(text(I18n.get(
+                    this, StringsTable.MINING_REWARDS_DELETE_NOTE),
+                    14, LABEL3, false), matchLpTop(2));
+        }
+
+        dialog.setOnShowListener(dlg -> {
+            final Button save = dialog.getButton(AlertDialog.BUTTON_POSITIVE);
+            final Runnable update = () -> {
+                MiningLogic.EntryState state = MiningLogic.innerHashEntryState(
+                        input.getText().toString());
+                save.setEnabled(state == MiningLogic.EntryState.OK);
+                if (state == MiningLogic.EntryState.BAD_FORMAT) {
+                    error.setText(I18n.get(this,
+                            StringsTable.MINING_REWARDS_ERR_FORMAT));
+                    error.setVisibility(View.VISIBLE);
+                } else if (state == MiningLogic.EntryState.NOT_CANONICAL) {
+                    error.setText(I18n.get(this,
+                            StringsTable.MINING_REWARDS_ERR_CANONICAL));
+                    error.setVisibility(View.VISIBLE);
+                } else {
+                    error.setVisibility(View.GONE);
+                }
+            };
+            input.addTextChangedListener(new AfterTextChanged(update));
+            update.run();
+            save.setOnClickListener(v -> {
+                // Re-validate at the last moment, as the name editor
+                // does: the lock may have become effective, and the
+                // setter itself refuses anything but a valid value.
+                if (NodeSettings.settingsLocked(this)) {
+                    input.setEnabled(false);
+                    save.setEnabled(false);
+                    return;
+                }
+                if (!NodeSettings.setRewardsInnerHash(
+                        this, input.getText().toString())) {
+                    update.run();
+                    return; // stay open with the error showing
+                }
+                dialog.dismiss();
+                refresh();
+            });
+        });
+        // Whichever way the dialog closes, the typed text does not
+        // stay behind in a view.
+        dialog.setOnDismissListener(d -> input.setText(""));
+        dialog.show();
+        styleDialog(dialog);
+    }
+
+    /**
+     * A text watcher that runs one action after every change. A
+     * named class on purpose: an anonymous one here would renumber
+     * the compiler's synthetic classes for this file, and with them
+     * the bytecode of methods this change does not touch.
+     */
+    private static final class AfterTextChanged implements TextWatcher {
+        private final Runnable action;
+
+        AfterTextChanged(Runnable action) {
+            this.action = action;
+        }
+
+        @Override
+        public void beforeTextChanged(
+                CharSequence s, int start, int count, int after) {
+        }
+
+        @Override
+        public void onTextChanged(
+                CharSequence s, int start, int before, int count) {
+        }
+
+        @Override
+        public void afterTextChanged(Editable s) {
+            action.run();
+        }
+    }
+
+    /** Deleting the saved inner hash also switches mining off; ask first. */
+    private void confirmRewardsDelete(final AlertDialog editor) {
+        if (NodeSettings.settingsLocked(this)) {
+            return;
+        }
+        AlertDialog confirm = new AlertDialog.Builder(this)
+                .setTitle(I18n.get(this, StringsTable.MINING_REWARDS_DELETE))
+                .setMessage(I18n.get(
+                        this, StringsTable.MINING_REWARDS_DELETE_NOTE))
+                .setNegativeButton(android.R.string.cancel, null)
+                .setPositiveButton(android.R.string.ok, (d, which) -> {
+                    if (NodeSettings.settingsLocked(this)) {
+                        return;
+                    }
+                    NodeSettings.clearRewardsInnerHash(this);
+                    editor.dismiss();
+                    refresh();
+                })
+                .create();
+        confirm.show();
+        styleDialog(confirm);
+    }
+
+    /** The picker label of a worker setting: "1", "2", "4" or "Auto (n)". */
+    private String workerLabel(int setting, int cores) {
+        if (setting == MiningLogic.WORKERS_AUTO) {
+            return I18n.format(this, StringsTable.MINING_WORKERS_AUTO_VALUE,
+                    String.valueOf(MiningLogic.effectiveCpuWorkers(
+                            MiningLogic.WORKERS_AUTO, cores)));
+        }
+        return String.valueOf(setting);
+    }
+
+    /**
+     * The worker-count picker: the fixed choices of
+     * {@link MiningLogic#workerChoices} and nothing else — the count
+     * is the one part of the miner's command the user controls. A
+     * custom list view, for the reason given at the language picker.
+     * A tap saves at once; a running miner picks the new count up
+     * when it is restarted (the status block offers that).
+     */
+    private void showWorkersDialog() {
+        final int[] choices = MiningLogic.workerChoices();
+        final int cores = Runtime.getRuntime().availableProcessors();
+        final int current = NodeSettings.miningCpuWorkers(this);
+        CharSequence[] items = new CharSequence[choices.length];
+        int checkedIndex = 0;
+        for (int i = 0; i < choices.length; i++) {
+            items[i] = workerLabel(choices[i], cores);
+            if (choices[i] == current) {
+                checkedIndex = i;
+            }
+        }
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(24), dp(8), dp(24), dp(8));
+        box.addView(text(I18n.get(this, StringsTable.MINING_WORKERS_NOTE),
+                14, LABEL3, false), matchLp());
+        ListView list = new ListView(this);
+        list.setChoiceMode(ListView.CHOICE_MODE_SINGLE);
+        list.setAdapter(new ArrayAdapter<>(this,
+                android.R.layout.simple_list_item_single_choice, items));
+        list.setItemChecked(checkedIndex, true);
+        list.setDivider(new ColorDrawable(HAIRLINE));
+        list.setDividerHeight(Math.max(1, dp(1)));
+        LinearLayout.LayoutParams listLp = matchLpTop(8);
+        listLp.height = Math.min(dp(56) * items.length, dp(400));
+        box.addView(list, listLp);
+        final AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle(I18n.get(this, StringsTable.MINING_WORKERS_LABEL))
+                .setView(box)
+                .setNegativeButton(android.R.string.cancel, null)
+                .create();
+        miningDialog = dialog;
+        list.setOnItemClickListener((parent, view, which, id) -> {
+            if (!NodeSettings.settingsLocked(this)
+                    && choices[which] != current) {
+                NodeSettings.setMiningCpuWorkers(this, choices[which]);
+            }
+            dialog.dismiss();
+            refresh();
+        });
+        dialog.show();
+        styleDialog(dialog);
+    }
+
+    /** Whether a node session is live, as the mining views mean it. */
+    private static boolean nodeLive(NodeState st) {
+        return st.serviceRunning && st.status != NodeState.Status.STOPPED;
+    }
+
+    /** What restarting the node would change about mining, if anything. */
+    private MiningLogic.PendingKind miningPendingKind(NodeState st) {
+        return MiningLogic.nodeRestartPendingKind(nodeLive(st),
+                st.launchedMining, st.launchedRewardsTag,
+                st.launchedMiningSkip, NodeSettings.miningEnabled(this),
+                NodeSettings.rewardsInnerHash(this));
+    }
+
+    /** Home card and pending link: the mining settings, switch on top. */
+    private void openMiningSettings() {
+        showScreen(SCREEN_SETTINGS);
+        final ScrollView ssv = (ScrollView) screens[SCREEN_SETTINGS];
+        if (ssv == null || miningRow == null) {
+            return;
+        }
+        ssv.post(() -> ssv.scrollTo(0, Math.max(0, offsetInContent(
+                miningRow, ssv.getChildAt(0)) - dp(24))));
+    }
+
+    /**
+     * Fill the mining views (1 s tick). With mining not in use — the
+     * switch off and no node running that was launched with it —
+     * this syncs the switch and the two rows, keeps the status block
+     * and the home card GONE, and returns.
+     */
+    private void refreshMining(NodeState st, long now) {
+        if (miningSwitch == null || homeMiningBox == null) {
+            return;
+        }
+        String tag = I18n.effectiveTag(this);
+        boolean enabled = NodeSettings.miningEnabled(this);
+        boolean hasHash = NodeSettings.hasRewardsInnerHash(this);
+        boolean locked = NodeSettings.settingsLocked(this);
+        boolean nodeRunning = nodeLive(st);
+        boolean launchedWith = nodeRunning
+                && Boolean.TRUE.equals(st.launchedMining);
+        boolean inUse = enabled || launchedWith;
+
+        syncSwitch(miningSwitch, enabled);
+        miningSwitch.setEnabled(!locked);
+        miningRow.setEnabled(!locked);
+        miningLockedView.setVisibility(locked ? View.VISIBLE : View.GONE);
+        miningRewardsRow.setEnabled(!locked);
+        miningRewardsRow.setAlpha(locked ? 0.55f : 1f);
+        miningWorkersRow.setEnabled(!locked);
+        miningWorkersRow.setAlpha(locked ? 0.55f : 1f);
+
+        setTextIfChanged(miningRewardsValue, I18n.get(this, hasHash
+                ? StringsTable.MINING_REWARDS_SET
+                : StringsTable.MINING_REWARDS_UNSET));
+        int setting = NodeSettings.miningCpuWorkers(this);
+        int cores = Runtime.getRuntime().availableProcessors();
+        setTextIfChanged(miningWorkersValue, workerLabel(setting, cores));
+
+        // What a node restart would change (the telemetry rows'
+        // pattern): the switch, or the inner hash.
+        MiningLogic.PendingKind pending = miningPendingKind(st);
+        boolean switchPending = pending == MiningLogic.PendingKind.ENABLE
+                || pending == MiningLogic.PendingKind.DISABLE;
+        miningPendingView.setVisibility(
+                switchPending ? View.VISIBLE : View.GONE);
+        miningAppliedView.setVisibility(
+                switchPending ? View.VISIBLE : View.GONE);
+        if (switchPending) {
+            setTextIfChanged(miningPendingView,
+                    I18n.get(this, StringsTable.SETTINGS_PENDING_STATUS));
+            setTextIfChanged(miningAppliedView, I18n.format(this,
+                    StringsTable.SETTINGS_APPLIED_VALUE,
+                    I18n.get(this, pending == MiningLogic.PendingKind.DISABLE
+                            ? StringsTable.VALUE_ON
+                            : StringsTable.VALUE_OFF)));
+        }
+        boolean rewardsPending =
+                pending == MiningLogic.PendingKind.REWARDS_CHANGED;
+        miningRewardsPendingView.setVisibility(
+                rewardsPending ? View.VISIBLE : View.GONE);
+        if (rewardsPending) {
+            setTextIfChanged(miningRewardsPendingView,
+                    I18n.get(this, StringsTable.SETTINGS_PENDING_STATUS));
+        }
+
+        // What a MINER restart would change: its worker count.
+        MiningLogic.MinerView view = nodeRunning ? st.minerView : null;
+        MiningLogic.MinerSnapshot snap =
+                view == null ? null : view.snapshot(now);
+        boolean workersPending = MiningLogic.minerRestartPending(snap,
+                MiningLogic.effectiveCpuWorkers(setting, cores));
+        miningWorkersPendingView.setVisibility(
+                workersPending ? View.VISIBLE : View.GONE);
+        if (workersPending) {
+            setTextIfChanged(miningWorkersPendingView, I18n.format(this,
+                    StringsTable.MINING_WORKERS_PENDING,
+                    String.valueOf(snap.cpuWorkers)));
+        }
+
+        miningStatusBox.setVisibility(inUse ? View.VISIBLE : View.GONE);
+        homeMiningBox.setVisibility(inUse ? View.VISIBLE : View.GONE);
+        if (!inUse) {
+            return;
+        }
+
+        MiningLogic.Presentation p = MiningLogic.present(enabled, hasHash,
+                nodeRunning, st.launchedMining, st.launchedMiningSkip,
+                st.status == NodeState.Status.SYNCED, st.peers, snap, now);
+        String stateText = MiningLogic.stateText(tag, p);
+        setTextIfChanged(miningStateValue, stateText);
+        miningStateValue.setTextColor(
+                p.state == MiningLogic.UiState.MINING ? STATE_SYNCED
+                        : p.state == MiningLogic.UiState.STOPPED
+                                ? STATE_FAILED : LABEL1);
+        String reason = MiningLogic.reasonText(tag, p);
+        miningReasonView.setVisibility(
+                reason == null ? View.GONE : View.VISIBLE);
+        if (reason != null) {
+            setTextIfChanged(miningReasonView, reason);
+        }
+        // A node that still mines although the settings now say
+        // otherwise: the status above stays the truth, and this line
+        // says what a restart will change. (ENABLE needs no second
+        // line — its reason line already is that sentence.)
+        String pendingNote = pending == MiningLogic.PendingKind.DISABLE
+                || pending == MiningLogic.PendingKind.REWARDS_CHANGED
+                ? MiningLogic.pendingText(tag, pending) : null;
+        miningPendingNoteView.setVisibility(
+                pendingNote == null ? View.GONE : View.VISIBLE);
+        if (pendingNote != null) {
+            setTextIfChanged(miningPendingNoteView, pendingNote);
+        }
+        // The node's own failure stays the node's (its screen shows
+        // it); this only connects it to mining, where the remedy is.
+        boolean nodeFailed = !nodeRunning && enabled
+                && Boolean.TRUE.equals(st.launchedMining)
+                && (st.lastStopKind == NodeState.StopKind.START_FAILED
+                || st.lastStopKind == NodeState.StopKind.UNEXPECTED);
+        miningNodeFailedView.setVisibility(
+                nodeFailed ? View.VISIBLE : View.GONE);
+
+        miningStatsBox.setVisibility(launchedWith ? View.VISIBLE : View.GONE);
+        String home = stateText;
+        if (launchedWith) {
+            MiningLogic.StatsSnapshot stats = snap == null
+                    ? MiningLogic.StatsSnapshot.EMPTY : snap.stats;
+            String rate = MiningLogic.formatHashrate(stats.hashrateHps);
+            setTextIfChanged(miningHashrateValue, rate != null ? rate
+                    : I18n.get(this, StringsTable.VALUE_UNAVAILABLE));
+            setTextIfChanged(miningJobsValue,
+                    UiLogic.grouped(stats.jobsReceived));
+            setTextIfChanged(miningSubmittedValue,
+                    UiLogic.grouped(stats.solutionsSubmitted));
+            setTextIfChanged(miningAcceptedValue,
+                    UiLogic.grouped(stats.blocksAccepted));
+            setTextIfChanged(miningAddressValue, stats.rewardsAddress != null
+                    ? stats.rewardsAddress
+                    : I18n.get(this, StringsTable.MINING_ADDRESS_PENDING));
+            miningRestartButton.setEnabled(view != null && !locked);
+            StringBuilder tail = new StringBuilder();
+            if (snap != null) {
+                for (String line : snap.logTail) {
+                    if (tail.length() > 0) {
+                        tail.append('\n');
+                    }
+                    tail.append(line);
+                }
+            }
+            setTextIfChanged(miningLogView, tail.toString());
+            if (p.state == MiningLogic.UiState.MINING && rate != null) {
+                home = stateText + " · " + rate;
+            }
+        }
+        setTextIfChanged(homeMiningText, home);
+    }
+
+    /** The mining parts of one share, gathered off the UI thread. */
+    private static final class MiningShare {
+        /** "" when there is no miner log to add. */
+        String minerLogSection = "";
+        /** Empty when mining is not in use. */
+        List<String> summaryLines = new ArrayList<>();
+        /** Never null; holds nothing when there is nothing to remove. */
+        MiningLogic.SecretScrubber scrubber =
+                MiningLogic.SecretScrubber.of(null, null);
+    }
+
+    /**
+     * What a share gains from mining (v4.0.0). Two independent parts:
+     *
+     *  - the scrubber is built whenever the app holds anything it
+     *    could find — the saved inner hash, the node's miner token —
+     *    whether or not mining is switched on, and is applied to
+     *    every shared body. Neither value is ever written to a log;
+     *    the share is the one path that leaves the device, so it is
+     *    checked once more regardless;
+     *  - the summary lines and the miner's log excerpt are added
+     *    only while mining is in use. With mining off the share
+     *    text is the v3.0.1 text.
+     */
+    private MiningShare gatherMiningShare(File logDir) {
+        MiningShare m = new MiningShare();
+        NodeState st = NodeState.get();
+        boolean enabled = NodeSettings.miningEnabled(this);
+        boolean hasHash = NodeSettings.hasRewardsInnerHash(this);
+        boolean nodeRunning = nodeLive(st);
+        boolean launchedWith = nodeRunning
+                && Boolean.TRUE.equals(st.launchedMining);
+        File tokenFile = MiningLogic.minerTokenFile(
+                new File(getFilesDir(), "node"), NodeService.CHAIN_NAME);
+        m.scrubber = MiningLogic.SecretScrubber.of(
+                NodeSettings.rewardsInnerHash(this),
+                MiningLogic.readSmallTextFile(tokenFile, 4096));
+        if (!enabled && !launchedWith) {
+            return m;
+        }
+        long now = SystemClock.elapsedRealtime();
+        MiningLogic.MinerView view = nodeRunning ? st.minerView : null;
+        MiningLogic.MinerSnapshot snap =
+                view == null ? null : view.snapshot(now);
+        MiningLogic.Presentation p = MiningLogic.present(enabled, hasHash,
+                nodeRunning, st.launchedMining, st.launchedMiningSkip,
+                st.status == NodeState.Status.SYNCED, st.peers, snap, now);
+        MiningLogic.ShareFacts f = new MiningLogic.ShareFacts();
+        f.enabledSetting = enabled;
+        f.launchedMining = nodeRunning ? st.launchedMining : null;
+        f.launchSkip = st.launchedMiningSkip;
+        f.rewardsSaved = hasHash;
+        f.workerSetting = NodeSettings.miningCpuWorkers(this);
+        long miningChanged = NodeSettings.miningChangedMs(this);
+        long rewardsChanged = NodeSettings.rewardsChangedMs(this);
+        f.miningChangedText = miningChanged > 0
+                ? DiagShare.formatTimestamp(miningChanged) : null;
+        f.rewardsChangedText = rewardsChanged > 0
+                ? DiagShare.formatTimestamp(rewardsChanged) : null;
+        f.uiState = p.state;
+        f.uiReason = p.reason;
+        f.miner = snap;
+        m.summaryLines = MiningLogic.summaryLines(f);
+        boolean[] truncated = new boolean[1];
+        String tail = BoundedLogFile.readTail(
+                NodeService.minerLogFile(logDir), 40_000, truncated);
+        m.minerLogSection = MiningLogic.minerLogSection(tail, truncated[0]);
+        return m;
+    }
+
     /**
      * The DePIN service's notification texts, resolved here (the UI
      * owns localisation) and handed to the facade for the service
@@ -2336,8 +3200,14 @@ public class MainActivity extends Activity {
         int pending = UiLogic.settingsPending(st.serviceRunning,
                 st.launchedTelemetry, NodeSettings.telemetryEnabled(this),
                 st.launchedNodeName, NodeSettings.effectiveNodeName(this));
+        // v4.0.0: with neither of the two pending, the link was shown
+        // for a pending mining change — go to the mining switch.
         final View target = (pending & UiLogic.PENDING_TELEMETRY) != 0
-                ? telemetryRow : nameRow;
+                ? telemetryRow
+                : pending == 0 && miningRow != null
+                        && miningPendingKind(st)
+                        != MiningLogic.PendingKind.NONE
+                        ? miningRow : nameRow;
         ScrollView ssv = (ScrollView) screens[SCREEN_SETTINGS];
         ssv.post(() -> ssv.scrollTo(0, Math.max(0, offsetInContent(
                 target, ssv.getChildAt(0)) - dp(24))));
@@ -2368,8 +3238,13 @@ public class MainActivity extends Activity {
                     logText == null ? null : ownIpAddresses(ipEnumFailed);
             final List<String> pathPrefixes =
                     logText == null ? null : appPathPrefixes();
+            // v4.0.0: the mining parts of the share (see
+            // gatherMiningShare); they add nothing while mining is
+            // not in use.
+            final MiningShare mining =
+                    logText == null ? null : gatherMiningShare(logDir);
             runOnUiThread(() -> shareLog(logText, wasTruncated,
-                    facts, ownIps, ipEnumFailed[0], pathPrefixes));
+                    facts, ownIps, ipEnumFailed[0], pathPrefixes, mining));
         }, "share-log-read").start();
     }
 
@@ -2388,7 +3263,8 @@ public class MainActivity extends Activity {
     private void shareLog(String logText, boolean wasTruncated,
                           DiagShare.Facts facts, List<String> ownIps,
                           boolean ipEnumFailed,
-                          List<String> pathPrefixes) {
+                          List<String> pathPrefixes,
+                          MiningShare mining) {
         if (isFinishing() || isDestroyed()) {
             // The background read finished into an activity that
             // is already going away: showing the dialog (or the
@@ -2449,7 +3325,8 @@ public class MainActivity extends Activity {
                 .setPositiveButton(
                         I18n.get(this, StringsTable.BUTTON_SHARE_LOG),
                         (d, which) -> doShareLog(excerpt, truncated, facts,
-                                maskToggle.isChecked(), ownIps, pathPrefixes))
+                                maskToggle.isChecked(), ownIps, pathPrefixes,
+                                mining))
                 .create();
         dialog.show();
         styleDialog(dialog);
@@ -2470,19 +3347,37 @@ public class MainActivity extends Activity {
      */
     private void doShareLog(String excerpt, boolean truncated,
                             DiagShare.Facts facts, boolean maskOn,
-                            List<String> ownIps, List<String> pathPrefixes) {
+                            List<String> ownIps, List<String> pathPrefixes,
+                            MiningShare mining) {
         String body = excerpt;
         if (truncated) {
             body = "[... earlier log omitted for sharing; "
                     + "showing the last part ...]\n"
                     + body;
         }
+        // v4.0.0: the miner's log excerpt follows the node's, inside
+        // the body, so the masking below covers it as well. "" (and
+        // so no change) while mining is not in use.
+        if (mining != null) {
+            body = body + mining.minerLogSection;
+        }
         if (maskOn) {
             body = DiagShare.maskSensitive(body, shareMaskNames(),
                     ownIps, pathPrefixes);
         }
-        String full = DiagShare.buildSummary(facts, excerpt, truncated)
-                + "\n" + body;
+        // v4.0.0: with masking on, the rewards address the node
+        // reported is hidden too; and whatever the masking choice,
+        // the inner hash and the miner token are removed from the
+        // body (MiningLogic.finishShareBody). A body that holds
+        // none of them is returned as the very same string.
+        body = MiningLogic.finishShareBody(body, maskOn,
+                mining == null ? null : mining.scrubber);
+        String summary = DiagShare.buildSummary(facts, excerpt, truncated);
+        if (mining != null) {
+            summary = MiningLogic.insertSummaryLines(
+                    summary, mining.summaryLines);
+        }
+        String full = summary + "\n" + body;
         Intent send = new Intent(Intent.ACTION_SEND);
         send.setType("text/plain");
         send.putExtra(Intent.EXTRA_SUBJECT,
@@ -3016,6 +3911,10 @@ public class MainActivity extends Activity {
         trackPeersValue.setText(
                 UiLogic.grouped(TrackStore.maxPeers(this)));
         refreshSettings(st);
+        // v4.0.0: its own step — refreshSettings can return early
+        // (no DePIN status yet), and the mining views must not
+        // depend on that.
+        refreshMining(st, now);
         refreshTransferState();
         firstRefresh = false;
     }
@@ -3109,7 +4008,7 @@ public class MainActivity extends Activity {
                 ? UiLogic.grouped(st.peers)
                 : I18n.get(this, StringsTable.VALUE_UNAVAILABLE));
         vhUptimeValue.setText(st.sessionAcceptedElapsedMs >= 0
-                ? sessionClockText(now - st.sessionAcceptedElapsedMs)
+                ? sessionClockText(sessionUptimeMs(st, now))
                 : I18n.get(this, StringsTable.VALUE_UNAVAILABLE));
         setTextIfChanged(vhBestAgoView, st.lastObservedElapsedMs >= 0
                 ? agoText(now - st.lastObservedElapsedMs)
@@ -3222,7 +4121,13 @@ public class MainActivity extends Activity {
         int pending = UiLogic.settingsPending(st.serviceRunning,
                 st.launchedTelemetry, NodeSettings.telemetryEnabled(this),
                 st.launchedNodeName, NodeSettings.effectiveNodeName(this));
-        boolean showPending = pending != 0 && UiLogic.showsStats(hs);
+        // v4.0.0: a mining change waiting for a node restart counts
+        // too. It is NONE whenever mining is not in use, which leaves
+        // this exactly the v3.0.1 condition.
+        boolean miningPending =
+                miningPendingKind(st) != MiningLogic.PendingKind.NONE;
+        boolean showPending = (pending != 0 || miningPending)
+                && UiLogic.showsStats(hs);
         pendingLinkView.setVisibility(showPending ? View.VISIBLE : View.GONE);
         if (showPending) {
             setTextIfChanged(pendingLinkView,
@@ -3312,7 +4217,14 @@ public class MainActivity extends Activity {
         });
     }
 
-    /** Session uptime as a mono clock (HH:MM:SS, hours unbounded). */
+    /** The current session's uptime: counted live while the session
+     *  runs, frozen at its end once it has ended. */
+    private static long sessionUptimeMs(NodeState st, long now) {
+        long end = st.sessionEndedElapsedMs >= 0
+                ? st.sessionEndedElapsedMs : now;
+        return end - st.sessionAcceptedElapsedMs;
+    }
+
     private static String sessionClockText(long elapsedMs) {
         long s = Math.max(0, elapsedMs / 1000);
         return String.format(Locale.US, "%02d:%02d:%02d",
@@ -3911,7 +4823,7 @@ public class MainActivity extends Activity {
                     : I18n.get(this, StringsTable.VALUE_UNAVAILABLE));
             detSessionValue.setText(st.sessionAcceptedElapsedMs >= 0
                     ? UiLogic.durationText(tag,
-                            now - st.sessionAcceptedElapsedMs, false)
+                            sessionUptimeMs(st, now), false)
                     : I18n.get(this, StringsTable.VALUE_UNAVAILABLE));
         } else {
             cumUptimeValue.setText(UiLogic.durationText(

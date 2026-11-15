@@ -8,6 +8,115 @@ the first public release (published 2026-11-04).
 "versionCode" is the Android build number of the MVP app (the bundled
 node binary is unchanged unless a build says otherwise).
 
+## versionCode 64 / v4.0.0 — 2026-11-16
+- **On-device mining, as an opt-in (off by default).** Verified
+  on a real device (Pixel 9a / GrapheneOS) before release: an
+  in-place update over v3.0.2; mining switched on; the bundled
+  miner receiving jobs from the bundled node (42 jobs in the
+  first session); the rewards address the node reports matching
+  the address the maintainer's wallet shows for the same inner
+  hash; the miner's metrics exporter inactive; and the shared
+  diagnostic text carrying the inner hash only as "saved", never
+  as a value. Not observed on a device: a solution actually
+  found and accepted — at the network's current difficulty a
+  phone's expected wait for a block is far longer than any test
+  session, so the submission path rests on the test harness's
+  parsing of the official miner's real log lines and on the
+  standard interface between the official miner and node
+  binaries, which are unmodified in this respect. External
+  audit rounds covered the mining implementation and the
+  finished tree; every verified finding was fixed, and a
+  closing review of the fixes found nothing that required
+  rebuilding the APK. With mining off, the app
+  behaves as v3.0.2 does — same launch arguments, same processes,
+  same notification, same shared diagnostic text. No permission
+  is added (still five), the manifest is unchanged, the bundled
+  node binary is unchanged from v3.0.2, and
+  no data is migrated. One binary is added to the APK: the
+  official `quantus-miner` v4.2.1 as `lib/arm64-v8a/libquantus_miner.so`.
+  - **Launch.** With mining on, the node is started with
+    `--validator --miner-listen-port 9833 --rewards-inner-hash <value>`
+    appended to the fixed argument set. The switch is read at
+    launch only; a change is applied by the user's own stop →
+    start, never by the app. A saved inner hash the node would
+    refuse, or a missing miner binary, makes the node start
+    exactly as it does without mining, with the reason shown.
+    On a fresh install the first start also runs without mining —
+    a validator start would be refused because the node has no
+    network key yet — and creates that key; stopping and starting
+    the node then begins mining, and the status says so.
+  - **The miner process.** The bundled miner runs as a second
+    child process under a supervisor modelled on the node's
+    worker: argument array (no shell), one `linker64` retry,
+    bounded stop (destroy → 5 s → destroyForcibly), exit always
+    awaited, output through a bounded line reader into a capped
+    log (`logs/miner.log`, ~256 KB). The command is fixed —
+    `serve --node-addr 127.0.0.1:9833 --auth-token-file <file>
+    --tls-cert-sha256-file <file> --cpu-workers <N> --gpu-devices 0`
+    — and the miner is started only after the node is up and
+    both files exist, are readable and are non-empty. `MINER_*`
+    and `RUST_LOG` are removed from its environment. A miner
+    that exits on its own is restarted after 10 s, 30 s and
+    60 s and then left alone; it can never stop or restart the
+    node, and it always stops with it.
+  - **Thermal protection.** Mining defaults to 2 CPU workers.
+    While the miner runs, the device's thermal status is watched:
+    at the platform's "moderate" level the worker count is halved
+    (rounded down, never below 1, and not raised again within the
+    session), and at "severe" or above the miner is stopped for
+    the rest of the session — the status names the heat as the
+    reason, and mining resumes when the node is restarted. The
+    cap and the stop are held for the whole session, across the
+    app's own restarts as well; they reset when the user stops
+    and starts the node. The node itself is never touched by any
+    of this.
+  - **The rewards inner hash** is entered in Settings and
+    validated by the official node's own rule (`0x` + 64 hex
+    digits that form a canonical Poseidon digest; a bare 64-digit
+    value is accepted and stored with the `0x`). It is stored in
+    the app-private settings only, never shown again after
+    saving, redacted from the launch line, and — together with
+    the node's miner auth token — scrubbed from every line of
+    node and miner output before the line is logged, displayed
+    or parsed, and once more from the shared diagnostic text.
+  - **Status.** Off / node stopped / preparing / waiting /
+    mining / stopped (with the miner's exit code), each with its
+    reason; jobs received, solutions submitted, blocks accepted
+    by the node and a hashrate estimate, read from the two
+    processes' log lines; and the wormhole address the node
+    reports for the configured inner hash, shown for comparison
+    with the "Address:" line the official key tool prints for
+    that inner hash. Only the first such report in the node's
+    output is shown, and none is taken once the miner endpoint
+    has been announced: a later line carrying the marker can be
+    text a peer sent to that endpoint, not the node's own
+    report. "Waiting" is explained as the normal state
+    while the node syncs or has no peers.
+  - **Settings and strings.** A mining section in Settings
+    (switch with a confirmation that carries the heat, battery,
+    charging and validator-role warnings; rewards editor; CPU
+    workers 1 / 2 / 4 / auto, 2 by default, capped at the core
+    count minus one), a home card shown only while mining is in
+    use, and a mining part in the status notification for a node
+    launched with mining. 68 new strings in all nine languages
+    (`StringsTable.java`: 400 keys × 9 languages in total, with
+    the support footer's three below).
+  - **Tests.** `app/tests/run-mining-tests.sh` (plain JVM): the
+    argument lists, the inner-hash rule, redaction and
+    scrubbing, log-line parsing, the restart policy, the status
+    mapping, the share text, the strings table, and the
+    supervisor itself against real child processes.
+- **Support footer.** The bottom of the Home screen shows the
+  developer's QTC donation address, with a line saying donations
+  are voluntary; tapping the address copies it. The app never
+  sends anything to it — donating is an action the user takes
+  in their own wallet. Three new strings in all nine languages.
+- **Session uptime display.** The "current uptime" on the home
+  and detail screens kept counting after the node was stopped.
+  It now freezes at the moment the session ends and shows the
+  length that session actually ran; the last session's figures
+  (best block, peers) already stayed as they were.
+
 ## versionCode 63 / v3.0.2 — 2026-11-14
 - **A hotfix release: the bundled node binary is rebuilt** (the
   first binary change since versionCode 10). App code,

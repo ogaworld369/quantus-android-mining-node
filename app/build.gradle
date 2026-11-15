@@ -6,10 +6,11 @@
 // key when QUANTUS_SIGNING=release (the keystore lives outside this
 // repository; see docs/RELEASE.md).
 //
-// For a Gradle build, stage the two native libraries first (they are not
-// in git, see README.md):
+// For a Gradle build, stage the three native libraries first (they are not
+// in git, see README.md; the miner joined the other two in v4.0.0):
 //   mkdir -p src/main/jniLibs/arm64-v8a
-//   cp native/libquantus_node.so native/libc++_shared.so src/main/jniLibs/arm64-v8a/
+//   cp native/libquantus_node.so native/libc++_shared.so \
+//      native/libquantus_miner.so src/main/jniLibs/arm64-v8a/
 plugins {
     id 'com.android.application' version '8.7.3'
 }
@@ -22,8 +23,8 @@ android {
         applicationId 'app.quantusnode.node'
         minSdk 31
         targetSdk 35
-        versionCode 63
-        versionName '3.0.2'
+        versionCode 64
+        versionName '4.0.0'
 
         ndk {
             // arm64-v8a only: quantus-node is built for aarch64-linux-android.
@@ -44,7 +45,8 @@ android {
         jniLibs {
             // The .so files must be extracted to disk (nativeLibraryDir):
             // libquantus_node.so is executed as a child process by path,
-            // which is impossible while it stays inside the APK.
+            // which is impossible while it stays inside the APK. The
+            // same holds for libquantus_miner.so (v4.0.0).
             useLegacyPackaging = true
         }
     }

@@ -7,7 +7,7 @@ it has synced.
 
 - applicationId: `app.quantusnode.node`
 - minSdk 31 / targetSdk 35 / arm64-v8a only
-- versionName `3.0.2` (versionCode 63; public releases began at v0.1.0)
+- versionName `4.0.0` (versionCode 64; public releases began at v0.1.0)
 - Permissions (only these): `INTERNET`, `ACCESS_NETWORK_STATE`,
   `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_SPECIAL_USE`,
   `POST_NOTIFICATIONS`
@@ -38,7 +38,8 @@ it has synced.
   Pruning is always passed. No `--rpc-external` (or similar) is ever
   passed, so RPC stays bound to `127.0.0.1`. All node files (chain DB,
   node key) stay inside the app-private directory. The app holds no
-  wallet, no seed phrase, no asset secrets — by design.
+  wallet, no seed phrase and no spendable key — by design (the
+  mining inner hash of the section below is a preimage, not a key).
 - Node output goes to `filesDir/logs/node.log`, hard-capped by rotation
   (~512 KB; when exceeded, the older half is dropped). No unbounded
   buffers, no unbounded appends.
@@ -58,6 +59,95 @@ it has synced.
   (`http://127.0.0.1:9944/`, `system_health` + `system_syncState`,
   polled every ~3 s). Connection refused while booting is shown as
   "起動中" (starting), never as an error. No external endpoint is contacted.
+
+## Mining (versionCode 64 / v4.0.0)
+
+Mining is an **opt-in, off by default**. While it is off, nothing
+below happens: the launch arguments, the log, the processes, the
+notification and the shared diagnostic text are those of v3.0.2.
+
+- **Launch.** With mining on (Settings → Mining; a valid rewards
+  inner hash must be saved first), the node is started with three
+  more arguments, appended to the fixed set above:
+
+  ```
+  --validator --miner-listen-port 9833 --rewards-inner-hash <saved value>
+  ```
+
+  The switch is read at launch only: turning it on or off never
+  touches a running node, and the app never restarts the node by
+  itself — the user stops and starts it. If the saved inner hash is
+  unusable or the miner binary is missing, the node starts exactly
+  as it does without mining and the status says why. On a fresh
+  install the first start also runs without mining (a validator
+  start would be refused because the node has no network key yet)
+  and creates that key; the next start mines.
+- **The miner** is a second child process, started and stopped by
+  `MinerSupervisor` for each node process launched with mining:
+  the bundled binary from `nativeLibraryDir`, an argument array
+  (no shell), one `/system/bin/linker64` retry, the fixed command
+
+  ```
+  serve --node-addr 127.0.0.1:9833
+    --auth-token-file <filesDir>/node/chains/mainnet/miner-auth-token
+    --tls-cert-sha256-file <filesDir>/node/chains/mainnet/miner-tls-cert-sha256
+    --cpu-workers <N> --gpu-devices 0
+  ```
+
+  It is started only after the node is up and both files exist,
+  are readable and are non-empty. `N` is the one user-controlled
+  part (1 / 2 / 4 / auto, 2 by default, never more than the core
+  count minus one). `MINER_*` and `RUST_LOG` are removed from the
+  miner's environment, so the command line is its whole
+  configuration. Stopping is bounded (destroy, 5 s,
+  destroyForcibly), the miner always stops with its node, and a
+  miner left behind by a killed app process is found and ended
+  before a new one starts.
+- **Thermal protection.** While the miner runs, the device's
+  thermal status is applied to a governor in `MiningLogic`: at
+  the platform's "moderate" level the worker cap is halved
+  (rounded down, never below 1, and never raised again within the
+  session — a restart brings the miner back within the cap), and
+  at "severe" or above the miner is stopped for the rest of the
+  session and the status gives the heat as the reason. One
+  governor serves a whole session of the service and is handed
+  to each supervisor the session creates, so the cap and the
+  stop survive the app's own restarts (sync-stall restart,
+  linker retry) and reset only at the user's next start. The
+  feed is registered per supervisor and removed with it; a
+  failure in it can never reach the node.
+- **Failures stay the miner's.** A miner that exits on its own is
+  restarted after 10 s, 30 s and 60 s; a fourth failure in a row
+  ends the automatic restarts (the status then shows the exit
+  code, and offers a manual miner restart). The supervisor has no
+  reference to the node process and cannot stop or restart it.
+- **Secrets.** The rewards inner hash is stored in the app-private
+  settings only, travels to the node as one argument, and is
+  replaced by `<redacted>` in the launch line. The node's miner
+  auth token reaches the miner as a file path. Every line of node
+  and miner output passes a scrubber for both values before it is
+  written to a log, kept for the screen or parsed, and the shared
+  diagnostic text is scrubbed once more whatever the masking
+  choice. The editor never shows a saved value again.
+- **Status** comes from the two processes' own log lines (bundled
+  miner v4.2.1 and node v1.0.5 formats): jobs received, solutions
+  submitted, blocks the node accepted, a hashrate estimate, and the
+  wormhole address the node reports for the configured inner hash —
+  shown so it can be compared with the "Address:" line the
+  official key tool prints for that inner hash. Only the first
+  such report in the node's output is used, and none is taken
+  after the miner endpoint has been announced. "Mining" is claimed
+  only while a job arrived within the last two minutes; otherwise
+  the state is "waiting", with the reason (syncing, no peers, no
+  job yet).
+- **Logs.** Miner output goes to `filesDir/logs/miner.log`, capped
+  at ~256 KB by the same rotation rule as `node.log`. Miner
+  lifecycle notes are `[app]` lines in `node.log`.
+- **Tests.** The logic lives in three Android-free classes
+  (`MiningLogic`, `MinerSupervisor`, `BoundedLogFile`) and is
+  verified on a JVM by `tests/run-mining-tests.sh` — including
+  the supervisor against real child processes.
+- No permission is added, and the manifest is unchanged.
 
 ## DePIN activity recording (versionCode 58 / v3.0)
 
@@ -221,7 +311,7 @@ strictly higher, so a fixed versionCode would silently strand testers
 on old builds. `versionName` stayed `0.1-mvp` through the
 pre-release builds; the first public release (versionCode 20)
 shipped as `0.1.0`, and the versionName in `build-manual.sh` and
-`build.gradle` moves with each release since (currently `3.0.2`).
+`build.gradle` moves with each release since (currently `4.0.0`).
 versionCode 3 is the
 evidence build: per-attempt start records on the dashboard and a
 share-log button, for diagnosing the on-device instant-exit failure

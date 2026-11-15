@@ -25,7 +25,8 @@
 #     cannot serve both the keystore and the key password from one
 #     single-line file). No password value ever appears in this
 #     script or on the command line.
-# Prerequisite: the two .so files in native/ (see README.md)
+# Prerequisite: the three .so files in native/ (see README.md):
+# the node, libc++_shared.so, and — since v4.0.0 — the miner.
 set -euo pipefail
 
 ANDROID_HOME="${ANDROID_HOME:-$HOME/workspace/toolchain/android-sdk}"
@@ -160,7 +161,7 @@ if [ "$SIGNING" = "release" ]; then
   fi
 fi
 
-for so in libquantus_node.so libc++_shared.so; do
+for so in libquantus_node.so libc++_shared.so libquantus_miner.so; do
   if [ ! -f "$APP_DIR/native/$so" ]; then
     echo "ERROR: missing $APP_DIR/native/$so (see README.md)" >&2
     exit 1
@@ -199,7 +200,7 @@ sed 's|<manifest |<manifest package="app.quantusnode.node" |' \
   -A "$APP_DIR/assets" \
   --manifest "$WORK/AndroidManifest.xml" \
   --min-sdk-version 31 --target-sdk-version 35 \
-  --version-code 63 --version-name 3.0.2 \
+  --version-code 64 --version-name 4.0.0 \
   --java "$WORK/gen" \
   "$WORK/res.zip"
 
@@ -235,13 +236,17 @@ mkdir -p "$WORK/core-classes"
 # 6) Assemble: dex (deflated) + native libs (STORED, uncompressed, so the
 #    installer extracts them to nativeLibraryDir — the manifest sets
 #    extractNativeLibs=true — where the node can be executed by path).
+#    v4.0.0 adds the miner the same way: libquantus_miner.so is an
+#    executable, packaged under a lib*.so name for exactly that
+#    extraction, and run by path only when the user has mining on.
 cp "$WORK/base.apk" "$WORK/app.apk"
 cp "$WORK/dex/classes.dex" "$WORK/stage/classes.dex"
 cp "$APP_DIR/native/libquantus_node.so" \
    "$APP_DIR/native/libc++_shared.so" \
+   "$APP_DIR/native/libquantus_miner.so" \
    "$WORK/stage/lib/arm64-v8a/"
 ( cd "$WORK/stage" && zip -q "$WORK/app.apk" classes.dex )
-( cd "$WORK/stage" && zip -q -0 "$WORK/app.apk" lib/arm64-v8a/libquantus_node.so lib/arm64-v8a/libc++_shared.so )
+( cd "$WORK/stage" && zip -q -0 "$WORK/app.apk" lib/arm64-v8a/libquantus_node.so lib/arm64-v8a/libc++_shared.so lib/arm64-v8a/libquantus_miner.so )
 
 # 7) Align (page-align .so) and sign (apksigner defaults; the
 #    shipped APK carries a v3 signature only — verified with

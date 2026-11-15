@@ -83,6 +83,12 @@ public final class NodeState {
      */
     public volatile long sessionAcceptedElapsedMs = -1;
     /**
+     * When the accepted session ended (elapsedRealtime), or -1 while
+     * it is live: the "current uptime" display freezes at this, so a
+     * stopped session shows the length it actually ran.
+     */
+    public volatile long sessionEndedElapsedMs = -1;
+    /**
      * Best block height at the most recent observation: the first
      * poll that saw the best height increase while the node was
      * already SYNCED (versionCode 26). -1 until the first such
@@ -119,6 +125,31 @@ public final class NodeState {
     public volatile Boolean launchedTelemetry = null;
     /** --name value the current node process was launched with; null until launch. */
     public volatile String launchedNodeName = null;
+    /**
+     * Whether the current node process was launched with the mining
+     * arguments (v4.0.0); null until it has actually been launched.
+     * The same kind of launch snapshot as {@link #launchedTelemetry}:
+     * it lets the UI tell "restart needed" from "live".
+     */
+    public volatile Boolean launchedMining = null;
+    /**
+     * Why a launch made with the mining setting on went without
+     * mining; {@link MiningLogic.SkipReason#NONE} otherwise.
+     */
+    public volatile MiningLogic.SkipReason launchedMiningSkip =
+            MiningLogic.SkipReason.NONE;
+    /**
+     * {@link MiningLogic#rewardsTag} of the inner hash the current
+     * node process was launched with — a one-way tag for comparing
+     * against the stored setting, never the value; null when the
+     * launch was without mining.
+     */
+    public volatile String launchedRewardsTag = null;
+    /**
+     * The current node process's miner, for the status screen; null
+     * whenever no miner belongs to the running node.
+     */
+    public volatile MiningLogic.MinerView minerView = null;
     /** Exit code of the last node process run, null if it never ran/exited. */
     public volatile Integer lastExitCode = null;
     /** Last human-readable note (startup error etc.), may be null. */

@@ -23,6 +23,16 @@ import android.content.SharedPreferences;
  *     locked, the settings controls are disabled in the UI. It holds
  *     no credential and locks nothing else — node start/stop always
  *     stays available.
+ *   - mining (v4.0.0, default OFF): whether the node is launched as
+ *     a validator with the bundled miner beside it, the rewards
+ *     inner hash that launch needs, and the miner's CPU worker
+ *     count. The opt-in cannot be on without a valid inner hash
+ *     (the setters below keep that true whatever the UI does). The
+ *     inner hash is treated as a secret: it is stored here and
+ *     nowhere else, handed to the node as one argument, and never
+ *     shown again, logged or shared — see the mining section below.
+ *     The opt-in and the inner hash take effect when the node is
+ *     launched, the worker count when the miner is next started.
  *
  * Both live in the app's private SharedPreferences and are read by
  * {@link NodeService} at launch time only, so changing them never
@@ -54,6 +64,19 @@ public final class NodeSettings {
     private static final String KEY_TELEMETRY_CHANGED_MS = "telemetry_changed_ms";
     private static final String KEY_NODE_NAME_CHANGED_MS = "node_name_changed_ms";
     private static final String KEY_LANGUAGE_CHANGED_MS = "language_changed_ms";
+
+    /**
+     * Mining settings (v4.0.0). The stored inner hash is always the
+     * normalized form ("0x" + 64 lowercase hex digits) or absent;
+     * the two change stamps follow the pattern above and are read
+     * only by the diagnostic summary. Neither stamp nor any other
+     * key holds anything derived from the inner hash's value.
+     */
+    private static final String KEY_MINING_ENABLED = "mining_enabled";
+    private static final String KEY_REWARDS_INNER_HASH = "mining_rewards_inner_hash";
+    private static final String KEY_MINING_CPU_WORKERS = "mining_cpu_workers";
+    private static final String KEY_MINING_CHANGED_MS = "mining_changed_ms";
+    private static final String KEY_REWARDS_CHANGED_MS = "mining_rewards_changed_ms";
 
     /**
      * Display-name limit so names stay sane in lists and logs: the
@@ -188,6 +211,142 @@ public final class NodeSettings {
 
     public static void setSettingsLocked(Context ctx, boolean locked) {
         prefs(ctx).edit().putBoolean(KEY_SETTINGS_LOCKED, locked).apply();
+    }
+
+    // ------------------------------------------------------------------
+    // Mining (v4.0.0)
+    // ------------------------------------------------------------------
+
+    /**
+     * Whether mining is switched on (default off). Like telemetry,
+     * this is read by {@link NodeService} at launch only: a change
+     * takes effect at the next node start, which the user performs.
+     * A stored "on" without a usable inner hash reads as off — the
+     * setters never produce that state, so it can only come from a
+     * damaged preferences file, and the safe answer is the default.
+     */
+    public static boolean miningEnabled(Context ctx) {
+        try {
+            return prefs(ctx).getBoolean(KEY_MINING_ENABLED, false)
+                    && hasRewardsInnerHash(ctx);
+        } catch (ClassCastException e) {
+            return false;
+        }
+    }
+
+    /**
+     * Switch mining on or off. Switching it on is refused (and
+     * nothing is written) while no valid inner hash is stored.
+     *
+     * @return true when the setting now equals {@code enabled}
+     */
+    public static boolean setMiningEnabled(Context ctx, boolean enabled) {
+        if (enabled && !hasRewardsInnerHash(ctx)) {
+            return false;
+        }
+        prefs(ctx).edit().putBoolean(KEY_MINING_ENABLED, enabled)
+                .putLong(KEY_MINING_CHANGED_MS, System.currentTimeMillis())
+                .apply();
+        return true;
+    }
+
+    /**
+     * The stored rewards inner hash in normalized form, or "" when
+     * none is stored (or the stored value is not a valid one). For
+     * the launch path and the validators only — never for display.
+     */
+    public static String rewardsInnerHash(Context ctx) {
+        String stored;
+        try {
+            stored = prefs(ctx).getString(KEY_REWARDS_INNER_HASH, "");
+        } catch (ClassCastException e) {
+            return "";
+        }
+        String normalized = MiningLogic.normalizeInnerHash(stored);
+        return normalized == null ? "" : normalized;
+    }
+
+    /** Whether a valid inner hash is stored. */
+    public static boolean hasRewardsInnerHash(Context ctx) {
+        return !rewardsInnerHash(ctx).isEmpty();
+    }
+
+    /**
+     * Store an inner hash. The value is validated by
+     * {@link MiningLogic#checkInnerHash} and stored normalized; an
+     * invalid value is refused and leaves the stored one untouched.
+     *
+     * @return true when the value was stored
+     */
+    public static boolean setRewardsInnerHash(Context ctx, String raw) {
+        String normalized = MiningLogic.normalizeInnerHash(raw);
+        if (normalized == null) {
+            return false;
+        }
+        prefs(ctx).edit().putString(KEY_REWARDS_INNER_HASH, normalized)
+                .putLong(KEY_REWARDS_CHANGED_MS, System.currentTimeMillis())
+                .apply();
+        return true;
+    }
+
+    /**
+     * Remove the stored inner hash. Mining is switched off in the
+     * same write, since it cannot be on without one.
+     */
+    public static void clearRewardsInnerHash(Context ctx) {
+        long now = System.currentTimeMillis();
+        SharedPreferences.Editor e = prefs(ctx).edit()
+                .remove(KEY_REWARDS_INNER_HASH)
+                .putLong(KEY_REWARDS_CHANGED_MS, now);
+        boolean wasOn;
+        try {
+            wasOn = prefs(ctx).getBoolean(KEY_MINING_ENABLED, false);
+        } catch (ClassCastException ex) {
+            wasOn = true;
+        }
+        if (wasOn) {
+            e.putBoolean(KEY_MINING_ENABLED, false)
+                    .putLong(KEY_MINING_CHANGED_MS, now);
+        }
+        e.apply();
+    }
+
+    /**
+     * The miner's CPU worker setting: one of
+     * {@link MiningLogic#workerChoices()} (0 = automatic). Anything
+     * else stored reads as the default.
+     */
+    public static int miningCpuWorkers(Context ctx) {
+        try {
+            return MiningLogic.normalizeWorkerSetting(
+                    prefs(ctx).getInt(KEY_MINING_CPU_WORKERS,
+                            MiningLogic.WORKERS_DEFAULT));
+        } catch (ClassCastException e) {
+            return MiningLogic.WORKERS_DEFAULT;
+        }
+    }
+
+    public static void setMiningCpuWorkers(Context ctx, int setting) {
+        prefs(ctx).edit().putInt(KEY_MINING_CPU_WORKERS,
+                MiningLogic.normalizeWorkerSetting(setting)).apply();
+    }
+
+    /** When the mining switch last changed (0 = never). */
+    public static long miningChangedMs(Context ctx) {
+        try {
+            return prefs(ctx).getLong(KEY_MINING_CHANGED_MS, 0L);
+        } catch (ClassCastException e) {
+            return 0L;
+        }
+    }
+
+    /** When the inner hash was last saved or removed (0 = never). */
+    public static long rewardsChangedMs(Context ctx) {
+        try {
+            return prefs(ctx).getLong(KEY_REWARDS_CHANGED_MS, 0L);
+        } catch (ClassCastException e) {
+            return 0L;
+        }
     }
 
     /**
