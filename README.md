@@ -91,6 +91,12 @@ New to the app? Start with the Usage Guide — available in all 9 languages the 
 - A full node for Quantus mainnet: sync, verify, relay, local status — and, since v4.0.0, optional mining (off by default) for the user's own rewards address. No wallet. The app never handles seed phrases — by design, there is no asset secret inside the app worth stealing.
 - Devices: not Pixel-only. Requirements: Android 12+ on arm64 — the implementation has no Google-services or Pixel-specific dependency (it runs on GrapheneOS, which ships without Google services). Verified so far: Pixel 9a running GrapheneOS. Other devices are expected to work but are unverified; OEM battery savers (Samsung, Xiaomi, …) may stop the resident service. Device reports via GitHub Issues are welcome — the verified list grows from them.
 
+## Known limitations
+
+- The node prunes its database to the latest 256 blocks: old block history cannot be queried from this device. (The Storage page can delete the chain database and resync from the start.)
+- Only Android 12 or later on arm64 is supported, and only the Pixel 9a / GrapheneOS combination is verified so far; on other makers' devices, aggressive battery management may stop the resident node service.
+- Mining is participation, not income: at a phone's hashrate the expected wait for a block is very long, and the phone gets warm while it runs (the app eases off and stops the miner on heat, by design).
+
 ## What we know so far
 
 - Upstream: `quantus-node` v1.0.5 (Quantus-Network/chain), Substrate-based, QPoW / Poseidon2, ML-DSA signatures.

@@ -17,7 +17,7 @@ node binary is unchanged unless a build says otherwise).
 - **A stale price dims on the home row too.** The price sheet already dimmed a stale value; the always-visible home row now does the same.
 - **The first-run paragraph no longer pushes the Start button down.** While the introductory paragraph shows, the metric block (all dashes in that state) is hidden, as in the design's first-run layout.
 - Internal: the design-token type sizes now match the scale the UI actually ships.
-
+- **Release record.** APK: 63,475,120 bytes, SHA-256 `c5a07aea4a87d62557edb221b052abffce6d6353e9e4497d9be26752c489ee0e`.
 ## versionCode 66 / v4.2.0 — 2026-11-16
 - **The home screen is a list now.** Under the status card and the start/stop button, everything is a row: today's record (with a progress bar under it), mining, the QTC price, node details, the activity track and donations. The price card is gone — tapping the QTC row opens a price sheet with the larger figure, the 24-hour change and the source, and the donation address has its own sheet too. A short paragraph in the status card explains what the app does until the node has run for the first time.
 - **Price fetching can be switched off, and says what it does.** The price sheet and the new External information settings page carry a switch for price fetching (on by default) and a note on what a fetch connects to and what it never sends. The refresh interval is now one hour instead of five minutes.
@@ -25,13 +25,13 @@ node binary is unchanged unless a build says otherwise).
 - **The member tab scrolls, and the card has its declared ratio.** The member screen is a scrolling column: the card (now formally 1.42:1, reached by tightening margins only — no text shrank), with a standing note below it that the records live only on this device, are never converted into money and carry no ranking. A long press on the member number copies it.
 - **Motion and touch.** Screen changes fade or slide briefly, sheets rise from the bottom, the main button answers a press immediately, toggles and the resync confirmation have haptic feedback, and screen changes are announced to accessibility services. All motion follows the system's animation setting; with animations off, everything is instant.
 - **Smaller fixes.** The notification icon is now a monochrome silhouette of the eye; in Japanese, "best block" reads "latest block"; the network ticker shows the newest event on a single line; the home block number shrinks to fit its line instead of wrapping at large font scales; and right-to-left layouts keep Latin-script values such as addresses in their own direction run.
-
+- **Release record.** APK: 63,475,120 bytes, SHA-256 `3a788e7835aeed77970d72074024dacc1331d1963c584d6de0ad777046dfe0bf`.
 ## versionCode 65 / v4.1.0 — 2026-11-16
 - **Storage management in Settings.** The Settings screen now shows how much space the chain database, the node as a whole, the logs and the DePIN records use, with a total for the app's data. A "delete the chain database and resync" action — available only while the node is stopped, behind a confirmation that spells out what is deleted and what is kept — removes only the chain database. The node's network key, the mining settings and rewards inner hash, the DePIN identity and records, the track records, the logs and the app settings are all kept. The node does not restart by itself; the next start syncs from the beginning.
 - **Daily activity sampling (foundation, no UI yet).** The app now keeps a lightweight on-device daily record — uptime, blocks observed, peer counts, mining jobs and mining time, and an approximate hash total. Nothing is displayed yet and nothing leaves the device; a later release will draw the activity track from it.
 - **Readability and polish fixes.** Dialog buttons now always use the app's own wording in the selected language instead of falling back to the device locale; the block number in the notification is digit-grouped; the faintest label color is split so that text meant to be read is lighter than pure decoration; the "how to read this screen" sheet can be dismissed with the back key, its close button or a tap outside; a pending chain-database reset is shown in the Storage section; and the home screen's field and card animations pause while the app is in the background or the node is stopped.
 - Two robustness fixes carried over from the v4.0.0 external audit's follow-up list: the mining worker cap is now read and published under the same lock, and miner thread startup is isolated from Error-level failures the same way the shutdown path already was.
-
+- **Release record.** APK: 63,458,659 bytes, SHA-256 `e267ad6142b7da29c25da4bd28bc6cdfbf9a2360efa8ae99a0ea553da81d6e32`.
 ## versionCode 64 / v4.0.0 — 2026-11-16
 - **On-device mining, as an opt-in (off by default).** Verified
   on a real device (Pixel 9a / GrapheneOS) before release: an
@@ -140,7 +140,7 @@ node binary is unchanged unless a build says otherwise).
   It now freezes at the moment the session ends and shows the
   length that session actually ran; the last session's figures
   (best block, peers) already stayed as they were.
-
+- **Release record.** APK: 63,442,275 bytes, SHA-256 `ca90bbae260d5c9c2e45e20c9507f452f12350557e0dc4c61d0a51c4563dcffd`.
 ## versionCode 63 / v3.0.2 — 2026-11-14
 - **A hotfix release: the bundled node binary is rebuilt** (the
   first binary change since versionCode 10). App code,
@@ -162,7 +162,7 @@ node binary is unchanged unless a build says otherwise).
     longer considered itself syncing once peers were gone.
     With verification working again the node catches up and
     the status follows.
-
+- **Release record.** APK: 55,995,644 bytes, SHA-256 `36791bd99b597b679190fb39b169cb89b81c70857bf630fd5e96859864eff85e`.
 ## versionCode 62 / v3.0.1 — 2026-11-12
 - **A maintenance release: audit fixes only.** The node launch
   arguments, the database and the bundled node binary are
