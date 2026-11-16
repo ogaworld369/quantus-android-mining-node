@@ -2,7 +2,7 @@
 
 **Languages:** English · [日本語](USAGE.ja.md) · [简体中文](USAGE.zh-Hans.md) · [Español](USAGE.es.md) · [हिन्दी](USAGE.hi.md) · [العربية](USAGE.ar.md) · [한국어](USAGE.ko.md) · [Русский](USAGE.ru.md) · [Français](USAGE.fr.md)
 
-This app runs a **non-validator full node** for Quantus Network (QTC mainnet) on an Android phone. It syncs the chain, verifies every block itself, and relays data to peers. It does **not** mine, and it has **no wallet** — it never touches seed phrases or reward keys.
+This app runs a **full node** for Quantus Network (QTC mainnet) on an Android phone. It syncs the chain, verifies every block itself, and relays data to peers. By default it runs as a non-validator; it can also mine, as an option that is off by default (see **Mining** below). It has **no wallet** and never touches seed phrases — the one secret it can hold is the mining rewards Inner Hash you paste in yourself.
 
 > Status: v4.2.0 released (2026-11-16), the current release — the home screen is now a list under the status card (rows for today's record, mining, the QTC price, node details, the activity track and donations; the price and the donation address open as sheets, and price fetching can be switched off); Settings is a hub of pages, each row showing its current value; the member tab scrolls and its card has a declared 1.42:1 ratio; screen changes and presses have brief motion and touch feedback; and the notification icon is a monochrome silhouette (v4.1.0, also released 2026-11-16, added storage management in Settings and a daily activity record kept on the device). The signed APK is published on [GitHub Releases](https://github.com/ogaworld369/quantus-android-node/releases) with a SHA-256 checksum. Earlier test builds were shared directly by the maintainer.
 
@@ -46,10 +46,34 @@ The app has three main tabs along the bottom — Home, Connection, and Membershi
 - **Language** — follow the device setting, or pick one of 9 languages (Japanese, English, Simplified Chinese, Spanish, Hindi, Arabic, Korean, Russian, French). Applies immediately.
 - **Record my activity (DePIN)** (off by default) — when on, the app keeps a signed record of the node's uptime and relay work on this device (a checkpoint every 10 minutes). Nothing is sent anywhere by itself; from Settings you can export the record as a proof bundle file and share it yourself. Turning it off stops the recording; the record stays on the device
 - **Lock settings** — locks the settings above (telemetry, display name, language, and activity recording) so they cannot be changed by accident while the phone sits there running the node. It is a mis-tap guard only: there is no PIN, and starting or stopping the node is never locked. Turn **Lock settings** off when you want to change settings again.
+- **Mining** (off by default) — the node can also mine on this device, with the bundled official miner. It needs a rewards Inner Hash first; see **Mining (optional)** below.
 
 Settings never restart the node by themselves. If you change telemetry or the display name while the node is running, the changed item is marked in Settings as not yet applied, and Home shows a link to review the pending settings; the change takes effect at the next node start (Stop → Start).
 
 **Share log** lives under **Node details → Diagnostics**: it shares the node log as text, and is what to attach when you report a problem. Before posting a log in a public place, check its contents first: it can include your node's public IP address and peer information. The share dialog opens with a summary of the session, and its masking (on by default) covers the display name, this device's own interface addresses and app-private paths; the outward address the node learns through its peers is not masked.
+
+## Mining (optional)
+
+The app can also mine, on this phone, with the official miner bundled in the app. Mining is **off by default**, and the node works exactly the same with it off. Turning it on makes the node start as a validator, and the rewards go to you — not to the app.
+
+**Before you can turn mining on, you need a rewards Inner Hash.** Rewards are not paid to an ordinary address: the protocol pays them to a **wormhole address** derived from a secret called the Inner Hash.
+
+To get an Inner Hash:
+
+- On a PC, run the official node's command `quantus-node key quantus --scheme wormhole`. It prints three values: the **Address** (where the rewards will go), the **Inner Hash** (the value this app needs), and a **Secret phrase** (your backup — store it safely, offline).
+- If you already use the official wallet, you can derive the same values from its seed phrase instead: add `--words` to the same command and enter the phrase when asked — on the PC, never in this app. With the same seed phrase, the rewards appear in that wallet automatically.
+
+Then, in the app:
+
+1. Open **Settings → Mining** and paste the **Inner Hash** value (it looks like `0x` followed by 64 hex digits). Enter only the Inner Hash — never a seed phrase or a secret key: the Inner Hash is written into every block this device produces and becomes public.
+2. The app shows the rewards address the node reports for your Inner Hash. Compare it with the **Address** from the tool before you rely on it.
+3. Turn mining on, then restart the node (Stop → Start). Mining settings take effect from the next node start.
+
+**Check the Inner Hash carefully before saving.** If it is wrong, the rewards are paid to that wrong destination and cannot be recovered. The saved value is stored only on this device; the app never shows it on screen, in logs or in shared text.
+
+**Workers and heat.** You can choose 1, 2, 4 or auto CPU workers (the default is 2; one core is always left for the node itself). More workers mean more heat and battery use. If the phone gets hot, mining automatically eases off at the platform's "moderate" heat level and stops for the rest of the session at "severe" — the phone is never pushed to its limit.
+
+**An honest expectation:** at a phone's hashrate, the expected wait for a found block is very long — far longer than any test session. Mining here is a way to take part, not a way to earn.
 
 ## Running it day to day
 

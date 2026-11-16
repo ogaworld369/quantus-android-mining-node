@@ -2,7 +2,7 @@
 
 **Idiomas:** [English](USAGE.md) · [日本語](USAGE.ja.md) · [简体中文](USAGE.zh-Hans.md) · Español · [हिन्दी](USAGE.hi.md) · [العربية](USAGE.ar.md) · [한국어](USAGE.ko.md) · [Русский](USAGE.ru.md) · [Français](USAGE.fr.md)
 
-Esta aplicación ejecuta un **nodo completo no validador** de Quantus Network (red principal de QTC) en un teléfono Android. Sincroniza la cadena, verifica cada bloque por sí mismo y retransmite datos a sus pares. **No** mina y **no** tiene billetera: nunca toca frases semilla ni claves de recompensa.
+Esta aplicación ejecuta un **nodo completo** de Quantus Network (red principal de QTC) en un teléfono Android. Sincroniza la cadena, verifica cada bloque por sí mismo y retransmite datos a sus pares. Por defecto funciona como no validador; también puede minar, como opción desactivada por defecto (véase **Minería** más abajo). **No** tiene billetera y nunca toca frases semilla: el único secreto que puede guardar es el Inner Hash de recompensas de minería que pegues tú mismo.
 
 > Estado: v4.2.0 publicada (2026-11-16), la versión actual: la pantalla principal es ahora una lista bajo la tarjeta de estado (filas para el registro de hoy, la minería, el precio de QTC, los detalles del nodo, la trayectoria de actividad y las donaciones; el precio y la dirección de donación se abren en hojas, y la obtención del precio puede desactivarse); Ajustes es un centro de páginas, cada fila con su valor actual; la pestaña de miembro se desplaza y su tarjeta tiene una proporción declarada de 1.42:1; los cambios de pantalla y las pulsaciones tienen movimiento breve y respuesta táctil; y el icono de notificación es una silueta monocroma (v4.1.0, también de 2026-11-16, añadió la gestión del almacenamiento y un registro diario de actividad guardado en el dispositivo). El APK firmado está disponible en [GitHub Releases](https://github.com/ogaworld369/quantus-android-node/releases) con suma de verificación SHA-256. Las compilaciones de prueba anteriores las compartía directamente el mantenedor.
 
@@ -46,10 +46,34 @@ La aplicación tiene tres pestañas en la parte inferior: Inicio, Conexión y Ta
 - **Idioma** — sigue el ajuste del dispositivo o elige uno de 9 idiomas (japonés, inglés, chino simplificado, español, hindi, árabe, coreano, ruso, francés). Se aplica de inmediato.
 - **Registrar mi actividad (DePIN)** (desactivado por defecto): cuando está activado, la aplicación guarda en este dispositivo un registro firmado del tiempo de funcionamiento y del trabajo de retransmisión del nodo (un punto de control cada 10 minutos). Nada se envía solo a ninguna parte; desde Ajustes puedes exportar el registro como un archivo de paquete de prueba y compartirlo tú mismo. Al desactivarlo el registro se detiene; lo ya registrado permanece en el dispositivo
 - **Bloquear ajustes** — bloquea los ajustes anteriores (telemetría, nombre visible, idioma y registro de actividad) para que no se cambien por accidente mientras el teléfono queda ejecutando el nodo. Es solo una protección contra toques involuntarios: no hay PIN, y el inicio y la detención del nodo nunca se bloquean. Desactiva **Bloquear ajustes** cuando quieras volver a cambiarlos.
+- **Minería** (desactivada por defecto) — el nodo también puede minar en este dispositivo, con el minero oficial incluido. Primero necesita un Inner Hash de recompensas; véase **Minería (opcional)** más abajo.
 
 Los ajustes nunca reinician el nodo por sí solos. Si cambias la telemetría o el nombre visible con el nodo en marcha, el elemento cambiado se marca en Ajustes como aún no aplicado, e Inicio muestra un enlace para revisar los ajustes pendientes; el cambio entra en vigor en el siguiente inicio del nodo (Detener → Iniciar).
 
 **Compartir registro** está en **Detalles del nodo → Diagnóstico**: comparte el registro del nodo como texto, y es lo que debes adjuntar al informar de un problema. Antes de pegar un registro en un lugar público, revisa su contenido: puede incluir la dirección IP pública de tu nodo e información de los pares. El diálogo para compartir puede enmascarar el nombre visible, las direcciones de las interfaces de este dispositivo y las rutas privadas de la aplicación (activado por defecto); la dirección exterior que el nodo conoce a través de sus pares no se enmascara.
+
+## Minería (opcional)
+
+La aplicación también puede minar, en este teléfono, con el minero oficial incluido en ella. La minería está **desactivada por defecto**, y el nodo funciona exactamente igual con ella desactivada. Al activarla, el nodo se inicia como validador y las recompensas son para ti, no para la aplicación.
+
+**Antes de poder activar la minería, necesitas un Inner Hash de recompensas.** Las recompensas no se pagan a una dirección ordinaria: el protocolo las paga a una **dirección wormhole** derivada de un secreto llamado Inner Hash.
+
+Para obtener un Inner Hash:
+
+- En un PC, ejecuta el comando del nodo oficial `quantus-node key quantus --scheme wormhole`. Muestra tres valores: la **Address** (a dónde irán las recompensas), el **Inner Hash** (el valor que necesita esta aplicación) y una **Secret phrase** (tu copia de seguridad: guárdala en un lugar seguro, sin conexión).
+- Si ya usas la billetera oficial, puedes derivar los mismos valores desde su frase semilla: añade `--words` al mismo comando e introduce la frase cuando se te pida — en el PC, nunca en esta aplicación. Con la misma frase semilla, las recompensas aparecen automáticamente en esa billetera.
+
+Después, en la aplicación:
+
+1. Abre **Ajustes → Minería** y pega el valor del **Inner Hash** (tiene la forma de `0x` seguido de 64 dígitos hexadecimales). Introduce solo el Inner Hash — nunca una frase semilla ni una clave secreta: el Inner Hash se escribe en cada bloque que produce este dispositivo y se hace público.
+2. La aplicación muestra la dirección de recompensas que el nodo informa para tu Inner Hash. Compárala con la **Address** de la herramienta antes de confiar en ella.
+3. Activa la minería y reinicia el nodo (Detener → Iniciar). Los ajustes de minería se aplican desde el siguiente inicio del nodo.
+
+**Comprueba el Inner Hash con cuidado antes de guardar.** Si es incorrecto, las recompensas se pagarán a ese destino erróneo y no podrán recuperarse. El valor guardado permanece solo en este dispositivo; la aplicación nunca lo muestra en pantalla, en registros ni en textos compartidos.
+
+**Trabajadores y calor.** Puedes elegir 1, 2, 4 o automático trabajadores de CPU (el valor por defecto es 2; siempre se deja un núcleo libre para el propio nodo). Más trabajadores significan más calor y más consumo de batería. Si el teléfono se calienta, la minería se reduce automáticamente en el nivel de calor «moderado» de la plataforma y se detiene durante el resto de la sesión en «severo»: el teléfono nunca se lleva al límite.
+
+**Expectativas honestas:** con la tasa de hash de un teléfono, la espera esperada hasta encontrar un bloque es muy larga, mucho más que cualquier sesión de prueba. Minar aquí es una forma de participar, no de ganar dinero.
 
 ## Uso diario
 

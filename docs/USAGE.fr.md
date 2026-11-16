@@ -2,7 +2,7 @@
 
 **Langues :** [English](USAGE.md) · [日本語](USAGE.ja.md) · [简体中文](USAGE.zh-Hans.md) · [Español](USAGE.es.md) · [हिन्दी](USAGE.hi.md) · [العربية](USAGE.ar.md) · [한국어](USAGE.ko.md) · [Русский](USAGE.ru.md) · Français
 
-Cette application fait tourner un **nœud complet non validateur** du Quantus Network (réseau principal QTC) sur un téléphone Android. Il synchronise la chaîne, vérifie lui-même chaque bloc et relaie les données aux pairs. Il **ne** mine pas, et il n'a **pas de portefeuille** — il ne touche jamais aux phrases de récupération ni aux clés de récompense.
+Cette application fait tourner un **nœud complet** du Quantus Network (réseau principal QTC) sur un téléphone Android. Il synchronise la chaîne, vérifie lui-même chaque bloc et relaie les données aux pairs. Par défaut, il fonctionne comme non-validateur ; il peut aussi miner, en option désactivée par défaut (voir **Minage** ci-dessous). Il n'a **pas de portefeuille** et ne touche jamais aux phrases de récupération — le seul secret qu'il puisse conserver est l'Inner Hash des récompenses de minage que vous collez vous-même.
 
 > État : v4.2.0 publiée (2026-11-16), la version actuelle — l'écran principal est désormais une liste sous la carte d'état (lignes pour le relevé du jour, le minage, le prix du QTC, les détails du nœud, la trajectoire d'activité et les dons ; le prix et l'adresse de don s'ouvrent en feuilles, et la récupération du prix peut être désactivée) ; les Réglages forment un centre de pages, chaque ligne affichant sa valeur actuelle ; l'onglet membre défile et sa carte a un rapport déclaré de 1.42:1 ; les changements d'écran et les pressions ont un bref mouvement et un retour tactile ; et l'icône de notification est une silhouette monochrome (v4.1.0, également publiée le 2026-11-16, avait ajouté la gestion du stockage et un relevé d'activité quotidien conservé sur l'appareil). L'APK signé est disponible sur [GitHub Releases](https://github.com/ogaworld369/quantus-android-node/releases) avec sa somme de contrôle SHA-256. Les versions de test précédentes étaient partagées directement par le mainteneur.
 
@@ -46,10 +46,34 @@ L'application compte trois onglets en bas : Accueil, Connexion et Carte de membr
 - **Langue** — suivre le réglage de l'appareil, ou choisir parmi 9 langues (japonais, anglais, chinois simplifié, espagnol, hindi, arabe, coréen, russe, français). S'applique immédiatement.
 - **Enregistrer mon activité (DePIN)** (désactivé par défaut) — quand c'est activé, l'application conserve sur cet appareil un journal signé du temps de fonctionnement et du travail de relais du nœud (un point de contrôle toutes les 10 minutes). Rien n'est envoyé nulle part de lui-même ; depuis les Réglages, vous pouvez exporter le journal sous forme de fichier de preuves et le partager vous-même. La désactivation arrête l'enregistrement ; le journal reste sur l'appareil
 - **Verrouiller les réglages** — verrouille les réglages ci-dessus (télémétrie, nom d'affichage, langue et enregistrement d'activité) pour qu'ils ne changent pas par accident pendant que le téléphone reste à faire tourner le nœud. C'est uniquement une protection contre les manipulations involontaires : il n'y a pas de code PIN, et le démarrage ou l'arrêt du nœud ne sont jamais verrouillés. Désactivez **Verrouiller les réglages** pour pouvoir les modifier à nouveau.
+- **Minage** (désactivé par défaut) — le nœud peut aussi miner sur cet appareil, avec le mineur officiel embarqué. Il lui faut d'abord un Inner Hash de récompenses ; voir **Minage (facultatif)** ci-dessous.
 
 Les réglages ne redémarrent jamais le nœud d'eux-mêmes. Si vous changez la télémétrie ou le nom d'affichage pendant que le nœud tourne, l'élément modifié est marqué dans les Réglages comme pas encore appliqué, et l'accueil affiche un lien pour vérifier les réglages en attente ; le changement prend effet au prochain démarrage du nœud (Arrêter → Démarrer).
 
 **Partager le journal** se trouve dans **Détails du nœud → Diagnostics** : il partage le journal du nœud en texte, et c'est ce qu'il faut joindre quand vous signalez un problème. Avant de coller un journal dans un lieu public, vérifiez d'abord son contenu : il peut inclure l'adresse IP publique de votre nœud et des informations sur les pairs. La boîte de dialogue de partage peut masquer le nom d'affichage, les adresses des interfaces de cet appareil et les chemins privés de l'application (activé par défaut) ; l'adresse extérieure que le nœud apprend par ses pairs n'est pas masquée.
+
+## Minage (facultatif)
+
+L'application peut aussi miner, sur ce téléphone, avec le mineur officiel qu'elle embarque. Le minage est **désactivé par défaut**, et le nœud fonctionne exactement de la même façon lorsqu'il est désactivé. Une fois activé, le nœud démarre comme validateur, et les récompenses vous reviennent — pas à l'application.
+
+**Avant de pouvoir activer le minage, il vous faut un Inner Hash de récompenses.** Les récompenses ne sont pas versées à une adresse ordinaire : le protocole les verse à une **adresse wormhole** dérivée d'un secret appelé Inner Hash.
+
+Pour obtenir un Inner Hash :
+
+- Sur un PC, exécutez la commande du nœud officiel `quantus-node key quantus --scheme wormhole`. Elle affiche trois valeurs : l'**Address** (où iront les récompenses), l'**Inner Hash** (la valeur dont cette application a besoin) et une **Secret phrase** (votre sauvegarde — conservez-la en lieu sûr, hors ligne).
+- Si vous utilisez déjà le portefeuille officiel, vous pouvez dériver les mêmes valeurs depuis sa phrase de récupération : ajoutez `--words` à la même commande et saisissez la phrase lorsqu'elle est demandée — sur le PC, jamais dans cette application. Avec la même phrase de récupération, les récompenses apparaissent automatiquement dans ce portefeuille.
+
+Ensuite, dans l'application :
+
+1. Ouvrez **Réglages → Minage** et collez la valeur de l'**Inner Hash** (de la forme `0x` suivi de 64 chiffres hexadécimaux). Ne saisissez que l'Inner Hash — jamais une phrase de récupération ni une clé secrète : l'Inner Hash est inscrit dans chaque bloc produit par cet appareil et devient public.
+2. L'application affiche l'adresse de récompenses que le nœud signale pour votre Inner Hash. Comparez-la à l'**Address** donnée par l'outil avant de vous y fier.
+3. Activez le minage, puis redémarrez le nœud (Arrêter → Démarrer). Les réglages de minage s'appliquent au prochain démarrage du nœud.
+
+**Vérifiez soigneusement l'Inner Hash avant d'enregistrer.** S'il est faux, les récompenses seront versées à cette mauvaise destination et ne pourront pas être récupérées. La valeur enregistrée reste uniquement sur cet appareil ; l'application ne l'affiche jamais à l'écran, dans les journaux ni dans les textes partagés.
+
+**Travailleurs et chaleur.** Vous pouvez choisir 1, 2, 4 ou automatique travailleurs CPU (2 par défaut ; un cœur reste toujours libre pour le nœud lui-même). Plus de travailleurs signifie plus de chaleur et de consommation de batterie. Si le téléphone chauffe, le minage se réduit automatiquement au niveau de chaleur « modéré » de la plateforme et s'arrête pour le reste de la session au niveau « sévère » — le téléphone n'est jamais poussé à sa limite.
+
+**Attente honnête :** au taux de hachage d'un téléphone, l'attente moyenne avant de trouver un bloc est très longue — bien plus longue que n'importe quelle session de test. Miner ici est une façon de participer, pas de gagner de l'argent.
 
 ## Au quotidien
 
