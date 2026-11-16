@@ -10,12 +10,12 @@ The design concept is to make the node's pulse visible: live block/peer visualiz
 
 | | |
 |---|---|
-| Current release | **v4.0.0** (versionCode 64), published 2026-11-16 — [release page](https://github.com/ogaworld369/quantus-android-node/releases/tag/v4.0.0) |
+| Current release | **v4.2.0** (versionCode 66), published 2026-11-16 — [release page](https://github.com/ogaworld369/quantus-android-node/releases/tag/v4.2.0) |
 | First public release | v0.1.0, published 2026-11-04 |
 | Download | Signed APK from [GitHub Releases](https://github.com/ogaworld369/quantus-android-node/releases) |
 | Requirements | Android 12 or later, arm64 device |
 | Verified device | Pixel 9a running GrapheneOS |
-| Languages | 9 (400 strings per language; see [docs/I18N.md](docs/I18N.md); native-speaker improvements are very welcome) |
+| Languages | 9 (438 strings per language; see [docs/I18N.md](docs/I18N.md); native-speaker improvements are very welcome) |
 | Telemetry listing | Opt-in only (off by default) |
 | Licence | Apache License 2.0 |
 
@@ -24,6 +24,21 @@ The design concept is to make the node's pulse visible: live block/peer visualiz
 - **It is** a full node for Quantus mainnet: it syncs, verifies every block itself, and relays data to peers. With mining switched on (v4.0.0, opt-in and off by default), the same node also validates and mines for the user's own rewards address.
 - **It is not** a wallet. It never handles wallet seed phrases and cannot spend funds. The one mining value it can hold is the rewards inner hash the user pastes in — a preimage that is published in block headers when mining and controls no assets by itself (see "Security first" below).
 - **New in v3.0 — activity recording (DePIN), built in.** Opt-in and off by default. With it on, the app keeps a signed record of the node's uptime and relay work, which you can export as a proof bundle file whenever you choose.
+
+## What's in v4.2.0
+
+- **The home screen is a list now.** Under the status card and the start/stop button, everything is a row: today's record (with a progress bar), mining, the QTC price, node details, the activity track and donations. The price card is gone — the QTC row opens a price sheet with the larger figure, the 24-hour change and the source, and the donation address has its own sheet. Until the node has run for the first time, the status card shows a short paragraph on what the app does.
+- **Price fetching can be switched off, and says what it does.** A switch on the price sheet and in Settings (on by default) turns price fetching off; a note there says what a fetch connects to and what it never sends. The refresh interval is now one hour instead of five minutes.
+- **Settings is a hub of pages** — Node, Mining, DePIN records, Storage, Device transfer, External information, Language, About — and every row shows its current value. The sections themselves work as before.
+- **The member tab scrolls, and the card has its declared ratio** (1.42:1, reached by tightening margins only). A standing note below the card says the records live only on this device, are never converted into money and carry no ranking. A long press on the member number copies it.
+- **Motion and touch.** Screen changes fade or slide briefly, sheets rise from the bottom, the main button answers a press immediately, toggles and the resync confirmation have haptic feedback, and screen changes are announced to accessibility services. All motion follows the system's animation setting.
+- Verified on a real device before release: an in-place update over v4.1.0 with settings and records preserved, the node synced to the chain tip, mining running with jobs received, the price fetched, and a shared diagnostic summary with no warnings or errors. Details: [CHANGELOG.md](CHANGELOG.md).
+
+## What's in v4.1.0
+
+- **Storage management in Settings:** per-area sizes (the chain database, the node as a whole, the logs, the DePIN records) and a "delete the chain database and resync" action — available only while the node is stopped, behind a confirmation that spells out what is deleted and what is kept. Only the database directories are removed; the node's network key, the mining settings, the DePIN identity and records, the logs and the app settings all stay.
+- **A daily activity record** is now kept on the device (uptime, blocks observed, peer counts, mining jobs and time) as the foundation for a later activity-track view. Nothing is displayed yet and nothing leaves the device.
+- Readability and polish fixes, and two robustness fixes carried over from the v4.0.0 audit's follow-up list. Details: [CHANGELOG.md](CHANGELOG.md).
 
 ## What's in v4.0.0
 
@@ -55,7 +70,7 @@ Details and the full version history: [CHANGELOG.md](CHANGELOG.md).
 
 ## Download
 
-Get the signed APK from [GitHub Releases](https://github.com/ogaworld369/quantus-android-node/releases). The current release is [v4.0.0](https://github.com/ogaworld369/quantus-android-node/releases/tag/v4.0.0); its APK size and SHA-256 are listed on the release page and in the [CHANGELOG](CHANGELOG.md), so you can verify your download. v4.0.0 installs over v3.0.2 keeping settings and synced data — the same code is verified in place on the reference device.
+Get the signed APK from [GitHub Releases](https://github.com/ogaworld369/quantus-android-node/releases). The current release is [v4.2.0](https://github.com/ogaworld369/quantus-android-node/releases/tag/v4.2.0); its APK size and SHA-256 are listed on the release page and in the [CHANGELOG](CHANGELOG.md), so you can verify your download. v4.2.0 installs over v4.1.0 keeping settings and records — the same code is verified in place on the reference device.
 
 ## Usage
 
@@ -63,7 +78,7 @@ New to the app? Start with the Usage Guide — available in all 9 languages the 
 
 ## Status
 
-- Publicly released since 2026-11-04; the current release is v4.0.0 (above). Per-version details live in the [CHANGELOG](CHANGELOG.md), not here.
+- Publicly released since 2026-11-04; the current release is v4.2.0 (above). Per-version details live in the [CHANGELOG](CHANGELOG.md), not here.
 - Still being watched on the reference device: the remaining on-device checks — where the pruned database size plateaus, and battery/heat over long uptimes.
 - Release gates: [docs/RELEASE.md](docs/RELEASE.md). Design: [docs/DESIGN.md](docs/DESIGN.md).
 
