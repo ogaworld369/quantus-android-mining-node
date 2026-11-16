@@ -42,15 +42,19 @@ final class Tokens {
     static final int STATE_SYNCED = Color.rgb(0x4A, 0xDE, 0x80);
     static final int STATE_FAILED = Color.rgb(0xF2, 0xA2, 0x98);
 
-    // Type scale (sp).
+    // Type scale (sp). These values mirror the scale the UI
+    // actually ships (design 8.2), corrected in v4.2.1
+    // (audit M-5): the tokens previously held the pre-P1-5
+    // sizes (44/28/13/11), so applying them would have
+    // silently re-introduced the old type scale.
     static final int HERO_MAX = 56;
-    static final int DISPLAY_L = 44;
-    static final int DISPLAY_M = 28;
+    static final int DISPLAY_L = 40;
+    static final int DISPLAY_M = 26;
     static final int TITLE = 20;
     static final int BODY_L = 16;
     static final int BODY = 14;
-    static final int CAPTION = 13;
-    static final int MICRO = 11;
+    static final int CAPTION = 12;
+    static final int MICRO = 10;
 
     // Spacing scale (dp).
     static final int S4 = 4;

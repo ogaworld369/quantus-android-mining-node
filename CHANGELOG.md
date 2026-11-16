@@ -8,6 +8,16 @@ the first public release (published 2026-11-04).
 "versionCode" is the Android build number of the MVP app (the bundled
 node binary is unchanged unless a build says otherwise).
 
+## versionCode 67 / v4.2.1 — 2026-11-16
+- **Fixes from the external audit of v4.2.0** (no critical findings; two high and five medium — all fixed in this release):
+- **The Storage page measures again.** The settings-hub split left the size measurement gated to the hub screen, so the Storage page could sit on "Measuring…" and, after a "delete the chain database and resync", kept showing the pre-deletion sizes. The measurement now runs on the Storage page itself.
+- **The price and donation sheets no longer slide under the bottom navigation.** The sheets' overlay now sits above the navigation pill: the donation address is fully visible, and tapping it copies it instead of switching tabs. The how-to-read sheet's panel also clears the pill.
+- **A failed start leads straight to the diagnostics.** Tapping "Node details" in a failure state (or after a time-limit stop) opens the details with the Diagnostics section expanded — the path the home screen's failure link provided before v4.2.0.
+- **The Settings hub's Node row carries no value.** It showed the telemetry switch as "Node On/Off", which read as the node's own state; the row is a plain navigation row now, as designed.
+- **A stale price dims on the home row too.** The price sheet already dimmed a stale value; the always-visible home row now does the same.
+- **The first-run paragraph no longer pushes the Start button down.** While the introductory paragraph shows, the metric block (all dashes in that state) is hidden, as in the design's first-run layout.
+- Internal: the design-token type sizes now match the scale the UI actually ships.
+
 ## versionCode 66 / v4.2.0 — 2026-11-16
 - **The home screen is a list now.** Under the status card and the start/stop button, everything is a row: today's record (with a progress bar under it), mining, the QTC price, node details, the activity track and donations. The price card is gone — tapping the QTC row opens a price sheet with the larger figure, the 24-hour change and the source, and the donation address has its own sheet too. A short paragraph in the status card explains what the app does until the node has run for the first time.
 - **Price fetching can be switched off, and says what it does.** The price sheet and the new External information settings page carry a switch for price fetching (on by default) and a note on what a fetch connects to and what it never sends. The refresh interval is now one hour instead of five minutes.

@@ -200,7 +200,7 @@ sed 's|<manifest |<manifest package="app.quantusnode.node" |' \
   -A "$APP_DIR/assets" \
   --manifest "$WORK/AndroidManifest.xml" \
   --min-sdk-version 31 --target-sdk-version 35 \
-  --version-code 66 --version-name 4.2.0 \
+  --version-code 67 --version-name 4.2.1 \
   --java "$WORK/gen" \
   "$WORK/res.zip"
 

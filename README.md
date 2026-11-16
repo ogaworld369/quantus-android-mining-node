@@ -10,7 +10,7 @@ The design concept is to make the node's pulse visible: live block/peer visualiz
 
 | | |
 |---|---|
-| Current release | **v4.2.0** (versionCode 66), published 2026-11-16 — [release page](https://github.com/ogaworld369/quantus-android-mining-node/releases/tag/v4.2.0) |
+| Current release | **v4.2.1** (versionCode 67), published 2026-11-16 — [release page](https://github.com/ogaworld369/quantus-android-mining-node/releases/tag/v4.2.1) |
 | First public release | v0.1.0, published 2026-11-04 |
 | Download | Signed APK from [GitHub Releases](https://github.com/ogaworld369/quantus-android-mining-node/releases) |
 | Requirements | Android 12 or later, arm64 device |
@@ -24,6 +24,10 @@ The design concept is to make the node's pulse visible: live block/peer visualiz
 - **It is** a full node for Quantus mainnet: it syncs, verifies every block itself, and relays data to peers. With mining switched on (v4.0.0, opt-in and off by default), the same node also validates and mines for the user's own rewards address.
 - **It is not** a wallet. It never handles wallet seed phrases and cannot spend funds. The one mining value it can hold is the rewards inner hash the user pastes in — a preimage that is published in block headers when mining and controls no assets by itself (see "Security first" below).
 - **New in v3.0 — activity recording (DePIN), built in.** Opt-in and off by default. With it on, the app keeps a signed record of the node's uptime and relay work, which you can export as a proof bundle file whenever you choose.
+
+## What's in v4.2.1
+
+- **Fixes from the external audit of v4.2.0** (two high, five medium; no critical): the Storage page measures its sizes again — including right after a resync; the price and donation sheets no longer slide under the bottom navigation, so the donation address is fully visible and copies on tap; after a failed start, Node details opens with the diagnostics expanded; the Settings hub's Node row no longer shows the telemetry switch as the node's state; a stale price dims on the home row too; and the first-run paragraph no longer pushes the Start button toward the fold. Details: [CHANGELOG.md](CHANGELOG.md).
 
 ## What's in v4.2.0
 
@@ -70,7 +74,7 @@ Details and the full version history: [CHANGELOG.md](CHANGELOG.md).
 
 ## Download
 
-Get the signed APK from [GitHub Releases](https://github.com/ogaworld369/quantus-android-mining-node/releases). The current release is [v4.2.0](https://github.com/ogaworld369/quantus-android-mining-node/releases/tag/v4.2.0); its APK size and SHA-256 are listed on the release page and in the [CHANGELOG](CHANGELOG.md), so you can verify your download. v4.2.0 installs over v4.1.0 keeping settings and records — the same code is verified in place on the reference device.
+Get the signed APK from [GitHub Releases](https://github.com/ogaworld369/quantus-android-mining-node/releases). The current release is [v4.2.1](https://github.com/ogaworld369/quantus-android-mining-node/releases/tag/v4.2.1); its APK size and SHA-256 are listed on the release page and in the [CHANGELOG](CHANGELOG.md), so you can verify your download. v4.2.1 installs over v4.2.0 keeping settings and records.
 
 ## Usage
 
@@ -78,7 +82,7 @@ New to the app? Start with the Usage Guide — available in all 9 languages the 
 
 ## Status
 
-- Publicly released since 2026-11-04; the current release is v4.2.0 (above). Per-version details live in the [CHANGELOG](CHANGELOG.md), not here.
+- Publicly released since 2026-11-04; the current release is v4.2.1 (above). Per-version details live in the [CHANGELOG](CHANGELOG.md), not here.
 - Still being watched on the reference device: the remaining on-device checks — where the pruned database size plateaus, and battery/heat over long uptimes.
 - Release gates: [docs/RELEASE.md](docs/RELEASE.md). Design: [docs/DESIGN.md](docs/DESIGN.md).
 

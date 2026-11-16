@@ -160,6 +160,8 @@ public class MainActivity extends Activity {
     private View stateDotView;
     private int stateDotColor = -1;
     private TextView statusView;
+    private TextView vhBestLabel;
+    private LinearLayout vhStatsRow;
     private TextView vhBestValue;
     private TextView vhPeersValue;
     private TextView vhUptimeValue;
@@ -241,7 +243,6 @@ public class MainActivity extends Activity {
 
     // Settings hub (UI/UX phase 1): the row values, and the
     // external page's price switch.
-    private TextView hubNodeValue;
     private TextView hubMiningValue;
     private TextView hubDepinValue;
     private TextView hubStorageValue;
@@ -1342,9 +1343,9 @@ public class MainActivity extends Activity {
         firstRunView = text(firstRunText(), 14, Tokens.MUTED, false);
         firstRunView.setVisibility(View.GONE);
         card.addView(firstRunView, matchLpTop(16));
-        TextView bestLabel = cardLabel(
+        vhBestLabel = cardLabel(
                 I18n.get(this, StringsTable.VISION_BEST));
-        card.addView(bestLabel, matchLpTop(32));
+        card.addView(vhBestLabel, matchLpTop(32));
         vhBestValue = text("", 56, Tokens.CONTENT, true);
         vhBestValue.setTypeface(VisionFonts.displayBold(this));
         card.addView(vhBestValue, matchLpTop(8));
@@ -1375,6 +1376,7 @@ public class MainActivity extends Activity {
         upCol.addView(vhUptimeValue, matchLpTop(8));
         stats.addView(upCol, new LinearLayout.LayoutParams(
                 0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        vhStatsRow = stats;
         card.addView(stats, matchLpTop(32));
         supplementView = text("", 13, Tokens.FAINT, false);
         supplementView.setVisibility(View.GONE);
@@ -1485,8 +1487,22 @@ public class MainActivity extends Activity {
                 v -> openPriceSheet());
         priceRowValue.setTypeface(VisionFonts.mono(this));
 
+        // In a failure or time-limit stop the row lands on the
+        // diagnostics, expanded (audit M-1: the v4.1.0 flare
+        // link's behaviour, absorbed into this row).
         navRow(root, I18n.get(this, StringsTable.SCREEN_NODE_DETAILS), 0,
-                v -> showScreen(SCREEN_DETAILS));
+                v -> {
+                    NodeState nst = NodeState.get();
+                    UiLogic.HomeState nhs = UiLogic.homeState(
+                            nst.status, nst.lastStopKind);
+                    if (UiLogic.isFailure(nhs)
+                            || nhs == UiLogic.HomeState
+                                    .STOPPED_TIME_LIMIT) {
+                        openDiagnosticsFromHome();
+                    } else {
+                        showScreen(SCREEN_DETAILS);
+                    }
+                });
         navRow(root, I18n.get(this, StringsTable.SECTION_TRACK), 0,
                 v -> showScreen(SCREEN_TRACK));
         // Support (v4.0.0): the developer's QTC donation address
@@ -1509,6 +1525,11 @@ public class MainActivity extends Activity {
                                    LinearLayout[] panelOut) {
         FrameLayout overlay = new FrameLayout(this);
         overlay.setBackgroundColor(Color.argb(160, 0, 0, 0));
+        // Above the bottom nav (elevation 12): the scrim covers
+        // the pill and the sheet is truly modal (audit H-2 - the
+        // panel used to end under the pill, which hid the
+        // donation address and stole its taps).
+        overlay.setElevation(dp(16));
         overlay.setVisibility(View.GONE);
         overlay.setOnClickListener(
                 v -> overlay.setVisibility(View.GONE));
@@ -1852,7 +1873,10 @@ public class MainActivity extends Activity {
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.WRAP_CONTENT,
                 Gravity.BOTTOM);
-        plp.setMargins(dp(16), 0, dp(16), dp(16));
+        // The read sheet lives inside its tab's screen, so an
+        // elevation cannot lift it over the container-level nav;
+        // its panel instead clears the pill zone (audit H-2).
+        plp.setMargins(dp(16), 0, dp(16), dp(16) + navZone());
         readSheetOverlay.addView(panel, plp);
         root.addView(readSheetOverlay, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
@@ -2321,8 +2345,12 @@ public class MainActivity extends Activity {
         // its current value, so the state is visible without
         // opening anything. The pages hold the sections the one
         // long settings scroll used to stack.
-        hubNodeValue = valueRow(root,
-                I18n.get(this, StringsTable.SET_NODE_TITLE), 16,
+        // The Node row carries no value (audit M-2): it used to
+        // show the telemetry switch as "Node On/Off", which read
+        // as the node's own state. The design's hub wireframe
+        // gives this row no value; telemetry's switch lives on
+        // the Node page itself.
+        navRow(root, I18n.get(this, StringsTable.SET_NODE_TITLE), 16,
                 v -> showScreen(SCREEN_SET_NODE));
         hubMiningValue = valueRow(root,
                 I18n.get(this, StringsTable.MINING_SECTION), 0,
@@ -2861,7 +2889,14 @@ public class MainActivity extends Activity {
             storageResetSeen = finished.seq;
             storageMeasuredElapsedMs = -1;
         }
-        if (currentScreen == SCREEN_SETTINGS && !storageMeasuring
+        // The storage page itself must trigger the measurement
+        // (audit H-1): the gate used to name only the hub screen,
+        // so on SCREEN_SET_STORAGE nothing ever measured and a
+        // resync's fresh figures never replaced the old ones.
+        // The hub is kept in the gate because its Storage row
+        // shows the total.
+        if ((currentScreen == SCREEN_SET_STORAGE
+                || currentScreen == SCREEN_SETTINGS) && !storageMeasuring
                 && (storageMeasuredElapsedMs < 0
                 || now - storageMeasuredElapsedMs >= STORAGE_REMEASURE_MS)) {
             measureStorage();
@@ -4858,6 +4893,16 @@ public class MainActivity extends Activity {
         boolean firstRun = !st.serviceRunning
                 && TrackStore.uptimeMs(this) == 0;
         firstRunView.setVisibility(firstRun ? View.VISIBLE : View.GONE);
+        // While the paragraph shows, the metric block hides
+        // (design 3.2's wireframe; audit M-4): its values are
+        // all dashes in this state, and stacking both pushed
+        // the Start button toward the fold in long languages
+        // and at larger font scales.
+        int metricsVis = firstRun ? View.GONE : View.VISIBLE;
+        vhBestLabel.setVisibility(metricsVis);
+        vhBestValue.setVisibility(metricsVis);
+        vhBestAgoView.setVisibility(metricsVis);
+        vhStatsRow.setVisibility(metricsVis);
 
         // The primary button: the vision wording (start / stop
         // from the spec's dictionary) over the same state machine
@@ -4975,12 +5020,9 @@ public class MainActivity extends Activity {
     /** The settings hub's row values (design 6.2): each page's
      *  state, readable without opening it. */
     private void refreshSettingsHub() {
-        if (hubNodeValue == null) {
+        if (hubMiningValue == null) {
             return;
         }
-        setTextIfChanged(hubNodeValue, I18n.get(this,
-                NodeSettings.telemetryEnabled(this)
-                        ? StringsTable.VALUE_ON : StringsTable.VALUE_OFF));
         setTextIfChanged(hubMiningValue, I18n.get(this,
                 NodeSettings.miningEnabled(this)
                         ? StringsTable.VALUE_ON : StringsTable.VALUE_OFF));
@@ -5108,6 +5150,10 @@ public class MainActivity extends Activity {
             setTextIfChanged(priceDeltaView, "24h \u2014");
         }
         setTextIfChanged(priceRowValue, rowText);
+        // A stale value dims on the row too, not only inside
+        // the sheet (audit M-3).
+        priceRowValue.setTextColor(
+                snap.stale ? Tokens.MUTED : Tokens.CONTENT);
         long srcMs = snap.updatedUnix > 0
                 ? snap.updatedUnix * 1000L : snap.fetchedWallMs;
         String time = priceTimeText(srcMs);
