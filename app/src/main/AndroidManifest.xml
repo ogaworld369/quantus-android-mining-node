@@ -2,8 +2,10 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
     <!-- Minimal permissions only:
-         INTERNET: the node itself talks to peers; local RPC stays on
-           127.0.0.1 and is never exposed (no external RPC flag anywhere).
+         INTERNET: the node itself talks to peers, and the app fetches
+           the QTC price from CoinGecko (api.coingecko.com) over HTTPS;
+           local RPC stays on 127.0.0.1 and is never exposed (no external
+           RPC flag anywhere).
          FOREGROUND_SERVICE / FOREGROUND_SERVICE_SPECIAL_USE: keep the node
            resident as a specialUse foreground service. specialUse is used
            instead of dataSync because Android 15 caps dataSync foreground

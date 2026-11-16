@@ -41,11 +41,11 @@ cd chain
 cargo update -p rustix   # 1.1.2 -> 1.1.6 (linux-raw-sys 0.11.0->0.12.1, libc 0.2.175->0.2.191 follow along)
 ```
 
-The change is limited to `Cargo.lock` (11 lines). **At the compile-verification (Phase 0) stage**, no source code patches were needed. However, the current build that runs on a real device requires the two patches in the next section.
+The change is limited to `Cargo.lock` (11 lines). **At the compile-verification (Phase 0) stage**, no source code patches were needed. However, the current build that runs on a real device requires the three patches in the next section.
 
 ## 3. Source code patches (required for the shipping build; three of them)
 
-Not needed for compile verification alone, but to produce a binary that works on a real device, apply the three patches in the repository's `patches/` before building. **If either one is missing, the result is unusable on a real device** (even when built exactly per the procedure in §5, pruning does not take effect and archive storage is forced / the binary panics and dies immediately right after networking starts. Both were actually hit on a real device).
+Not needed for compile verification alone, but to produce a binary that works on a real device, apply the three patches in the repository's `patches/` before building. **If any one is missing, the result is unusable on a real device** (even when built exactly per the procedure in §5, pruning does not take effect and archive storage is forced / the binary panics and dies immediately right after networking starts. Both were actually hit on a real device).
 
 ### 3.1 Pruning patch
 

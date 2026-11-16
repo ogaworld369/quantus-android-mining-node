@@ -4,8 +4,11 @@
 
   The app's only cleartext traffic is its JSON-RPC polling of the
   node it launched, over loopback: http://127.0.0.1:9944/. Nothing
-  else in the app speaks HTTP at all — the node process itself owns
-  all peer traffic and does not go through this policy.
+  else in the app speaks cleartext HTTP at all. (The app does make
+  one HTTPS call of its own — the QTC price fetch to
+  api.coingecko.com — which is TLS-encrypted and outside this
+  policy's concern.) The node process itself owns all peer traffic
+  and does not go through this policy.
 
   The platform default does NOT permit that polling: for
   targetSdk 28+ the default network security policy denies cleartext

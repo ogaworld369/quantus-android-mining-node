@@ -5,6 +5,8 @@ Purpose in one sentence: **Not for rewards — for decentralization.** Build an 
 
 > Changes from v0.1: the app was initially "node + mining", but the owner settled on "no mining, node only". The miner-related design (wormholes, inner_hash, the QUIC miner protocol, etc.) was removed as out of scope.
 
+> Note (2026-11-16): parts of this design predate v4.0.0. Since v4.0.0 the app can also mine on-device as an opt-in (off by default); where this document says "no mining / non-validator only", read it as the pre-v4.0.0 design.
+
 ---
 
 ## 1. Premises and principles

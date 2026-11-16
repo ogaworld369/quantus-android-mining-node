@@ -26,7 +26,7 @@ import java.util.Set;
  * so archived bundles stay verifiable. Generation always uses the
  * current profile.
  *
- * v0.5 changes relative to v0.4 (Codex re-audit of v0.4):
+ * v0.5 changes relative to v0.4 (external re-audit of v0.4):
  *  - format domains versioned to QDP1/{seed,ckpt,bundle}/v0.5.
  *    The chain-seed INPUTS are unchanged from v0.4: the seed binds
  *    the slot (timestamp // 600), finalized block number (i64, -1

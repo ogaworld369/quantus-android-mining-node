@@ -1,4 +1,4 @@
-# Quantus Android Node (working title)
+# Quantus Android Node
 
 Android-only, open-source app that runs a Quantus Network (QTC) full node on a phone.
 
@@ -74,7 +74,7 @@ Details and the full version history: [CHANGELOG.md](CHANGELOG.md).
 
 ## Download
 
-Get the signed APK from [GitHub Releases](https://github.com/ogaworld369/quantus-android-mining-node/releases). The current release is [v4.2.1](https://github.com/ogaworld369/quantus-android-mining-node/releases/tag/v4.2.1); its APK size and SHA-256 are listed on the release page and in the [CHANGELOG](CHANGELOG.md), so you can verify your download. v4.2.1 installs over v4.2.0 keeping settings and records.
+Get the signed APK from [GitHub Releases](https://github.com/ogaworld369/quantus-android-mining-node/releases). The current release is [v4.2.1](https://github.com/ogaworld369/quantus-android-mining-node/releases/tag/v4.2.1); its APK size and SHA-256 are listed on the release page (and in the release records in [docs/RELEASE.md](docs/RELEASE.md)), so you can verify your download. v4.2.1 installs over v4.2.0 keeping settings and records.
 
 ## Usage
 
@@ -94,17 +94,14 @@ New to the app? Start with the Usage Guide — available in all 9 languages the 
 ## What we know so far
 
 - Upstream: `quantus-node` v1.0.5 (Quantus-Network/chain), Substrate-based, QPoW / Poseidon2, ML-DSA signatures.
-- The node cross-builds for `aarch64-linux-android`. Two small patches are needed, both in [patches/](patches/): one makes explicit pruning values take effect (next bullet), and one stops DNS resolution from panicking when the node runs as a plain process outside an Android app runtime (vendored `ndk-context` / `hickory-resolver` with a fallback). The build recipe is fixed in [docs/BUILD-android.md](docs/BUILD-android.md). Release-profile binary: ~53 MB stripped (debug: ~123 MB).
+- The node cross-builds for `aarch64-linux-android`. Three small patches are needed, all in [patches/](patches/): one makes explicit pruning values take effect (next bullet), one stops DNS resolution from panicking when the node runs as a plain process outside an Android app runtime (vendored `ndk-context` / `hickory-resolver` with a fallback), and one makes the Wasm runtime create instances on demand instead of reserving its whole memory pool up front. The build recipe is fixed in [docs/BUILD-android.md](docs/BUILD-android.md). Release-profile binary: ~53 MB stripped (debug: ~123 MB).
 - Upstream forces archive storage on all nodes; a minimal patch (respect explicit numeric pruning) enables a phone-sized database. Details in the design doc.
 - Official minimum specs list 100 GB storage (validator-oriented); a pruned non-validator node is far smaller in practice. Measured on a Pixel 9a after a full sync (2026-11-05): 1.30 GB in total (96 MB app + 1.20 GB of node data). Where it plateaus over months is still being watched.
 
 ## Roadmap (summary)
 
-- Phase 0: feasibility spikes (mainnet DB size with warp + pruning; Android port blockers)
-- Phase 1: node MVP (sync/verify/relay, status UI, foreground service)
-- Phase 2: daily-driver hardening (power, data, storage caps; GrapheneOS soak tests)
-- Phase 3: security review, reproducible builds, public release prep
-- Phase 4: mainnet release and wider Android device support
+- Next features: a home-screen widget; the activity-track graph, drawn from the daily record the app has kept on-device since v4.1.0; a QR presentation mode for the member card; and a QTC price / network-nodes visualization.
+- The DePIN aggregation pilot (collecting proof bundles through the DePIN repository) has not started yet.
 
 ## Security first
 
