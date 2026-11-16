@@ -28,6 +28,10 @@ import android.graphics.drawable.RippleDrawable;
 import android.os.BatteryManager;
 import android.os.Build;
 import android.os.Bundle;
+import android.provider.Settings;
+import android.view.HapticFeedbackConstants;
+import android.view.MotionEvent;
+import android.view.animation.DecelerateInterpolator;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.PowerManager;
@@ -95,11 +99,11 @@ public class MainActivity extends Activity {
 
     // ---- Palette (Quantus brand tokens from quantus.com, dark only) --
     // void #0E0E0E / surface #181818 / flare #FF6B35 / content #E8E6E0
-    // / green #4ADE80. LABEL2, HAIRLINE and FIELD_BORDER are
+    // / green #4ADE80. Tokens.MUTED, Tokens.HAIRLINE and Tokens.FIELD_BORDER are
     // content composited over the background at the site's own alpha
     // steps (60% / 12% / 30%), as solid colours. The old 40% step
-    // (FAINT) is split since UI/UX phase 0: FAINT for anything read
-    // (text and cues — #656462 on the surface was ~2.9:1), DECOR for
+    // (Tokens.FAINT) is split since UI/UX phase 0: Tokens.FAINT for anything read
+    // (text and cues — #656462 on the surface was ~2.9:1), Tokens.DECOR for
     // what is only seen (dots, hairline borders).
     /** How long the attempt-log reset note stays on the
      *  DePIN status after the reset ran (H-06): seven days —
@@ -117,30 +121,6 @@ public class MainActivity extends Activity {
     private static final String DONATE_ADDRESS =
             "qzoqy3pcLsBcPpGFqj9BTv3UyvRB9o8ScnKqcQfSbQTR6odnu";
 
-    private static final int BG = Color.rgb(0x0E, 0x0E, 0x0E);
-    private static final int SURFACE = Color.rgb(0x18, 0x18, 0x18);
-    private static final int LABEL1 = Color.rgb(0xE8, 0xE6, 0xE0);
-    private static final int LABEL2 = Color.rgb(0x91, 0x90, 0x8C);
-    private static final int FAINT = Color.rgb(0x8A, 0x89, 0x86);
-    private static final int DECOR = Color.rgb(0x65, 0x64, 0x62);
-    private static final int ACCENT = Color.rgb(0xFF, 0x6B, 0x35);
-    private static final int ON_ACCENT = BG;
-    private static final int HAIRLINE = Color.rgb(0x28, 0x28, 0x27);
-    private static final int FIELD_BORDER = Color.rgb(0x4F, 0x4F, 0x4D);
-    private static final int STATE_STOPPED = DECOR;
-    private static final int STATE_STARTING = Color.rgb(0x93, 0xB4, 0xEC);
-    private static final int STATE_SYNCING = Color.rgb(0xF2, 0xA9, 0x3B);
-    private static final int STATE_SYNCED = Color.rgb(0x4A, 0xDE, 0x80);
-    private static final int STATE_FAILED = Color.rgb(0xF2, 0xA2, 0x98);
-    /** Vision UI tokens (spec section 1): surface-2 for the
-     *  stopped action and the member card's gradient start; the
-     *  card line is content at 8%. */
-    private static final int SURFACE2 = Color.rgb(0x20, 0x20, 0x20);
-    private static final int CARD_LINE = Color.argb(20, 0xE8, 0xE6, 0xE0);
-    /** Dialog surface (redesign spec, audit finding L-7). */
-    private static final int DIALOG_BG = Color.rgb(0x18, 0x18, 0x18);
-    private static final int RIPPLE_ACCENT =
-            Color.argb(0x1F, 0xFF, 0x6B, 0x35); // flare at 12%
     private static final int REQ_NOTIF = 42;
 
     // ---- Screens ------------------------------------------------------
@@ -154,8 +134,18 @@ public class MainActivity extends Activity {
     private static final int SCREEN_SETTINGS = 3;
     private static final int SCREEN_NETWORK = 4;
     private static final int SCREEN_MEMBER = 5;
+    // Settings pages (UI/UX phase 1 hub, design 6.2): contiguous
+    // so the back key can return to the hub as one range.
+    private static final int SCREEN_SET_NODE = 6;
+    private static final int SCREEN_SET_MINING = 7;
+    private static final int SCREEN_SET_DEPIN = 8;
+    private static final int SCREEN_SET_STORAGE = 9;
+    private static final int SCREEN_SET_TRANSFER = 10;
+    private static final int SCREEN_SET_EXTERNAL = 11;
+    private static final int SCREEN_SET_LANGUAGE = 12;
+    private static final int SCREEN_SET_ABOUT = 13;
 
-    private final View[] screens = new View[6];
+    private final View[] screens = new View[14];
     private int currentScreen = SCREEN_HOME;
     /** The tab a sub-screen's back returns to. */
     private int tabScreen = SCREEN_HOME;
@@ -174,7 +164,7 @@ public class MainActivity extends Activity {
     private TextView vhPeersValue;
     private TextView vhUptimeValue;
     private TextView supplementView;
-    private TextView detailLinkView;
+    private TextView firstRunView;
     private Button mainButton;
     private TextView pendingLinkView;
     private TextView priceDeltaView;
@@ -226,16 +216,39 @@ public class MainActivity extends Activity {
     private long netSearchSinceElapsedMs = -1;
     private boolean netSearchMeasuredZero = false;
 
-    // Home (vision): today's-record row (stage 1 spec S1-10).
-    private LinearLayout homeTodayBox;
+    // Home (vision): today's-record row (stage 1 spec S1-10;
+    // a row with a 2 dp bar since the UI/UX phase 1 list).
+    private LinearLayout homeTodayRow;
     private TextView homeTodayText;
     private FrameLayout homeTodayTrack;
     private View homeTodayFill;
 
-    // Home (vision): the mining card (v4.0.0). Shown only while
-    // mining is in use; an install with mining off never sees it.
-    private LinearLayout homeMiningBox;
+    // Home (vision): the mining row (v4.0.0; a row since the
+    // UI/UX phase 1 list). Shown only while mining is in use;
+    // an install with mining off never sees it.
+    private LinearLayout homeMiningRow;
     private TextView homeMiningText;
+
+    // Home (UI/UX phase 1): the price row's value and the two
+    // home sheets (price, donation), overlays on the home root.
+    private TextView priceRowValue;
+    private FrameLayout priceSheetOverlay;
+    private ToggleView priceFetchToggle;
+    private FrameLayout donateSheetOverlay;
+    private LinearLayout priceSheetPanel;
+    private LinearLayout donateSheetPanel;
+    private LinearLayout readSheetPanel;
+
+    // Settings hub (UI/UX phase 1): the row values, and the
+    // external page's price switch.
+    private TextView hubNodeValue;
+    private TextView hubMiningValue;
+    private TextView hubDepinValue;
+    private TextView hubStorageValue;
+    private TextView hubExternalValue;
+    private TextView hubLanguageValue;
+    private ToggleView priceSwitch;
+    private LinearLayout priceSwitchRow;
 
     // Home (vision): age of the last block observation.
     private TextView vhBestAgoView;
@@ -574,6 +587,7 @@ public class MainActivity extends Activity {
     private static final int ID_ANCHOR_NAME = View.generateViewId();
     private static final int ID_ANCHOR_LANGUAGE = View.generateViewId();
     private static final int ID_ANCHOR_LOCK = View.generateViewId();
+    private static final int ID_ANCHOR_PRICE = View.generateViewId();
 
     private final Runnable refresher = new Runnable() {
         @Override
@@ -723,6 +737,20 @@ public class MainActivity extends Activity {
             readSheetOverlay.setVisibility(View.GONE);
             return;
         }
+        if (priceSheetOverlay != null
+                && priceSheetOverlay.getVisibility() == View.VISIBLE) {
+            priceSheetOverlay.setVisibility(View.GONE);
+            return;
+        }
+        if (donateSheetOverlay != null
+                && donateSheetOverlay.getVisibility() == View.VISIBLE) {
+            donateSheetOverlay.setVisibility(View.GONE);
+            return;
+        }
+        if (isSettingsPage(currentScreen)) {
+            showScreen(SCREEN_SETTINGS);
+            return;
+        }
         if (!isTabScreen(currentScreen)) {
             showScreen(tabScreen);
             return;
@@ -770,12 +798,25 @@ public class MainActivity extends Activity {
         int dir = I18n.isRtl(this)
                 ? View.LAYOUT_DIRECTION_RTL : View.LAYOUT_DIRECTION_LTR;
         FrameLayout container = new FrameLayout(this);
-        container.setBackgroundColor(BG);
+        container.setBackgroundColor(Tokens.VOID);
         container.setLayoutDirection(dir);
         screens[SCREEN_HOME] = buildHome(container, dir);
         screens[SCREEN_DETAILS] = buildDetails(container, dir);
         screens[SCREEN_TRACK] = buildTrack(container, dir);
         screens[SCREEN_SETTINGS] = buildSettings(container, dir);
+        screens[SCREEN_SET_NODE] = buildNodeSettingsPage(container, dir);
+        screens[SCREEN_SET_MINING] =
+                buildMiningSettingsPage(container, dir);
+        screens[SCREEN_SET_DEPIN] = buildDepinSettingsPage(container, dir);
+        screens[SCREEN_SET_STORAGE] =
+                buildStorageSettingsPage(container, dir);
+        screens[SCREEN_SET_TRANSFER] =
+                buildTransferSettingsPage(container, dir);
+        screens[SCREEN_SET_EXTERNAL] =
+                buildExternalSettingsPage(container, dir);
+        screens[SCREEN_SET_LANGUAGE] =
+                buildLanguageSettingsPage(container, dir);
+        screens[SCREEN_SET_ABOUT] = buildAboutSettingsPage(container, dir);
         screens[SCREEN_NETWORK] = buildNetwork(container, dir);
         screens[SCREEN_MEMBER] = buildMember(container, dir);
         buildBottomNav(container, dir);
@@ -792,7 +833,7 @@ public class MainActivity extends Activity {
     private LinearLayout screenContent(FrameLayout container, int screen,
                                        int dir) {
         ScrollView sv = new ScrollView(this);
-        sv.setBackgroundColor(BG);
+        sv.setBackgroundColor(Tokens.VOID);
         sv.setLayoutDirection(dir);
         sv.setVisibility(View.GONE);
         LinearLayout root = new LinearLayout(this);
@@ -808,26 +849,158 @@ public class MainActivity extends Activity {
         return root;
     }
 
+    private static boolean isSettingsPage(int screen) {
+        return screen >= SCREEN_SET_NODE && screen <= SCREEN_SET_ABOUT;
+    }
+
     private static boolean isTabScreen(int screen) {
         return screen == SCREEN_HOME
                 || screen == SCREEN_NETWORK
                 || screen == SCREEN_MEMBER;
     }
 
+    /** Whether motion is welcome: the same
+     *  ANIMATOR_DURATION_SCALE read the custom views use
+     *  (design 9, layer 3). Zero means every transition is
+     *  instant. */
+    private boolean motionEnabled() {
+        try {
+            float scale = Settings.Global.getFloat(
+                    getContentResolver(),
+                    Settings.Global.ANIMATOR_DURATION_SCALE, 1f);
+            return scale != 0f;
+        } catch (RuntimeException e) {
+            return true;
+        }
+    }
+
+    /** Sheet entrance (design 9, layer 3): the scrim fades in
+     *  over 160ms while the panel rises over 240ms. Closing
+     *  stays instant. */
+    private void animateSheetIn(View overlay, View panel) {
+        if (!motionEnabled()) {
+            return;
+        }
+        overlay.setAlpha(0f);
+        overlay.animate().alpha(1f).setDuration(160).start();
+        if (panel != null) {
+            panel.setTranslationY(dp(48));
+            panel.animate().translationY(0f).setDuration(240)
+                    .setInterpolator(new DecelerateInterpolator())
+                    .start();
+        }
+    }
+
+    /** The spoken name of a screen, for the transition
+     *  announcement (design 9, layer 3). */
+    private String screenName(int screen) {
+        switch (screen) {
+            case SCREEN_HOME:
+                return I18n.get(this, StringsTable.VISION_NAV_HOME);
+            case SCREEN_NETWORK:
+                return I18n.get(this, StringsTable.VISION_NAV_NETWORK);
+            case SCREEN_MEMBER:
+                return I18n.get(this, StringsTable.VISION_NAV_MEMBER);
+            case SCREEN_DETAILS:
+                return I18n.get(this, StringsTable.SCREEN_NODE_DETAILS);
+            case SCREEN_TRACK:
+                return I18n.get(this, StringsTable.SECTION_TRACK);
+            case SCREEN_SETTINGS:
+                return I18n.get(this, StringsTable.SECTION_SETTINGS);
+            case SCREEN_SET_NODE:
+                return I18n.get(this, StringsTable.SET_NODE_TITLE);
+            case SCREEN_SET_MINING:
+                return I18n.get(this, StringsTable.MINING_SECTION);
+            case SCREEN_SET_STORAGE:
+                return I18n.get(this, StringsTable.STORAGE_SECTION);
+            case SCREEN_SET_DEPIN:
+                return I18n.get(this,
+                        StringsTable.SETTINGS_DEPIN_SECTION);
+            case SCREEN_SET_TRANSFER:
+                return I18n.get(this,
+                        StringsTable.DEPIN_TRANSFER_SECTION);
+            case SCREEN_SET_EXTERNAL:
+                return I18n.get(this, StringsTable.SET_EXTERNAL_TITLE);
+            case SCREEN_SET_LANGUAGE:
+                return I18n.get(this, StringsTable.SETTINGS_LANGUAGE);
+            case SCREEN_SET_ABOUT:
+                return I18n.get(this, StringsTable.SET_ABOUT_TITLE);
+            default:
+                return null;
+        }
+    }
+
     private void showScreen(int screen) {
+        int previous = currentScreen;
         currentScreen = screen;
         // UI/UX phase 0: the how-to-read sheet never survives a
-        // screen change.
+        // screen change. UI/UX phase 1: neither do the home
+        // sheets.
         if (readSheetOverlay != null) {
             readSheetOverlay.setVisibility(View.GONE);
+        }
+        if (priceSheetOverlay != null) {
+            priceSheetOverlay.setVisibility(View.GONE);
+        }
+        if (donateSheetOverlay != null) {
+            donateSheetOverlay.setVisibility(View.GONE);
         }
         if (isTabScreen(screen)) {
             tabScreen = screen;
         }
         for (int i = 0; i < screens.length; i++) {
             if (screens[i] != null) {
+                // Land on final states first: a fast double
+                // switch must not inherit a half-run transition.
+                screens[i].animate().cancel();
+                screens[i].setAlpha(1f);
+                screens[i].setTranslationX(0f);
+                screens[i].setTranslationY(0f);
                 screens[i].setVisibility(
                         i == screen ? View.VISIBLE : View.GONE);
+            }
+        }
+        // Screen motion and the accessibility announcement are
+        // one piece of work (design 9, layer 3): tabs crossfade
+        // with a small rise, a push slides in at 200ms, a pop
+        // slides back at 160ms, and the new screen's name is
+        // announced either way.
+        View incoming = screens[screen];
+        if (incoming != null && previous >= 0 && previous != screen) {
+            if (motionEnabled()) {
+                boolean rtl = getResources().getConfiguration()
+                        .getLayoutDirection()
+                        == View.LAYOUT_DIRECTION_RTL;
+                int dirSign = rtl ? -1 : 1;
+                if (isTabScreen(screen) && isTabScreen(previous)) {
+                    incoming.setAlpha(0f);
+                    incoming.setTranslationY(dp(4));
+                    incoming.animate().alpha(1f).translationY(0f)
+                            .setDuration(160)
+                            .setInterpolator(
+                                    new DecelerateInterpolator())
+                            .start();
+                } else if (isTabScreen(screen)
+                        || screen == SCREEN_SETTINGS) {
+                    incoming.setAlpha(0f);
+                    incoming.setTranslationX(-dirSign * dp(24));
+                    incoming.animate().alpha(1f).translationX(0f)
+                            .setDuration(160)
+                            .setInterpolator(
+                                    new DecelerateInterpolator())
+                            .start();
+                } else {
+                    incoming.setTranslationX(dirSign * dp(24));
+                    incoming.animate().translationX(0f)
+                            .setDuration(200)
+                            .setInterpolator(
+                                    new DecelerateInterpolator())
+                            .start();
+                }
+            }
+            String name = screenName(screen);
+            if (name != null) {
+                incoming.announceForAccessibility(name);
             }
         }
         // The bar belongs to the tabs; sub-screens hide it.
@@ -868,8 +1041,8 @@ public class MainActivity extends Activity {
                     ? rounded(Color.argb(20, 0xE8, 0xE6, 0xE0),
                             999, density, 0, 0)
                     : null);
-            navIcons[i].setIconColor(on ? LABEL1 : FAINT);
-            navLabels[i].setTextColor(on ? LABEL1 : FAINT);
+            navIcons[i].setIconColor(on ? Tokens.CONTENT : Tokens.FAINT);
+            navLabels[i].setTextColor(on ? Tokens.CONTENT : Tokens.FAINT);
         }
     }
 
@@ -913,7 +1086,7 @@ public class MainActivity extends Activity {
 
     private View hairline(int topDp) {
         View v = new View(this);
-        v.setBackgroundColor(HAIRLINE);
+        v.setBackgroundColor(Tokens.HAIRLINE);
         LinearLayout.LayoutParams lp = matchLpTop(topDp);
         lp.height = Math.max(1, dp(1));
         v.setLayoutParams(lp);
@@ -935,7 +1108,7 @@ public class MainActivity extends Activity {
     /** Press feedback: a 12% accent ripple over the given base. */
     private RippleDrawable ripple(android.graphics.drawable.Drawable base) {
         return new RippleDrawable(
-                ColorStateList.valueOf(RIPPLE_ACCENT), base, null);
+                ColorStateList.valueOf(Tokens.FLARE_RIPPLE), base, null);
     }
 
     // The primary button's three dresses, cached per instance:
@@ -946,7 +1119,7 @@ public class MainActivity extends Activity {
     private android.graphics.drawable.Drawable accentButtonBg() {
         if (mainBtnAccentBg == null) {
             float d = getResources().getDisplayMetrics().density;
-            mainBtnAccentBg = ripple(rounded(ACCENT, 999, d, 0, 0));
+            mainBtnAccentBg = ripple(rounded(Tokens.FLARE, 999, d, 0, 0));
         }
         return mainBtnAccentBg;
     }
@@ -955,7 +1128,7 @@ public class MainActivity extends Activity {
     private android.graphics.drawable.Drawable surfaceButtonBg() {
         if (mainBtnSurfaceBg == null) {
             float d = getResources().getDisplayMetrics().density;
-            mainBtnSurfaceBg = ripple(rounded(SURFACE2, 999, d, CARD_LINE, 1));
+            mainBtnSurfaceBg = ripple(rounded(Tokens.SURFACE2, 999, d, Tokens.LINE, 1));
         }
         return mainBtnSurfaceBg;
     }
@@ -964,7 +1137,7 @@ public class MainActivity extends Activity {
     private android.graphics.drawable.Drawable stoppingButtonBg() {
         if (mainBtnStoppingBg == null) {
             float d = getResources().getDisplayMetrics().density;
-            mainBtnStoppingBg = rounded(SURFACE2, 999, d, 0, 0);
+            mainBtnStoppingBg = rounded(Tokens.SURFACE2, 999, d, 0, 0);
         }
         return mainBtnStoppingBg;
     }
@@ -982,9 +1155,9 @@ public class MainActivity extends Activity {
             parent.addView(hairline(0));
         }
         InfoRowView r = new InfoRowView(this);
-        TextView l = text(label, 16, LABEL2, false);
+        TextView l = text(label, 16, Tokens.MUTED, false);
         r.addView(l);
-        TextView v = text("", 16, LABEL1, false);
+        TextView v = text("", 16, Tokens.CONTENT, false);
         v.setGravity(Gravity.END);
         r.addView(v);
         parent.addView(r, matchLp());
@@ -1003,10 +1176,10 @@ public class MainActivity extends Activity {
         r.setClickable(true);
         r.setFocusable(true);
         r.setOnClickListener(click);
-        TextView l = text(label, 16, LABEL1, false);
+        TextView l = text(label, 16, Tokens.CONTENT, false);
         r.addView(l, new LinearLayout.LayoutParams(
                 0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
-        TextView chev = text(I18n.isRtl(this) ? "‹" : "›", 22, FAINT, false);
+        TextView chev = text(I18n.isRtl(this) ? "‹" : "›", 22, Tokens.FAINT, false);
         r.addView(chev);
         parent.addView(r, matchLpTop(topDp));
         return r;
@@ -1014,19 +1187,28 @@ public class MainActivity extends Activity {
 
     /** Sub-screen header: back target + 20 sp title. */
     private void subHeader(LinearLayout root, String title) {
+        subHeaderTo(root, title, -1);
+    }
+
+    /** Sub-screen header whose back leads to a fixed screen
+     *  (the settings hub, for its pages); -1 keeps the tab the
+     *  screen was opened from. */
+    private void subHeaderTo(LinearLayout root, String title,
+                             int backScreen) {
         LinearLayout h = new LinearLayout(this);
         h.setOrientation(LinearLayout.HORIZONTAL);
         h.setGravity(Gravity.CENTER_VERTICAL);
         h.setMinimumHeight(dp(56));
-        TextView back = text(I18n.isRtl(this) ? "›" : "‹", 30, LABEL2, false);
+        TextView back = text(I18n.isRtl(this) ? "›" : "‹", 30, Tokens.MUTED, false);
         back.setGravity(Gravity.CENTER);
         back.setContentDescription(I18n.get(this, StringsTable.A11Y_BACK));
         back.setBackground(ripple(null));
         back.setClickable(true);
         back.setFocusable(true);
-        back.setOnClickListener(v -> showScreen(tabScreen));
+        back.setOnClickListener(v -> showScreen(
+                backScreen >= 0 ? backScreen : tabScreen));
         h.addView(back, new LinearLayout.LayoutParams(dp(48), dp(48)));
-        TextView t = text(title, 20, LABEL1, true);
+        TextView t = text(title, 20, Tokens.CONTENT, true);
         LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(
                 0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
         tlp.setMarginStart(dp(4));
@@ -1036,7 +1218,7 @@ public class MainActivity extends Activity {
 
     /** A 14 sp medium section heading for expandable sections. */
     private TextView sectionLabel(String s) {
-        return text(s, 14, LABEL2, true);
+        return text(s, 14, Tokens.MUTED, true);
     }
 
     /**
@@ -1051,7 +1233,7 @@ public class MainActivity extends Activity {
         }
         float d = getResources().getDisplayMetrics().density;
         dialog.getWindow().setBackgroundDrawable(
-                rounded(DIALOG_BG, 16, d, 0, 0));
+                rounded(Tokens.SURFACE, 16, d, 0, 0));
     }
 
     // ------------------------------------------------------------------
@@ -1062,7 +1244,7 @@ public class MainActivity extends Activity {
      *  corners (spec sections 1 and 3). */
     private android.graphics.drawable.Drawable cardBg() {
         float d = getResources().getDisplayMetrics().density;
-        return rounded(SURFACE, 24, d, CARD_LINE, 1);
+        return rounded(Tokens.SURFACE, 24, d, Tokens.LINE, 1);
     }
 
     /** The official logo in its rounded tile (spec section 7):
@@ -1089,7 +1271,20 @@ public class MainActivity extends Activity {
 
     /** A small label in the vision cards (13 sp, muted). */
     private TextView cardLabel(String s) {
-        return text(s, 13, LABEL2, false);
+        return text(s, 12, Tokens.MUTED, false);
+    }
+
+    /** The first-run paragraph's text (design 3.2): the node and
+     *  chain sentences form one paragraph, then the record and
+     *  first-sync paragraphs. Japanese and Chinese join sentences
+     *  without a space; the other languages take one. */
+    private String firstRunText() {
+        String tag = I18n.effectiveTag(this);
+        String joiner = ("ja".equals(tag) || "zh".equals(tag)) ? "" : " ";
+        return I18n.get(this, StringsTable.FIRST_RUN_NODE) + joiner
+                + I18n.get(this, StringsTable.FIRST_RUN_CHAIN) + "\n\n"
+                + I18n.get(this, StringsTable.FIRST_RUN_RECORD) + "\n\n"
+                + I18n.get(this, StringsTable.FIRST_RUN_SYNC);
     }
 
     private ScrollView buildHome(FrameLayout container, int dir) {
@@ -1106,7 +1301,7 @@ public class MainActivity extends Activity {
         header.setGravity(Gravity.CENTER_VERTICAL);
         header.setMinimumHeight(dp(56));
         header.addView(logoView(32, 9));
-        TextView title = text("Quantus Node", 20, LABEL1, true);
+        TextView title = text("Quantus Node", 20, Tokens.CONTENT, true);
         title.setTypeface(VisionFonts.displayBold(this));
         LinearLayout.LayoutParams ttlp = new LinearLayout.LayoutParams(
                 0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
@@ -1131,7 +1326,7 @@ public class MainActivity extends Activity {
         stateDotView = new View(this);
         stateRow.addView(stateDotView,
                 new LinearLayout.LayoutParams(dp(7), dp(7)));
-        statusView = text("", 22, LABEL1, true);
+        statusView = text("", 20, Tokens.CONTENT, true);
         statusView.setTypeface(VisionFonts.displayMedium(this));
         LinearLayout.LayoutParams stlp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT,
@@ -1139,26 +1334,34 @@ public class MainActivity extends Activity {
         stlp.setMarginStart(dp(9));
         stateRow.addView(statusView, stlp);
         card.addView(stateRow, matchLp());
+        // First-run paragraph (design 3.2, decided in 14-10):
+        // inside the status card, shown only until the node has
+        // run once. Visibility is driven from refreshVisionHome;
+        // no setting and no dismiss control - starting the node
+        // is what removes it.
+        firstRunView = text(firstRunText(), 14, Tokens.MUTED, false);
+        firstRunView.setVisibility(View.GONE);
+        card.addView(firstRunView, matchLpTop(16));
         TextView bestLabel = cardLabel(
                 I18n.get(this, StringsTable.VISION_BEST));
         card.addView(bestLabel, matchLpTop(32));
-        vhBestValue = text("", 56, LABEL1, true);
+        vhBestValue = text("", 56, Tokens.CONTENT, true);
         vhBestValue.setTypeface(VisionFonts.displayBold(this));
-        card.addView(vhBestValue, matchLpTop(10));
+        card.addView(vhBestValue, matchLpTop(8));
         // Age of the last block observation, under the number
         // (stage 1 spec S1-10): a relative age while an
         // observation exists, a dash while none does — the
         // same 0-vs-dash discipline as everywhere else.
-        vhBestAgoView = text("", 11, FAINT, false);
+        vhBestAgoView = text("", 12, Tokens.FAINT, false);
         vhBestAgoView.setTypeface(VisionFonts.mono(this));
-        card.addView(vhBestAgoView, matchLpTop(6));
+        card.addView(vhBestAgoView, matchLpTop(8));
         LinearLayout stats = new LinearLayout(this);
         stats.setOrientation(LinearLayout.HORIZONTAL);
         LinearLayout peersCol = new LinearLayout(this);
         peersCol.setOrientation(LinearLayout.VERTICAL);
         peersCol.addView(cardLabel(
                 I18n.get(this, StringsTable.VISION_PEERS)), matchLp());
-        vhPeersValue = text("", 28, LABEL1, true);
+        vhPeersValue = text("", 26, Tokens.CONTENT, true);
         vhPeersValue.setTypeface(VisionFonts.displayMedium(this));
         peersCol.addView(vhPeersValue, matchLpTop(8));
         stats.addView(peersCol, new LinearLayout.LayoutParams(
@@ -1167,41 +1370,195 @@ public class MainActivity extends Activity {
         upCol.setOrientation(LinearLayout.VERTICAL);
         upCol.addView(cardLabel(
                 I18n.get(this, StringsTable.VISION_UPTIME)), matchLp());
-        vhUptimeValue = text("", 24, LABEL1, false);
+        vhUptimeValue = text("", 26, Tokens.CONTENT, false);
         vhUptimeValue.setTypeface(VisionFonts.monoMedium(this));
         upCol.addView(vhUptimeValue, matchLpTop(8));
         stats.addView(upCol, new LinearLayout.LayoutParams(
                 0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
-        card.addView(stats, matchLpTop(36));
-        supplementView = text("", 13, FAINT, false);
+        card.addView(stats, matchLpTop(32));
+        supplementView = text("", 13, Tokens.FAINT, false);
         supplementView.setVisibility(View.GONE);
-        card.addView(supplementView, matchLpTop(20));
+        card.addView(supplementView, matchLpTop(16));
         root.addView(card, matchLpTop(8));
 
-        // Price card: QTC price, 24 h change, source + time.
-        LinearLayout priceCard = new LinearLayout(this);
-        priceCard.setOrientation(LinearLayout.VERTICAL);
-        priceCard.setBackground(cardBg());
-        priceCard.setPadding(dp(26), dp(26), dp(26), dp(26));
-        LinearLayout priceHead = new LinearLayout(this);
-        priceHead.setOrientation(LinearLayout.HORIZONTAL);
-        priceHead.setGravity(Gravity.CENTER_VERTICAL);
-        TextView priceLabel = cardLabel(
-                I18n.get(this, StringsTable.VISION_PRICE));
-        priceHead.addView(priceLabel, new LinearLayout.LayoutParams(
+        // The one primary action (pill dress, vision spec 4.1),
+        // directly under the status card (design 7.1): its place
+        // no longer depends on how long the list below it grows.
+        mainButton = new Button(this);
+        mainButton.setTextSize(15);
+        mainButton.setAllCaps(false);
+        mainButton.setStateListAnimator(null);
+        mainButton.setMinHeight(dp(58));
+        mainButton.setPadding(dp(24), dp(12), dp(24), dp(12));
+        mainButton.setOnClickListener(v -> onMainButtonClicked());
+        // Press response (design 9, layer 3): the button dips
+        // to 0.98 at once - the only feedback that does not
+        // wait for the one-second tick. Returning false keeps
+        // the click (and its ripple) exactly as it was.
+        mainButton.setOnTouchListener((v, ev) -> {
+            if (motionEnabled()) {
+                int action = ev.getAction();
+                if (action == MotionEvent.ACTION_DOWN) {
+                    v.animate().scaleX(0.98f).scaleY(0.98f)
+                            .setDuration(120).start();
+                } else if (action == MotionEvent.ACTION_UP
+                        || action == MotionEvent.ACTION_CANCEL) {
+                    v.animate().scaleX(1f).scaleY(1f)
+                            .setDuration(120).start();
+                }
+            }
+            return false;
+        });
+        mainButton.setFocusableInTouchMode(false);
+        LinearLayout.LayoutParams mlp = matchLpTop(16);
+        mlp.height = LinearLayout.LayoutParams.WRAP_CONTENT;
+        root.addView(mainButton, mlp);
+
+        pendingLinkView = text("", 14, Tokens.FLARE, true);
+        pendingLinkView.setGravity(Gravity.CENTER);
+        pendingLinkView.setBackground(ripple(null));
+        pendingLinkView.setClickable(true);
+        pendingLinkView.setFocusable(true);
+        pendingLinkView.setPadding(0, dp(8), 0, dp(8));
+        pendingLinkView.setOnClickListener(v -> openPendingSettings());
+        root.addView(pendingLinkView, matchLpTop(8));
+
+        // The list (design 7.1): everything that is not the
+        // state is a row, and hairlines close the list at both
+        // ends. The old detail link is absorbed into the node
+        // details row; the failure wording stays in the card's
+        // supplement.
+        root.addView(hairline(16));
+
+        // Today's record (stage 1 spec S1-10): the share of
+        // today's elapsed checkpoint slots that actually hold a
+        // record, as a row with a 2 dp bar along its bottom
+        // (design 7.1). Shown only while DePIN is on: a device
+        // that is not recording must not be shown a 0% progress
+        // bar for a record it never claimed to keep.
+        homeTodayRow = new LinearLayout(this);
+        homeTodayRow.setOrientation(LinearLayout.VERTICAL);
+        LinearLayout todayInner = new LinearLayout(this);
+        todayInner.setOrientation(LinearLayout.HORIZONTAL);
+        todayInner.setGravity(Gravity.CENTER_VERTICAL);
+        todayInner.setMinimumHeight(dp(56));
+        todayInner.setPadding(0, dp(12), 0, dp(12));
+        TextView todayLabel = text(
+                I18n.get(this, StringsTable.HOME_TODAY),
+                16, Tokens.CONTENT, false);
+        todayInner.addView(todayLabel, new LinearLayout.LayoutParams(
                 0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
-        priceDeltaView = text("", 13, LABEL2, false);
-        priceDeltaView.setTypeface(VisionFonts.mono(this));
-        priceDeltaView.setGravity(Gravity.END);
-        priceHead.addView(priceDeltaView);
-        priceCard.addView(priceHead, matchLp());
-        priceValueView = text("", 44, LABEL1, true);
+        homeTodayText = text("", 14, Tokens.MUTED, false);
+        homeTodayText.setGravity(Gravity.END);
+        todayInner.addView(homeTodayText);
+        homeTodayRow.addView(todayInner, matchLp());
+        homeTodayTrack = new FrameLayout(this);
+        homeTodayTrack.setBackground(rounded(
+                Color.rgb(0x22, 0x22, 0x2A), 1,
+                getResources().getDisplayMetrics().density, 0, 0));
+        homeTodayFill = new View(this);
+        homeTodayFill.setBackground(rounded(Tokens.FLARE, 1,
+                getResources().getDisplayMetrics().density, 0, 0));
+        homeTodayTrack.addView(homeTodayFill,
+                new FrameLayout.LayoutParams(0, dp(2)));
+        LinearLayout.LayoutParams tlp2 = matchLp();
+        tlp2.height = dp(2);
+        homeTodayRow.addView(homeTodayTrack, tlp2);
+        homeTodayRow.setVisibility(View.GONE);
+        root.addView(homeTodayRow, matchLp());
+
+        // Mining (v4.0.0): a row, shown only while mining is in
+        // use (the switch is on, or the running node was
+        // launched with it). It says what the miner is doing
+        // and leads to the mining settings; with mining off it
+        // stays GONE and the home screen carries no trace of it.
+        homeMiningText = valueRow(root,
+                I18n.get(this, StringsTable.MINING_SECTION), 0,
+                v -> openMiningSettings());
+        homeMiningRow = (LinearLayout) homeMiningText.getParent();
+        homeMiningRow.setVisibility(View.GONE);
+
+        // Price: a row (design 7.1; decided in 14-1). The big
+        // number, the source and the fetch switch live in the
+        // price sheet.
+        priceRowValue = valueRow(root, "QTC", 0,
+                v -> openPriceSheet());
+        priceRowValue.setTypeface(VisionFonts.mono(this));
+
+        navRow(root, I18n.get(this, StringsTable.SCREEN_NODE_DETAILS), 0,
+                v -> showScreen(SCREEN_DETAILS));
+        navRow(root, I18n.get(this, StringsTable.SECTION_TRACK), 0,
+                v -> showScreen(SCREEN_TRACK));
+        // Support (v4.0.0): the developer's QTC donation address
+        // is a row now (decided in 14-9); the address itself and
+        // the copy action live in the donation sheet.
+        navRow(root, I18n.get(this, StringsTable.DONATE_TITLE), 0,
+                v -> openDonateSheet());
+        root.addView(hairline(0));
+
+        buildPriceSheet(container);
+        buildDonateSheet(container);
+        return (ScrollView) screens[SCREEN_HOME];
+    }
+
+    /** One home sheet's shell, in the how-to-read sheet's shape:
+     *  a scrim overlay (a tap outside closes it) with a bottom
+     *  panel; the panel is handed back through panelOut for the
+     *  caller to fill. */
+    private FrameLayout buildSheet(FrameLayout container, String title,
+                                   LinearLayout[] panelOut) {
+        FrameLayout overlay = new FrameLayout(this);
+        overlay.setBackgroundColor(Color.argb(160, 0, 0, 0));
+        overlay.setVisibility(View.GONE);
+        overlay.setOnClickListener(
+                v -> overlay.setVisibility(View.GONE));
+        LinearLayout panel = new LinearLayout(this);
+        panel.setOrientation(LinearLayout.VERTICAL);
+        panel.setBackground(cardBg());
+        panel.setPadding(dp(26), dp(22), dp(26), dp(22));
+        panel.setOnClickListener(v -> {
+            // Swallow taps so the panel itself does not close.
+        });
+        LinearLayout head = new LinearLayout(this);
+        head.setOrientation(LinearLayout.HORIZONTAL);
+        head.setGravity(Gravity.CENTER_VERTICAL);
+        TextView t = text(title, 20, Tokens.CONTENT, true);
+        head.addView(t, new LinearLayout.LayoutParams(
+                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        TextView close = text("✕", 16, Tokens.MUTED, false);
+        close.setGravity(Gravity.CENTER);
+        close.setOnClickListener(
+                v -> overlay.setVisibility(View.GONE));
+        head.addView(close, new LinearLayout.LayoutParams(dp(48), dp(48)));
+        panel.addView(head, matchLp());
+        FrameLayout.LayoutParams plp = new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.WRAP_CONTENT,
+                Gravity.BOTTOM);
+        plp.setMargins(dp(16), 0, dp(16), dp(16));
+        overlay.addView(panel, plp);
+        container.addView(overlay, new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT));
+        panelOut[0] = panel;
+        return overlay;
+    }
+
+    /** The price sheet (design 7.1): the big number, the 24 h
+     *  change, the source, and the fetch switch with its
+     *  disclosure (decided in 14-2). */
+    private void buildPriceSheet(FrameLayout container) {
+        LinearLayout[] panelBox = new LinearLayout[1];
+        priceSheetOverlay = buildSheet(container,
+                I18n.get(this, StringsTable.VISION_PRICE), panelBox);
+        LinearLayout panel = panelBox[0];
+        priceSheetPanel = panel;
+        priceValueView = text("", 40, Tokens.CONTENT, true);
         priceValueView.setTypeface(VisionFonts.displayBold(this));
-        priceCard.addView(priceValueView, matchLpTop(14));
-        priceSrcView = text("", 11, FAINT, false);
-        priceSrcView.setTypeface(VisionFonts.mono(this));
-        priceCard.addView(priceSrcView, matchLpTop(14));
-        root.addView(priceCard, matchLpTop(16));
+        panel.addView(priceValueView, matchLpTop(16));
+        priceDeltaView = text("", 13, Tokens.MUTED, false);
+        priceDeltaView.setTypeface(VisionFonts.mono(this));
+        panel.addView(priceDeltaView, matchLpTop(8));
         // Tapping the "24h —" placeholder explains itself
         // (stage 1 spec S1-07): the fetch simply carried no
         // change rate. The tap is live only in that state.
@@ -1214,113 +1571,72 @@ public class MainActivity extends Activity {
                         android.widget.Toast.LENGTH_LONG).show();
             }
         });
+        priceSrcView = text("", 12, Tokens.FAINT, false);
+        priceSrcView.setTypeface(VisionFonts.mono(this));
+        panel.addView(priceSrcView, matchLpTop(8));
+        LinearLayout swRow = new LinearLayout(this);
+        swRow.setOrientation(LinearLayout.HORIZONTAL);
+        swRow.setGravity(Gravity.CENTER_VERTICAL);
+        TextView swLabel = text(
+                I18n.get(this, StringsTable.PRICE_FETCH),
+                16, Tokens.CONTENT, false);
+        swRow.addView(swLabel, new LinearLayout.LayoutParams(
+                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        priceFetchToggle = new ToggleView(this);
+        priceFetchToggle.setContentDescription(
+                I18n.get(this, StringsTable.PRICE_FETCH));
+        priceFetchToggle.setChecked(PriceStore.isEnabled(this));
+        priceFetchToggle.setOnCheckedChangeListener((view, on) -> {
+            PriceStore.setEnabled(this, on);
+            refreshPriceViews();
+        });
+        swRow.addView(priceFetchToggle,
+                new LinearLayout.LayoutParams(dp(52), dp(48)));
+        swRow.setOnClickListener(v -> {
+            if (priceFetchToggle.isEnabled()) {
+                priceFetchToggle.toggle();
+            }
+        });
+        panel.addView(swRow, matchLpTop(16));
+        TextView disc = text(
+                I18n.get(this, StringsTable.PRICE_DISCLOSURE),
+                13, Tokens.MUTED, false);
+        disc.setLineSpacing(0f, 1.3f);
+        panel.addView(disc, matchLpTop(8));
+    }
 
-        // Today's record (stage 1 spec S1-10): a thin card
-        // under the price card — the share of today's elapsed
-        // checkpoint slots that actually hold a record. Shown
-        // only while DePIN is on: a device that is not
-        // recording must not be shown a 0% progress bar for a
-        // record it never claimed to keep.
-        homeTodayBox = new LinearLayout(this);
-        homeTodayBox.setOrientation(LinearLayout.VERTICAL);
-        homeTodayBox.setBackground(cardBg());
-        homeTodayBox.setPadding(dp(26), dp(18), dp(26), dp(18));
-        homeTodayBox.addView(cardLabel(
-                I18n.get(this, StringsTable.HOME_TODAY)), matchLp());
-        homeTodayText = text("", 13, LABEL2, false);
-        homeTodayText.setTypeface(VisionFonts.mono(this));
-        homeTodayBox.addView(homeTodayText, matchLpTop(8));
-        homeTodayTrack = new FrameLayout(this);
-        homeTodayTrack.setBackground(rounded(
-                Color.rgb(0x22, 0x22, 0x2A), 2,
-                getResources().getDisplayMetrics().density, 0, 0));
-        homeTodayFill = new View(this);
-        homeTodayFill.setBackground(rounded(ACCENT, 2,
-                getResources().getDisplayMetrics().density, 0, 0));
-        homeTodayTrack.addView(homeTodayFill,
-                new FrameLayout.LayoutParams(0, dp(4)));
-        LinearLayout.LayoutParams tlp2 = matchLpTop(10);
-        tlp2.height = dp(4);
-        homeTodayBox.addView(homeTodayTrack, tlp2);
-        homeTodayBox.setVisibility(View.GONE);
-        root.addView(homeTodayBox, matchLpTop(16));
+    private void openPriceSheet() {
+        if (priceSheetOverlay == null) {
+            return;
+        }
+        priceFetchToggle.setChecked(PriceStore.isEnabled(this));
+        refreshPriceViews();
+        priceSheetOverlay.setVisibility(View.VISIBLE);
+        animateSheetIn(priceSheetOverlay, priceSheetPanel);
+    }
 
-        // Mining (v4.0.0): a thin card of the same kind, shown only
-        // while mining is in use (the switch is on, or the running
-        // node was launched with it). It says what the miner is
-        // doing and leads to the mining settings; with mining off
-        // it stays GONE and the home screen is the v3.0.1 one.
-        homeMiningBox = new LinearLayout(this);
-        homeMiningBox.setOrientation(LinearLayout.VERTICAL);
-        homeMiningBox.setBackground(ripple(cardBg()));
-        homeMiningBox.setPadding(dp(26), dp(18), dp(26), dp(18));
-        homeMiningBox.addView(cardLabel(
-                I18n.get(this, StringsTable.MINING_SECTION)), matchLp());
-        homeMiningText = text("", 13, LABEL2, false);
-        homeMiningBox.addView(homeMiningText, matchLpTop(8));
-        homeMiningBox.setClickable(true);
-        homeMiningBox.setFocusable(true);
-        homeMiningBox.setOnClickListener(v -> openMiningSettings());
-        homeMiningBox.setVisibility(View.GONE);
-        root.addView(homeMiningBox, matchLpTop(16));
-
-        // The one primary action (pill dress, vision spec 4.1).
-        mainButton = new Button(this);
-        mainButton.setTextSize(15);
-        mainButton.setAllCaps(false);
-        mainButton.setStateListAnimator(null);
-        mainButton.setMinHeight(dp(58));
-        mainButton.setPadding(dp(24), dp(12), dp(24), dp(12));
-        mainButton.setOnClickListener(v -> onMainButtonClicked());
-        mainButton.setFocusableInTouchMode(false);
-        LinearLayout.LayoutParams mlp = matchLpTop(16);
-        mlp.height = LinearLayout.LayoutParams.WRAP_CONTENT;
-        root.addView(mainButton, mlp);
-
-        detailLinkView = text("", 14, ACCENT, true);
-        detailLinkView.setGravity(Gravity.CENTER);
-        detailLinkView.setBackground(ripple(null));
-        detailLinkView.setClickable(true);
-        detailLinkView.setFocusable(true);
-        detailLinkView.setPadding(0, dp(8), 0, dp(8));
-        detailLinkView.setOnClickListener(v -> openDiagnosticsFromHome());
-        root.addView(detailLinkView, matchLpTop(8));
-
-        pendingLinkView = text("", 14, ACCENT, true);
-        pendingLinkView.setGravity(Gravity.CENTER);
-        pendingLinkView.setBackground(ripple(null));
-        pendingLinkView.setClickable(true);
-        pendingLinkView.setFocusable(true);
-        pendingLinkView.setPadding(0, dp(8), 0, dp(8));
-        pendingLinkView.setOnClickListener(v -> openPendingSettings());
-        root.addView(pendingLinkView, matchLpTop(8));
-
-        navRow(root, I18n.get(this, StringsTable.SCREEN_NODE_DETAILS), 16,
-                v -> showScreen(SCREEN_DETAILS));
-        navRow(root, I18n.get(this, StringsTable.SECTION_TRACK), 0,
-                v -> showScreen(SCREEN_TRACK));
-
-        // Support (v4.0.0): the developer's QTC donation address
-        // at the bottom of Home. Quiet text, no card: a label, one
-        // line saying donations are voluntary, and the address
-        // itself in mono — tapping it copies it, with a toast as
-        // the receipt. Always shown; it asks for nothing and the
-        // app never acts on it.
-        LinearLayout donateBox = new LinearLayout(this);
-        donateBox.setOrientation(LinearLayout.VERTICAL);
-        donateBox.setPadding(dp(26), 0, dp(26), 0);
-        donateBox.addView(cardLabel(
-                I18n.get(this, StringsTable.DONATE_TITLE)), matchLp());
-        TextView donateNote = text(
-                I18n.get(this, StringsTable.DONATE_NOTE), 12, FAINT, false);
-        donateBox.addView(donateNote, matchLpTop(6));
-        TextView donateAddr = text(DONATE_ADDRESS, 12, LABEL2, false);
-        donateAddr.setTypeface(VisionFonts.mono(this));
-        donateAddr.setBackground(ripple(null));
-        donateAddr.setClickable(true);
-        donateAddr.setFocusable(true);
-        donateAddr.setPadding(0, dp(8), 0, dp(8));
-        donateAddr.setOnClickListener(v -> {
+    /** The donation sheet (decided in 14-9): the voluntary note
+     *  and the address; tapping the address copies it, with a
+     *  toast as the receipt. The app never sends anything to it
+     *  on its own. The QR joins in v4.4.0 (design 10.4). */
+    private void buildDonateSheet(FrameLayout container) {
+        LinearLayout[] panelBox = new LinearLayout[1];
+        donateSheetOverlay = buildSheet(container,
+                I18n.get(this, StringsTable.DONATE_TITLE), panelBox);
+        LinearLayout panel = panelBox[0];
+        donateSheetPanel = panel;
+        TextView note = text(
+                I18n.get(this, StringsTable.DONATE_NOTE),
+                13, Tokens.MUTED, false);
+        note.setLineSpacing(0f, 1.3f);
+        panel.addView(note, matchLpTop(16));
+        TextView addr = text(DONATE_ADDRESS, 12, Tokens.CONTENT, false);
+        addr.setTypeface(VisionFonts.mono(this));
+        addr.setBackground(ripple(null));
+        addr.setClickable(true);
+        addr.setFocusable(true);
+        addr.setPadding(0, dp(8), 0, dp(8));
+        addr.setOnClickListener(v -> {
             android.content.ClipboardManager cm =
                     (android.content.ClipboardManager)
                             getSystemService(Context.CLIPBOARD_SERVICE);
@@ -1333,9 +1649,14 @@ public class MainActivity extends Activity {
                         android.widget.Toast.LENGTH_SHORT).show();
             }
         });
-        donateBox.addView(donateAddr, matchLpTop(2));
-        root.addView(donateBox, matchLpTop(24));
-        return (ScrollView) screens[SCREEN_HOME];
+        panel.addView(addr, matchLpTop(8));
+    }
+
+    private void openDonateSheet() {
+        if (donateSheetOverlay != null) {
+            donateSheetOverlay.setVisibility(View.VISIBLE);
+            animateSheetIn(donateSheetOverlay, donateSheetPanel);
+        }
     }
 
     // ------------------------------------------------------------------
@@ -1344,13 +1665,13 @@ public class MainActivity extends Activity {
 
     private View buildNetwork(FrameLayout container, int dir) {
         FrameLayout root = new FrameLayout(this);
-        root.setBackgroundColor(BG);
+        root.setBackgroundColor(Tokens.VOID);
         root.setLayoutDirection(dir);
         root.setVisibility(View.GONE);
         float density = getResources().getDisplayMetrics().density;
 
         ScrollView sv = new ScrollView(this);
-        sv.setBackgroundColor(BG);
+        sv.setBackgroundColor(Tokens.VOID);
         root.addView(sv, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT));
@@ -1366,7 +1687,7 @@ public class MainActivity extends Activity {
         header.setOrientation(LinearLayout.HORIZONTAL);
         header.setGravity(Gravity.CENTER_VERTICAL);
         TextView t = text(I18n.get(this, StringsTable.VISION_NET_TITLE),
-                20, LABEL1, true);
+                20, Tokens.CONTENT, true);
         t.setTypeface(VisionFonts.displayBold(this));
         header.addView(t, new LinearLayout.LayoutParams(
                 0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
@@ -1382,9 +1703,9 @@ public class MainActivity extends Activity {
         seg.addView(netSegNowBtn);
         seg.addView(netSeg24hBtn);
         header.addView(seg);
-        TextView info = text("i", 13, LABEL1, true);
+        TextView info = text("i", 13, Tokens.CONTENT, true);
         info.setGravity(Gravity.CENTER);
-        info.setBackground(rounded(0, 999, density, DECOR, 1));
+        info.setBackground(rounded(0, 999, density, Tokens.DECOR, 1));
         info.setClickable(true);
         info.setOnClickListener(v -> openReadSheet());
         LinearLayout.LayoutParams ilp = new LinearLayout.LayoutParams(
@@ -1401,14 +1722,14 @@ public class MainActivity extends Activity {
         hero.setOrientation(LinearLayout.HORIZONTAL);
         LinearLayout heroLeft = new LinearLayout(this);
         heroLeft.setOrientation(LinearLayout.VERTICAL);
-        netNumView = text("", 90, ACCENT, true);
+        netNumView = text("", 88, Tokens.FLARE, true);
         netNumView.setTypeface(VisionFonts.displayBold(this));
         heroLeft.addView(netNumView, matchLp());
-        netSubView = text("", 15, LABEL2, false);
-        heroLeft.addView(netSubView, matchLpTop(10));
-        netTagView = text("", 11, FAINT, false);
+        netSubView = text("", 15, Tokens.MUTED, false);
+        heroLeft.addView(netSubView, matchLpTop(8));
+        netTagView = text("", 12, Tokens.FAINT, false);
         netTagView.setTypeface(VisionFonts.mono(this));
-        heroLeft.addView(netTagView, matchLpTop(6));
+        heroLeft.addView(netTagView, matchLpTop(8));
         hero.addView(heroLeft, new LinearLayout.LayoutParams(
                 0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
         sparkView = new SparklineView(this);
@@ -1417,7 +1738,7 @@ public class MainActivity extends Activity {
         splp.gravity = Gravity.CENTER_VERTICAL;
         splp.setMarginStart(dp(12));
         hero.addView(sparkView, splp);
-        col.addView(hero, matchLpTop(18));
+        col.addView(hero, matchLpTop(16));
 
         // The field, in its card.
         FrameLayout fieldCard = new FrameLayout(this);
@@ -1427,21 +1748,21 @@ public class MainActivity extends Activity {
         fieldCard.addView(networkField, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT));
-        LinearLayout.LayoutParams flp = matchLpTop(20);
+        LinearLayout.LayoutParams flp = matchLpTop(16);
         flp.height = dp(340);
         col.addView(fieldCard, flp);
 
         netGhostNoteView = text(
                 I18n.get(this, StringsTable.SEG_24H_NOTE),
-                12, FAINT, false);
+                12, Tokens.FAINT, false);
         netGhostNoteView.setVisibility(View.GONE);
-        col.addView(netGhostNoteView, matchLpTop(10));
+        col.addView(netGhostNoteView, matchLpTop(8));
 
         // The ticker zone: the live log's latest lines, newest
         // first, resting above the nav zone (S2-03).
         tickerBox = new LinearLayout(this);
         tickerBox.setOrientation(LinearLayout.VERTICAL);
-        col.addView(tickerBox, matchLpTop(18));
+        col.addView(tickerBox, matchLpTop(16));
 
         buildReadSheet(root);
 
@@ -1453,7 +1774,7 @@ public class MainActivity extends Activity {
 
     /** One segment pill of the network header. */
     private TextView segmentButton(String label, boolean is24h) {
-        TextView b = text(label, 12, FAINT, true);
+        TextView b = text(label, 12, Tokens.FAINT, true);
         b.setGravity(Gravity.CENTER);
         b.setPadding(dp(12), dp(6), dp(12), dp(6));
         b.setClickable(true);
@@ -1472,9 +1793,9 @@ public class MainActivity extends Activity {
         android.graphics.drawable.Drawable sel = rounded(
                 Color.argb(38, 0xE8, 0xE6, 0xE0), 999, density, 0, 0);
         netSegNowBtn.setBackground(netShow24h ? null : sel);
-        netSegNowBtn.setTextColor(netShow24h ? FAINT : LABEL1);
+        netSegNowBtn.setTextColor(netShow24h ? Tokens.FAINT : Tokens.CONTENT);
         netSeg24hBtn.setBackground(netShow24h ? sel : null);
-        netSeg24hBtn.setTextColor(netShow24h ? LABEL1 : FAINT);
+        netSeg24hBtn.setTextColor(netShow24h ? Tokens.CONTENT : Tokens.FAINT);
         if (netGhostNoteView != null) {
             netGhostNoteView.setVisibility(
                     netShow24h ? View.VISIBLE : View.GONE);
@@ -1490,6 +1811,7 @@ public class MainActivity extends Activity {
         readSheetOverlay.setOnClickListener(
                 v -> readSheetOverlay.setVisibility(View.GONE));
         LinearLayout panel = new LinearLayout(this);
+        readSheetPanel = panel;
         panel.setOrientation(LinearLayout.VERTICAL);
         panel.setBackground(cardBg());
         panel.setPadding(dp(26), dp(22), dp(26), dp(22));
@@ -1501,29 +1823,29 @@ public class MainActivity extends Activity {
         head.setGravity(Gravity.CENTER_VERTICAL);
         TextView title = text(
                 I18n.get(this, StringsTable.FIELD_HOWTO),
-                17, LABEL1, true);
+                20, Tokens.CONTENT, true);
         head.addView(title, new LinearLayout.LayoutParams(
                 0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
-        TextView close = text("✕", 16, LABEL2, false);
+        TextView close = text("✕", 16, Tokens.MUTED, false);
         close.setGravity(Gravity.CENTER);
         close.setOnClickListener(
                 v -> readSheetOverlay.setVisibility(View.GONE));
         head.addView(close, new LinearLayout.LayoutParams(dp(48), dp(48)));
         panel.addView(head, matchLp());
-        readSheetBestView = text("", 15, LABEL1, false);
+        readSheetBestView = text("", 15, Tokens.CONTENT, false);
         readSheetBestView.setTypeface(VisionFonts.mono(this));
         panel.addView(readSheetBestView, matchLpTop(16));
-        readSheetFactsView = text("", 13, LABEL2, false);
+        readSheetFactsView = text("", 13, Tokens.MUTED, false);
         readSheetFactsView.setTypeface(VisionFonts.mono(this));
         panel.addView(readSheetFactsView, matchLpTop(8));
         TextView rings = text(
                 I18n.get(this, StringsTable.FIELD_READ_RINGS),
-                13, LABEL2, false);
+                13, Tokens.MUTED, false);
         rings.setLineSpacing(0f, 1.3f);
         panel.addView(rings, matchLpTop(16));
         TextView ghost = text(
                 I18n.get(this, StringsTable.FIELD_READ_GHOST),
-                13, LABEL2, false);
+                13, Tokens.MUTED, false);
         ghost.setLineSpacing(0f, 1.3f);
         panel.addView(ghost, matchLpTop(12));
         FrameLayout.LayoutParams plp = new FrameLayout.LayoutParams(
@@ -1565,6 +1887,7 @@ public class MainActivity extends Activity {
                 StringsTable.FIELD_FACTS_FMT,
                 peersText, obsText, upText));
         readSheetOverlay.setVisibility(View.VISIBLE);
+        animateSheetIn(readSheetOverlay, readSheetPanel);
     }
 
     // ------------------------------------------------------------------
@@ -1572,21 +1895,25 @@ public class MainActivity extends Activity {
     // ------------------------------------------------------------------
 
     private View buildMember(FrameLayout container, int dir) {
-        // A vertical column, not an overlay frame: the title owns
-        // the top row and the card centres in the area BELOW it.
-        // The overlay layout let the card slide up over the
-        // title, leaving only its first character visible
-        // (device finding, 2026-11-09).
+        // A scrolling column (design 7.3): the title, then the
+        // card under it, then the standing note. The centred
+        // overlay area the first build used is gone - the tab
+        // grows downward from here (the track graph and the
+        // totals join below the card in v4.3.0).
+        ScrollView sv = new ScrollView(this);
+        sv.setBackgroundColor(Tokens.VOID);
+        sv.setLayoutDirection(dir);
+        sv.setVisibility(View.GONE);
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        root.setBackgroundColor(BG);
         root.setLayoutDirection(dir);
-        root.setVisibility(View.GONE);
+        root.setPadding(0, 0, 0, navClearance());
+        sv.addView(root);
         int side = sidePadding();
 
         TextView title = text(
                 I18n.get(this, StringsTable.VISION_MEM_TITLE),
-                20, LABEL1, true);
+                20, Tokens.CONTENT, true);
         title.setTypeface(VisionFonts.displayBold(this));
         LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
@@ -1594,30 +1921,22 @@ public class MainActivity extends Activity {
         tlp.setMarginStart(side);
         tlp.setMarginEnd(side);
         tlp.topMargin = dp(24);
-        tlp.bottomMargin = dp(20);
+        tlp.bottomMargin = dp(16);
         root.addView(title, tlp);
-
-        // The area the card (or the guidance) centres in. Its
-        // bottom padding keeps the centred card out of the
-        // floating nav's zone.
-        FrameLayout area = new FrameLayout(this);
-        area.setPadding(0, 0, 0, navZone());
-        root.addView(area, new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
 
         // Guidance while DePIN holds no records yet: no card is
         // dressed up for a record that does not exist.
         memberEmptyView = text(
                 I18n.get(this, StringsTable.VISION_MEMBER_EMPTY),
-                15, LABEL2, false);
+                15, Tokens.MUTED, false);
         memberEmptyView.setGravity(Gravity.CENTER);
-        FrameLayout.LayoutParams elp = new FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.WRAP_CONTENT,
-                Gravity.CENTER);
+        LinearLayout.LayoutParams elp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT);
         elp.setMarginStart(side);
         elp.setMarginEnd(side);
-        area.addView(memberEmptyView, elp);
+        elp.topMargin = dp(24);
+        root.addView(memberEmptyView, elp);
 
         // The card: glow layer behind, content on top.
         memberCardBox = new FrameLayout(this);
@@ -1628,12 +1947,12 @@ public class MainActivity extends Activity {
         LinearLayout content = new LinearLayout(this);
         memberContent = content;
         content.setOrientation(LinearLayout.VERTICAL);
-        content.setPadding(dp(22), dp(22), dp(22), dp(22));
+        content.setPadding(dp(22), dp(14), dp(22), dp(14));
         LinearLayout top = new LinearLayout(this);
         top.setOrientation(LinearLayout.HORIZONTAL);
         top.setGravity(Gravity.CENTER_VERTICAL);
-        top.addView(logoView(48, 13));
-        TextView memberWord = text("MEMBER", 11, ACCENT, true);
+        top.addView(logoView(40, 11));
+        TextView memberWord = text("MEMBER", 11, Tokens.FLARE, true);
         memberWord.setTypeface(VisionFonts.displayBold(this));
         memberWord.setLetterSpacing(0.32f);
         LinearLayout.LayoutParams mwlp = new LinearLayout.LayoutParams(
@@ -1642,19 +1961,39 @@ public class MainActivity extends Activity {
         mwlp.setMarginStart(dp(12));
         top.addView(memberWord, mwlp);
         content.addView(top, matchLp());
-        memNameView = text("", 56, LABEL1, true);
+        memNameView = text("", 40, Tokens.CONTENT, true);
         memNameView.setTypeface(VisionFonts.displayBold(this));
         memNameView.setSingleLine(true);
-        content.addView(memNameView, matchLpTop(28));
+        content.addView(memNameView, matchLpTop(8));
         TextView idLabel = cardLabel(
                 I18n.get(this, StringsTable.VISION_MEM_ID));
-        content.addView(idLabel, matchLpTop(18));
-        memIdView = text("", 14, LABEL1, false);
+        content.addView(idLabel, matchLpTop(8));
+        memIdView = text("", 14, Tokens.CONTENT, false);
         memIdView.setTypeface(VisionFonts.mono(this));
         memIdView.setSingleLine(true);
         // The number rests grouped in fours for reading; a tap
         // shows the raw id for copying, and back (S1-11).
         memIdView.setClickable(true);
+        // A long press copies the raw number (A-18): the card
+        // could show it and flip its grouping, but until now
+        // there was no way to take it anywhere.
+        memIdView.setOnLongClickListener(v -> {
+            if (memIdRaw == null) {
+                return false;
+            }
+            android.content.ClipboardManager cm =
+                    (android.content.ClipboardManager)
+                            getSystemService(CLIPBOARD_SERVICE);
+            if (cm == null) {
+                return false;
+            }
+            cm.setPrimaryClip(android.content.ClipData.newPlainText(
+                    "member id", memIdRaw));
+            Toast.makeText(this, I18n.get(
+                    this, StringsTable.MEMBER_ID_COPIED),
+                    Toast.LENGTH_SHORT).show();
+            return true;
+        });
         memIdView.setOnClickListener(v -> {
             memIdGrouped = !memIdGrouped;
             if (memIdRaw != null) {
@@ -1663,7 +2002,7 @@ public class MainActivity extends Activity {
                 fitSingleLinePx(memIdView, 14f, 10f, 7f);
             }
         });
-        content.addView(memIdView, matchLpTop(8));
+        content.addView(memIdView, matchLpTop(4));
         LinearLayout mstats = new LinearLayout(this);
         mstats.setOrientation(LinearLayout.HORIZONTAL);
         memSinceValue = memberStat(mstats,
@@ -1673,29 +2012,45 @@ public class MainActivity extends Activity {
                 I18n.get(this, StringsTable.VISION_CPS), 1f, false);
         memDaysValue = memberStat(mstats,
                 I18n.get(this, StringsTable.MEM_STREAK), 1f, false);
-        content.addView(mstats, matchLpTop(20));
-        // The card keeps the credit-card ratio (1.586:1) when
-        // its content is shorter than the ratio demands; the
-        // spacer absorbs the difference and the refresh loop
-        // sizes it. Content taller than the ratio always wins:
-        // nothing is ever clipped for the ratio's sake (S1-11).
+        content.addView(mstats, matchLpTop(12));
+        // The card keeps its declared ratio (1.42:1, decided
+        // in 14-8; the brief's section 6-4) when its content is
+        // shorter than the ratio demands; the spacer absorbs
+        // the difference and the refresh loop sizes it. Content
+        // taller than the ratio always wins: nothing is ever
+        // clipped for the ratio's sake (S1-11).
         memberSpacer = new View(this);
         content.addView(memberSpacer, new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, 0));
         memberCardBox.addView(content, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.WRAP_CONTENT));
-        FrameLayout.LayoutParams clp = new FrameLayout.LayoutParams(
+        LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(
                 Math.min(dp(330), getResources().getDisplayMetrics()
                         .widthPixels - side * 2),
-                FrameLayout.LayoutParams.WRAP_CONTENT,
-                Gravity.CENTER);
-        area.addView(memberCardBox, clp);
+                LinearLayout.LayoutParams.WRAP_CONTENT);
+        clp.gravity = Gravity.CENTER_HORIZONTAL;
+        clp.topMargin = dp(8);
+        root.addView(memberCardBox, clp);
 
-        container.addView(root, new FrameLayout.LayoutParams(
+        // The standing note (design 7.3): the first principle,
+        // always on this tab.
+        TextView principle = text(
+                I18n.get(this, StringsTable.RECORD_PRINCIPLE),
+                12, Tokens.FAINT, false);
+        principle.setGravity(Gravity.CENTER);
+        LinearLayout.LayoutParams prlp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT);
+        prlp.setMarginStart(side);
+        prlp.setMarginEnd(side);
+        prlp.topMargin = dp(24);
+        root.addView(principle, prlp);
+
+        container.addView(sv, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
                 FrameLayout.LayoutParams.MATCH_PARENT));
-        return root;
+        return sv;
     }
 
     /**
@@ -1713,13 +2068,13 @@ public class MainActivity extends Activity {
                                 float weight, boolean first) {
         LinearLayout col = new LinearLayout(this);
         col.setOrientation(LinearLayout.VERTICAL);
-        TextView lab = text(label, 12, LABEL2, false);
+        TextView lab = text(label, 12, Tokens.MUTED, false);
         lab.setSingleLine(true);
         col.addView(lab, matchLp());
-        TextView v = text("", 20, LABEL1, true);
+        TextView v = text("", 20, Tokens.CONTENT, true);
         v.setTypeface(VisionFonts.displayMedium(this));
         v.setSingleLine(true);
-        col.addView(v, matchLpTop(10));
+        col.addView(v, matchLpTop(4));
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 0, LinearLayout.LayoutParams.WRAP_CONTENT, weight);
         if (!first) {
@@ -1742,7 +2097,7 @@ public class MainActivity extends Activity {
         float density = getResources().getDisplayMetrics().density;
         bottomNav.setBackground(rounded(
                 Color.argb(209, 0x18, 0x18, 0x18), 999, density,
-                CARD_LINE, 1));
+                Tokens.LINE, 1));
         bottomNav.setPadding(dp(6), dp(6), dp(6), dp(6));
         bottomNav.setElevation(dp(12));
         String[] labels = {
@@ -1762,10 +2117,10 @@ public class MainActivity extends Activity {
             btn.setClickable(true);
             btn.setFocusable(true);
             btn.setContentDescription(labels[i]);
-            navIcons[i] = new NavIconView(this, icons[i], FAINT);
+            navIcons[i] = new NavIconView(this, icons[i], Tokens.FAINT);
             btn.addView(navIcons[i], new LinearLayout.LayoutParams(
                     dp(20), dp(20)));
-            navLabels[i] = text(labels[i], 11, FAINT, true);
+            navLabels[i] = text(labels[i], 11, Tokens.FAINT, true);
             LinearLayout.LayoutParams nlp = new LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.WRAP_CONTENT,
                     LinearLayout.LayoutParams.WRAP_CONTENT);
@@ -1800,7 +2155,7 @@ public class MainActivity extends Activity {
         subHeader(root, I18n.get(this, StringsTable.SCREEN_NODE_DETAILS));
 
         TextView identity = text(
-                I18n.get(this, StringsTable.APP_SUBTITLE), 14, FAINT, false);
+                I18n.get(this, StringsTable.APP_SUBTITLE), 14, Tokens.FAINT, false);
         root.addView(identity, matchLpTop(8));
 
         // Running presentation: the exact current values.
@@ -1817,7 +2172,7 @@ public class MainActivity extends Activity {
         detSessionValue = infoRow(detailsRunningBox,
                 I18n.get(this, StringsTable.LABEL_UPTIME_SESSION), true);
         TextView gapNote = text(
-                I18n.get(this, StringsTable.SYNC_GAP_NOTE), 14, FAINT, false);
+                I18n.get(this, StringsTable.SYNC_GAP_NOTE), 14, Tokens.FAINT, false);
         detailsRunningBox.addView(gapNote, matchLpTop(8));
         root.addView(detailsRunningBox, matchLpTop(16));
 
@@ -1825,7 +2180,7 @@ public class MainActivity extends Activity {
         detailsStoppedBox = new LinearLayout(this);
         detailsStoppedBox.setOrientation(LinearLayout.VERTICAL);
         TextView cumNote = text(I18n.get(
-                this, StringsTable.STOPPED_CUMULATIVE_NOTE), 14, FAINT, false);
+                this, StringsTable.STOPPED_CUMULATIVE_NOTE), 14, Tokens.FAINT, false);
         detailsStoppedBox.addView(cumNote, matchLp());
         cumUptimeValue = infoRow(detailsStoppedBox,
                 I18n.get(this, StringsTable.LABEL_UPTIME_TOTAL), false);
@@ -1837,7 +2192,7 @@ public class MainActivity extends Activity {
 
         // Network / RPC line (raw endpoint — not translated, by design).
         TextView rpc = text(I18n.get(this, StringsTable.RPC_LOCAL_NOTE)
-                + " · 127.0.0.1:9944", 14, FAINT, false);
+                + " · 127.0.0.1:9944", 14, Tokens.FAINT, false);
         root.addView(rpc, matchLpTop(24));
 
         // Diagnostics (expandable).
@@ -1853,18 +2208,18 @@ public class MainActivity extends Activity {
         diagSection.addView(diagHeader, matchLp());
         diagContent = new LinearLayout(this);
         diagContent.setOrientation(LinearLayout.VERTICAL);
-        diagText = text("", 14, LABEL2, false);
+        diagText = text("", 14, Tokens.MUTED, false);
         diagText.setTextIsSelectable(true);
         diagContent.addView(diagText, matchLp());
         TextView logLocLabel = text(
-                I18n.get(this, StringsTable.LABEL_LOG_LOCATION), 14, FAINT, false);
+                I18n.get(this, StringsTable.LABEL_LOG_LOCATION), 14, Tokens.FAINT, false);
         diagContent.addView(logLocLabel, matchLpTop(16));
-        TextView logLoc = text("files/logs/node.log", 14, LABEL2, false);
+        TextView logLoc = text("files/logs/node.log", 14, Tokens.MUTED, false);
         diagContent.addView(logLoc, matchLpTop(4));
         Button share = new Button(this);
         share.setText(I18n.get(this, StringsTable.BUTTON_SHARE_LOG));
         share.setTextSize(16);
-        share.setTextColor(ACCENT);
+        share.setTextColor(Tokens.FLARE);
         share.setAllCaps(false);
         share.setBackground(ripple(null));
         share.setStateListAnimator(null);
@@ -1899,14 +2254,14 @@ public class MainActivity extends Activity {
                 0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
         h.addView(l, llp);
         if (trailing != null) {
-            TextView t = text(trailing, 14, FAINT, false);
+            TextView t = text(trailing, 14, Tokens.FAINT, false);
             LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.WRAP_CONTENT,
                     LinearLayout.LayoutParams.WRAP_CONTENT);
             tlp.setMarginEnd(dp(12));
             h.addView(t, tlp);
         }
-        TextView chev = text("›", 22, FAINT, false);
+        TextView chev = text("›", 22, Tokens.FAINT, false);
         h.addView(chev);
         h.setTag(label);
         return h;
@@ -1940,16 +2295,16 @@ public class MainActivity extends Activity {
         trackPeersValue = bigMetric(root,
                 I18n.get(this, StringsTable.LABEL_MAX_PEERS), 32);
         TextView note = text(
-                I18n.get(this, StringsTable.TRACK_LOCAL_NOTE), 14, FAINT, false);
+                I18n.get(this, StringsTable.TRACK_LOCAL_NOTE), 14, Tokens.FAINT, false);
         root.addView(note, matchLpTop(32));
         return (ScrollView) screens[SCREEN_TRACK];
     }
 
     /** One track metric: small label, 24 sp medium value. */
     private TextView bigMetric(LinearLayout parent, String label, int topDp) {
-        TextView l = text(label, 14, LABEL2, false);
+        TextView l = text(label, 14, Tokens.MUTED, false);
         parent.addView(l, matchLpTop(topDp));
-        TextView v = text("", 24, LABEL1, true);
+        TextView v = text("", 24, Tokens.CONTENT, true);
         parent.addView(v, matchLpTop(4));
         return v;
     }
@@ -1962,8 +2317,64 @@ public class MainActivity extends Activity {
         LinearLayout root = screenContent(container, SCREEN_SETTINGS, dir);
         subHeader(root, I18n.get(this, StringsTable.SECTION_SETTINGS));
 
+        // The hub (design 6.2): one row per page, each carrying
+        // its current value, so the state is visible without
+        // opening anything. The pages hold the sections the one
+        // long settings scroll used to stack.
+        hubNodeValue = valueRow(root,
+                I18n.get(this, StringsTable.SET_NODE_TITLE), 16,
+                v -> showScreen(SCREEN_SET_NODE));
+        hubMiningValue = valueRow(root,
+                I18n.get(this, StringsTable.MINING_SECTION), 0,
+                v -> showScreen(SCREEN_SET_MINING));
+        hubDepinValue = valueRow(root,
+                I18n.get(this, StringsTable.SETTINGS_DEPIN_SECTION), 0,
+                v -> showScreen(SCREEN_SET_DEPIN));
+        hubStorageValue = valueRow(root,
+                I18n.get(this, StringsTable.STORAGE_SECTION), 0,
+                v -> showScreen(SCREEN_SET_STORAGE));
+        navRow(root, I18n.get(this, StringsTable.DEPIN_TRANSFER_SECTION), 0,
+                v -> showScreen(SCREEN_SET_TRANSFER));
+        hubExternalValue = valueRow(root,
+                I18n.get(this, StringsTable.SET_EXTERNAL_TITLE), 0,
+                v -> showScreen(SCREEN_SET_EXTERNAL));
+        hubLanguageValue = valueRow(root,
+                I18n.get(this, StringsTable.SETTINGS_LANGUAGE), 0,
+                v -> showScreen(SCREEN_SET_LANGUAGE));
+        navRow(root, I18n.get(this, StringsTable.SET_ABOUT_TITLE), 0,
+                v -> showScreen(SCREEN_SET_ABOUT));
+
+        root.addView(hairline(24));
+
+        // Settings lock: always reachable, including to unlock.
+        lockSwitch = settingsSwitch(root, 8, ID_ANCHOR_LOCK,
+                I18n.get(this, StringsTable.SETTINGS_LOCK),
+                NodeSettings.settingsLocked(this),
+                (view, isChecked) -> {
+                    if (syncingSettings) {
+                        return;
+                    }
+                    if (isChecked != NodeSettings.settingsLocked(this)) {
+                        NodeSettings.setSettingsLocked(this, isChecked);
+                        applySettingsLock();
+                        refresh();
+                    }
+                });
+        TextView lockNote = text(I18n.get(
+                this, StringsTable.SETTINGS_LOCK_NOTE), 14, Tokens.FAINT, false);
+        root.addView(lockNote, matchLpTop(4));
+
+        return (ScrollView) screens[SCREEN_SETTINGS];
+    }
+
+    /** Settings page: the node itself - the restart note, the
+     *  telemetry switch and the display name (design 6.2). */
+    private ScrollView buildNodeSettingsPage(FrameLayout container, int dir) {
+        LinearLayout root = screenContent(container, SCREEN_SET_NODE, dir);
+        subHeaderTo(root, I18n.get(this, StringsTable.SET_NODE_TITLE),
+                SCREEN_SETTINGS);
         TextView restartNote = text(I18n.get(
-                this, StringsTable.SETTINGS_NODE_RESTART_NOTE), 14, FAINT, false);
+                this, StringsTable.SETTINGS_NODE_RESTART_NOTE), 14, Tokens.FAINT, false);
         root.addView(restartNote, matchLpTop(8));
 
         // Telemetry: switch + always-visible public-scope note.
@@ -1978,32 +2389,87 @@ public class MainActivity extends Activity {
                     refresh();
                 });
         telemetryRow = (LinearLayout) telemetrySwitch.getParent();
-        telemetryPendingView = text("", 14, ACCENT, false);
+        telemetryPendingView = text("", 14, Tokens.FLARE, false);
         root.addView(telemetryPendingView, matchLpTop(4));
-        telemetryAppliedView = text("", 14, FAINT, false);
+        telemetryAppliedView = text("", 14, Tokens.FAINT, false);
         root.addView(telemetryAppliedView, matchLpTop(4));
         TextView telemetryNote = text(I18n.get(
-                this, StringsTable.SETTINGS_TELEMETRY_NOTE), 14, FAINT, false);
+                this, StringsTable.SETTINGS_TELEMETRY_NOTE), 14, Tokens.FAINT, false);
         root.addView(telemetryNote, matchLpTop(4));
         telemetryLockedView = text(I18n.get(
-                this, StringsTable.SETTINGS_LOCKED_NOTICE), 14, FAINT, false);
+                this, StringsTable.SETTINGS_LOCKED_NOTICE), 14, Tokens.FAINT, false);
         telemetryLockedView.setVisibility(View.GONE);
         root.addView(telemetryLockedView, matchLpTop(4));
 
+
         root.addView(hairline(24));
 
-        // Mining (v4.0.0): the second node-launch opt-in, placed
-        // with the first. Off by default.
+        // Display name: shows the stored value; opens the editor.
+        nameRow = new LinearLayout(this);
+        nameRow.setOrientation(LinearLayout.HORIZONTAL);
+        nameRow.setGravity(Gravity.CENTER_VERTICAL);
+        nameRow.setMinimumHeight(dp(56));
+        nameRow.setPadding(0, dp(12), 0, dp(12));
+        nameRow.setBackground(ripple(null));
+        nameRow.setClickable(true);
+        nameRow.setFocusable(true);
+        nameRow.setOnClickListener(v -> {
+            if (!NodeSettings.settingsLocked(this)) {
+                showNameDialog();
+            }
+        });
+        nameRow.setId(ID_ANCHOR_NAME);
+        settingsAnchors.add(nameRow);
+        TextView nameLabel = text(
+                I18n.get(this, StringsTable.SETTINGS_DISPLAY_NAME), 16, Tokens.MUTED, false);
+        LinearLayout.LayoutParams nlp = new LinearLayout.LayoutParams(
+                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
+        nlp.setMarginEnd(dp(24));
+        nameRow.addView(nameLabel, nlp);
+        nameValue = text("", 16, Tokens.CONTENT, false);
+        nameValue.setGravity(Gravity.END);
+        nameRow.addView(nameValue);
+        nameChevron = text(I18n.isRtl(this) ? "‹" : "›", 22, Tokens.FAINT, false);
+        LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT);
+        clp.setMarginStart(dp(12));
+        nameRow.addView(nameChevron, clp);
+        root.addView(nameRow, matchLpTop(8));
+        namePendingView = text("", 14, Tokens.FLARE, false);
+        root.addView(namePendingView, matchLpTop(4));
+        nameAppliedView = text("", 14, Tokens.FAINT, false);
+        root.addView(nameAppliedView, matchLpTop(4));
+        nameLockedView = text(I18n.get(
+                this, StringsTable.SETTINGS_NAME_LOCKED), 14, Tokens.FAINT, false);
+        root.addView(nameLockedView, matchLpTop(4));
+
+        return (ScrollView) screens[SCREEN_SET_NODE];
+    }
+
+    /** Settings page: mining (design 6.2). The section builder
+     *  is the one the settings scroll used. */
+    private ScrollView buildMiningSettingsPage(FrameLayout container,
+                                               int dir) {
+        LinearLayout root = screenContent(container, SCREEN_SET_MINING, dir);
+        subHeaderTo(root, I18n.get(this, StringsTable.MINING_SECTION),
+                SCREEN_SETTINGS);
         buildMiningSection(root);
+        return (ScrollView) screens[SCREEN_SET_MINING];
+    }
 
-        root.addView(hairline(24));
-
+    /** Settings page: the DePIN record (design 6.2). */
+    private ScrollView buildDepinSettingsPage(FrameLayout container,
+                                              int dir) {
+        LinearLayout root = screenContent(container, SCREEN_SET_DEPIN, dir);
+        subHeaderTo(root, I18n.get(this,
+                StringsTable.SETTINGS_DEPIN_SECTION), SCREEN_SETTINGS);
         // DePIN: opt-in observation of this node's uptime, kept
         // entirely separate from node operation (integration step 2).
         // The toggle talks only to the DepinModule facade; the rows
         // below it are a read-only view of its latest status.
         TextView depinHeading = text(I18n.get(
-                this, StringsTable.SETTINGS_DEPIN_SECTION), 16, LABEL2, true);
+                this, StringsTable.SETTINGS_DEPIN_SECTION), 16, Tokens.MUTED, true);
         root.addView(depinHeading, matchLpTop(8));
         depinSwitch = settingsSwitch(root, 8, ID_ANCHOR_DEPIN,
                 I18n.get(this, StringsTable.SETTINGS_DEPIN_TOGGLE),
@@ -2041,10 +2507,10 @@ public class MainActivity extends Activity {
                 });
         depinRow = (LinearLayout) depinSwitch.getParent();
         TextView depinNote = text(I18n.get(
-                this, StringsTable.SETTINGS_DEPIN_NOTE), 14, FAINT, false);
+                this, StringsTable.SETTINGS_DEPIN_NOTE), 14, Tokens.FAINT, false);
         root.addView(depinNote, matchLpTop(4));
         depinLockedView = text(I18n.get(
-                this, StringsTable.SETTINGS_LOCKED_NOTICE), 14, FAINT, false);
+                this, StringsTable.SETTINGS_LOCKED_NOTICE), 14, Tokens.FAINT, false);
         depinLockedView.setVisibility(View.GONE);
         root.addView(depinLockedView, matchLpTop(4));
         depinDeviceIdValue = infoRow(root,
@@ -2055,7 +2521,7 @@ public class MainActivity extends Activity {
                 I18n.get(this, StringsTable.DEPIN_LABEL_CHECKPOINTS), true);
         depinLastCheckpointValue = infoRow(root,
                 I18n.get(this, StringsTable.DEPIN_LABEL_LAST_CHECKPOINT), true);
-        depinNoteView = text("", 14, FAINT, false);
+        depinNoteView = text("", 14, Tokens.FAINT, false);
         depinNoteView.setVisibility(View.GONE);
         root.addView(depinNoteView, matchLpTop(4));
 
@@ -2069,13 +2535,13 @@ public class MainActivity extends Activity {
         depinAttemptResetButton.setText(I18n.get(
                 this, StringsTable.DEPIN_ATTEMPT_RESET_BUTTON));
         depinAttemptResetButton.setTextSize(15);
-        depinAttemptResetButton.setTextColor(ACCENT);
+        depinAttemptResetButton.setTextColor(Tokens.FLARE);
         depinAttemptResetButton.setAllCaps(false);
         depinAttemptResetButton.setBackground(ripple(null));
         depinAttemptResetButton.setStateListAnimator(null);
         depinAttemptResetButton.setGravity(
                 Gravity.START | Gravity.CENTER_VERTICAL);
-        depinAttemptResetButton.setMinHeight(dp(44));
+        depinAttemptResetButton.setMinHeight(dp(48));
         depinAttemptResetButton.setVisibility(View.GONE);
         depinAttemptResetButton.setOnClickListener(
                 v -> confirmAttemptLogReset());
@@ -2091,18 +2557,28 @@ public class MainActivity extends Activity {
         depinExportButton.setText(I18n.get(
                 this, StringsTable.DEPIN_EXPORT_BUNDLE));
         depinExportButton.setTextSize(15);
-        depinExportButton.setTextColor(ACCENT);
+        depinExportButton.setTextColor(Tokens.FLARE);
         depinExportButton.setAllCaps(false);
         depinExportButton.setBackground(ripple(null));
         depinExportButton.setStateListAnimator(null);
         depinExportButton.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
-        depinExportButton.setMinHeight(dp(44));
+        depinExportButton.setMinHeight(dp(48));
         depinExportButton.setOnClickListener(v -> onExportBundleClicked());
-        root.addView(depinExportButton, matchLpTop(2));
-        depinExportNoteView = text("", 14, FAINT, false);
+        root.addView(depinExportButton, matchLpTop(4));
+        depinExportNoteView = text("", 14, Tokens.FAINT, false);
         depinExportNoteView.setVisibility(View.GONE);
         root.addView(depinExportNoteView, matchLpTop(4));
 
+        return (ScrollView) screens[SCREEN_SET_DEPIN];
+    }
+
+    /** Settings page: device-to-device transfer, kept apart as
+     *  the detailed operation it is (design 6.2). */
+    private ScrollView buildTransferSettingsPage(FrameLayout container,
+                                                 int dir) {
+        LinearLayout root = screenContent(container, SCREEN_SET_TRANSFER, dir);
+        subHeaderTo(root, I18n.get(this,
+                StringsTable.DEPIN_TRANSFER_SECTION), SCREEN_SETTINGS);
         // Device transfer (integration step 4, design section
         // 5.3; UI consolidated into a state-driven main action):
         // receive a recorded identity from the companion
@@ -2115,16 +2591,16 @@ public class MainActivity extends Activity {
         // Every value shown at the confirmation step is a full
         // value.
         TextView transferHeading = text(I18n.get(
-                this, StringsTable.DEPIN_TRANSFER_SECTION), 16, LABEL2, true);
+                this, StringsTable.DEPIN_TRANSFER_SECTION), 16, Tokens.MUTED, true);
         root.addView(transferHeading, matchLpTop(16));
         TextView transferNote = text(I18n.get(
-                this, StringsTable.DEPIN_TRANSFER_NOTE), 14, FAINT, false);
+                this, StringsTable.DEPIN_TRANSFER_NOTE), 14, Tokens.FAINT, false);
         root.addView(transferNote, matchLpTop(4));
         depinTransferLockedView = text(I18n.get(
-                this, StringsTable.DEPIN_TRANSFER_LOCKED), 14, FAINT, false);
+                this, StringsTable.DEPIN_TRANSFER_LOCKED), 14, Tokens.FAINT, false);
         depinTransferLockedView.setVisibility(View.GONE);
         root.addView(depinTransferLockedView, matchLpTop(4));
-        depinTransferResultView = text("", 14, FAINT, false);
+        depinTransferResultView = text("", 14, Tokens.FAINT, false);
         depinTransferResultView.setVisibility(View.GONE);
         root.addView(depinTransferResultView, matchLpTop(4));
         // The error-file export sits directly under the failure
@@ -2136,32 +2612,32 @@ public class MainActivity extends Activity {
         depinTransferSaveErrorButton.setText(I18n.get(this,
                 StringsTable.DEPIN_TRANSFER_SAVE_ERROR));
         depinTransferSaveErrorButton.setTextSize(15);
-        depinTransferSaveErrorButton.setTextColor(ACCENT);
+        depinTransferSaveErrorButton.setTextColor(Tokens.FLARE);
         depinTransferSaveErrorButton.setAllCaps(false);
         depinTransferSaveErrorButton.setBackground(ripple(null));
         depinTransferSaveErrorButton.setStateListAnimator(null);
         depinTransferSaveErrorButton.setGravity(
                 Gravity.START | Gravity.CENTER_VERTICAL);
-        depinTransferSaveErrorButton.setMinHeight(dp(44));
+        depinTransferSaveErrorButton.setMinHeight(dp(48));
         depinTransferSaveErrorButton.setVisibility(View.GONE);
         depinTransferSaveErrorButton.setOnClickListener(
                 v -> runTransferAction(ACT_SAVE_ERROR));
-        root.addView(depinTransferSaveErrorButton, matchLpTop(2));
+        root.addView(depinTransferSaveErrorButton, matchLpTop(4));
 
         // Receiver block.
         TextView receiverHeading = text(I18n.get(
                 this, StringsTable.DEPIN_TRANSFER_RECEIVER_HEADING),
-                15, LABEL2, true);
+                15, Tokens.MUTED, true);
         root.addView(receiverHeading, matchLpTop(12));
-        depinTransferReceiverStateView = text("", 14, FAINT, false);
+        depinTransferReceiverStateView = text("", 14, Tokens.FAINT, false);
         root.addView(depinTransferReceiverStateView, matchLpTop(4));
         depinTransferReceiverMainButton = mainTransferButton(
                 v -> runTransferAction(receiverMainAction));
-        root.addView(depinTransferReceiverMainButton, matchLpTop(2));
+        root.addView(depinTransferReceiverMainButton, matchLpTop(4));
         final LinearLayout receiverOthers = new LinearLayout(this);
         receiverOthers.setOrientation(LinearLayout.VERTICAL);
         receiverOthers.setVisibility(View.GONE);
-        root.addView(othersToggle(receiverOthers, true), matchLpTop(2));
+        root.addView(othersToggle(receiverOthers, true), matchLpTop(4));
         root.addView(receiverOthers, matchLpTop(0));
         transferButton(receiverOthers,
                 StringsTable.DEPIN_TRANSFER_IMPORT_CANCEL_TOKEN,
@@ -2182,17 +2658,17 @@ public class MainActivity extends Activity {
         // Sender block (reverse migration).
         TextView senderHeading = text(I18n.get(
                 this, StringsTable.DEPIN_TRANSFER_SENDER_HEADING),
-                15, LABEL2, true);
+                15, Tokens.MUTED, true);
         root.addView(senderHeading, matchLpTop(12));
-        depinTransferSenderStateView = text("", 14, FAINT, false);
+        depinTransferSenderStateView = text("", 14, Tokens.FAINT, false);
         root.addView(depinTransferSenderStateView, matchLpTop(4));
         depinTransferSenderMainButton = mainTransferButton(
                 v -> runTransferAction(senderMainAction));
-        root.addView(depinTransferSenderMainButton, matchLpTop(2));
+        root.addView(depinTransferSenderMainButton, matchLpTop(4));
         final LinearLayout senderOthers = new LinearLayout(this);
         senderOthers.setOrientation(LinearLayout.VERTICAL);
         senderOthers.setVisibility(View.GONE);
-        root.addView(othersToggle(senderOthers, false), matchLpTop(2));
+        root.addView(othersToggle(senderOthers, false), matchLpTop(4));
         root.addView(senderOthers, matchLpTop(0));
         transferButton(senderOthers,
                 StringsTable.DEPIN_TRANSFER_CANCEL_TRANSFER,
@@ -2212,51 +2688,15 @@ public class MainActivity extends Activity {
         depinTransferReexportButton = transferButton(senderOthers,
                 StringsTable.DEPIN_TRANSFER_REEXPORT_ONESHOT,
                 ACT_REEXPORT_ONESHOT);
+        return (ScrollView) screens[SCREEN_SET_TRANSFER];
+    }
 
-        root.addView(hairline(24));
-
-        // Display name: shows the stored value; opens the editor.
-        nameRow = new LinearLayout(this);
-        nameRow.setOrientation(LinearLayout.HORIZONTAL);
-        nameRow.setGravity(Gravity.CENTER_VERTICAL);
-        nameRow.setMinimumHeight(dp(56));
-        nameRow.setPadding(0, dp(12), 0, dp(12));
-        nameRow.setBackground(ripple(null));
-        nameRow.setClickable(true);
-        nameRow.setFocusable(true);
-        nameRow.setOnClickListener(v -> {
-            if (!NodeSettings.settingsLocked(this)) {
-                showNameDialog();
-            }
-        });
-        nameRow.setId(ID_ANCHOR_NAME);
-        settingsAnchors.add(nameRow);
-        TextView nameLabel = text(
-                I18n.get(this, StringsTable.SETTINGS_DISPLAY_NAME), 16, LABEL2, false);
-        LinearLayout.LayoutParams nlp = new LinearLayout.LayoutParams(
-                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
-        nlp.setMarginEnd(dp(24));
-        nameRow.addView(nameLabel, nlp);
-        nameValue = text("", 16, LABEL1, false);
-        nameValue.setGravity(Gravity.END);
-        nameRow.addView(nameValue);
-        nameChevron = text(I18n.isRtl(this) ? "‹" : "›", 22, FAINT, false);
-        LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT);
-        clp.setMarginStart(dp(12));
-        nameRow.addView(nameChevron, clp);
-        root.addView(nameRow, matchLpTop(8));
-        namePendingView = text("", 14, ACCENT, false);
-        root.addView(namePendingView, matchLpTop(4));
-        nameAppliedView = text("", 14, FAINT, false);
-        root.addView(nameAppliedView, matchLpTop(4));
-        nameLockedView = text(I18n.get(
-                this, StringsTable.SETTINGS_NAME_LOCKED), 14, FAINT, false);
-        root.addView(nameLockedView, matchLpTop(4));
-
-        root.addView(hairline(24));
-
+    /** Settings page: language (design 6.2). */
+    private ScrollView buildLanguageSettingsPage(FrameLayout container,
+                                                 int dir) {
+        LinearLayout root = screenContent(container, SCREEN_SET_LANGUAGE, dir);
+        subHeaderTo(root, I18n.get(this, StringsTable.SETTINGS_LANGUAGE),
+                SCREEN_SETTINGS);
         // Language: shows the current choice; opens the picker.
         languageRow = new LinearLayout(this);
         languageRow.setOrientation(LinearLayout.HORIZONTAL);
@@ -2270,15 +2710,15 @@ public class MainActivity extends Activity {
         languageRow.setId(ID_ANCHOR_LANGUAGE);
         settingsAnchors.add(languageRow);
         TextView langLabel = text(
-                I18n.get(this, StringsTable.SETTINGS_LANGUAGE), 16, LABEL2, false);
+                I18n.get(this, StringsTable.SETTINGS_LANGUAGE), 16, Tokens.MUTED, false);
         LinearLayout.LayoutParams llp2 = new LinearLayout.LayoutParams(
                 0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
         llp2.setMarginEnd(dp(24));
         languageRow.addView(langLabel, llp2);
-        languageValue = text("", 16, LABEL1, false);
+        languageValue = text("", 16, Tokens.CONTENT, false);
         languageValue.setGravity(Gravity.END);
         languageRow.addView(languageValue);
-        TextView langChevron = text(I18n.isRtl(this) ? "‹" : "›", 22, FAINT, false);
+        TextView langChevron = text(I18n.isRtl(this) ? "‹" : "›", 22, Tokens.FAINT, false);
         LinearLayout.LayoutParams clp2 = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT);
@@ -2286,36 +2726,58 @@ public class MainActivity extends Activity {
         languageRow.addView(langChevron, clp2);
         root.addView(languageRow, matchLpTop(8));
 
-        root.addView(hairline(24));
+        return (ScrollView) screens[SCREEN_SET_LANGUAGE];
+    }
 
-        // Storage (v4.1.0): what the app uses, and the resync.
+    /** Settings page: storage (design 6.2). The v4.1.0 section
+     *  moves as it is; only its root changes. */
+    private ScrollView buildStorageSettingsPage(FrameLayout container,
+                                                int dir) {
+        LinearLayout root = screenContent(container, SCREEN_SET_STORAGE, dir);
+        subHeaderTo(root, I18n.get(this, StringsTable.STORAGE_SECTION),
+                SCREEN_SETTINGS);
         buildStorageSection(root);
+        return (ScrollView) screens[SCREEN_SET_STORAGE];
+    }
 
-        root.addView(hairline(24));
-
-        // Settings lock: always reachable, including to unlock.
-        lockSwitch = settingsSwitch(root, 8, ID_ANCHOR_LOCK,
-                I18n.get(this, StringsTable.SETTINGS_LOCK),
-                NodeSettings.settingsLocked(this),
+    /** Settings page: information from outside (design 6.2) -
+     *  what the app fetches, each with its switch and its
+     *  disclosure. The price fetch is here and in the price
+     *  sheet, over one preference (14-2). The telemetry node
+     *  count joins with #10 (v5.0.0). */
+    private ScrollView buildExternalSettingsPage(FrameLayout container,
+                                                 int dir) {
+        LinearLayout root = screenContent(container, SCREEN_SET_EXTERNAL, dir);
+        subHeaderTo(root, I18n.get(this, StringsTable.SET_EXTERNAL_TITLE),
+                SCREEN_SETTINGS);
+        priceSwitch = settingsSwitch(root, 16, ID_ANCHOR_PRICE,
+                I18n.get(this, StringsTable.PRICE_FETCH),
+                PriceStore.isEnabled(this),
                 (view, isChecked) -> {
                     if (syncingSettings) {
                         return;
                     }
-                    if (isChecked != NodeSettings.settingsLocked(this)) {
-                        NodeSettings.setSettingsLocked(this, isChecked);
-                        applySettingsLock();
-                        refresh();
-                    }
+                    PriceStore.setEnabled(this, isChecked);
+                    refresh();
                 });
-        TextView lockNote = text(I18n.get(
-                this, StringsTable.SETTINGS_LOCK_NOTE), 14, FAINT, false);
-        root.addView(lockNote, matchLpTop(4));
+        priceSwitchRow = (LinearLayout) priceSwitch.getParent();
+        TextView priceNote = text(I18n.get(
+                this, StringsTable.PRICE_DISCLOSURE), 14, Tokens.FAINT, false);
+        root.addView(priceNote, matchLpTop(4));
+        return (ScrollView) screens[SCREEN_SET_EXTERNAL];
+    }
 
+    /** Settings page: about this app (design 6.2). */
+    private ScrollView buildAboutSettingsPage(FrameLayout container,
+                                              int dir) {
+        LinearLayout root = screenContent(container, SCREEN_SET_ABOUT, dir);
+        subHeaderTo(root, I18n.get(this, StringsTable.SET_ABOUT_TITLE),
+                SCREEN_SETTINGS);
         // Version, at the very bottom.
-        TextView version = text(versionText(), 14, FAINT, false);
+        TextView version = text(versionText(), 14, Tokens.FAINT, false);
         version.setGravity(Gravity.CENTER);
         root.addView(version, matchLpTop(32));
-        return (ScrollView) screens[SCREEN_SETTINGS];
+        return (ScrollView) screens[SCREEN_SET_ABOUT];
     }
 
     // ------------------------------------------------------------------
@@ -2335,7 +2797,7 @@ public class MainActivity extends Activity {
      */
     private void buildStorageSection(LinearLayout root) {
         TextView heading = text(I18n.get(
-                this, StringsTable.STORAGE_SECTION), 16, LABEL2, true);
+                this, StringsTable.STORAGE_SECTION), 16, Tokens.MUTED, true);
         root.addView(heading, matchLpTop(8));
         storageChainDbValue = infoRow(root, I18n.get(
                 this, StringsTable.STORAGE_LABEL_CHAIN_DB), false);
@@ -2348,7 +2810,7 @@ public class MainActivity extends Activity {
         storageTotalValue = infoRow(root, I18n.get(
                 this, StringsTable.STORAGE_LABEL_TOTAL), true);
         storageRunningNote = text(I18n.get(
-                this, StringsTable.STORAGE_RUNNING_NOTE), 14, FAINT, false);
+                this, StringsTable.STORAGE_RUNNING_NOTE), 14, Tokens.FAINT, false);
         storageRunningNote.setVisibility(View.GONE);
         root.addView(storageRunningNote, matchLpTop(4));
 
@@ -2358,10 +2820,10 @@ public class MainActivity extends Activity {
         root.addView(storageResyncButton, matchLpTop(8));
         storageNeedsStopNote = text(I18n.get(
                 this, StringsTable.STORAGE_RESYNC_NEEDS_STOP),
-                14, FAINT, false);
+                14, Tokens.FAINT, false);
         storageNeedsStopNote.setVisibility(View.GONE);
         root.addView(storageNeedsStopNote, matchLpTop(4));
-        storageResultView = text("", 14, FAINT, false);
+        storageResultView = text("", 14, Tokens.FAINT, false);
         storageResultView.setVisibility(View.GONE);
         root.addView(storageResultView, matchLpTop(4));
     }
@@ -2424,7 +2886,7 @@ public class MainActivity extends Activity {
         boolean locked = NodeSettings.settingsLocked(this);
         storageResyncButton.setEnabled(allowed && !locked && !busy);
         storageResyncButton.setAlpha(
-                allowed && !locked && !busy ? 1f : 0.55f);
+                allowed && !locked && !busy ? 1f : 0.70f);
         setTextIfChanged(storageResyncButton, I18n.get(this,
                 busy ? StringsTable.STORAGE_RESYNC_WORKING
                         : StringsTable.STORAGE_RESYNC_BUTTON));
@@ -2493,13 +2955,13 @@ public class MainActivity extends Activity {
         box.setPadding(dp(24), dp(8), dp(24), dp(8));
         box.addView(text(I18n.get(this,
                 StringsTable.STORAGE_RESYNC_CONFIRM_DELETES),
-                14, LABEL1, false), matchLp());
+                14, Tokens.CONTENT, false), matchLp());
         box.addView(text(I18n.get(this,
                 StringsTable.STORAGE_RESYNC_CONFIRM_KEEPS),
-                14, LABEL1, false), matchLpTop(12));
+                14, Tokens.CONTENT, false), matchLpTop(12));
         box.addView(text(I18n.get(this,
                 StringsTable.STORAGE_RESYNC_CONFIRM_NOTE),
-                14, LABEL2, false), matchLpTop(12));
+                14, Tokens.MUTED, false), matchLpTop(12));
         ScrollView scroll = new ScrollView(this);
         scroll.addView(box);
         AlertDialog dialog = new AlertDialog.Builder(this)
@@ -2509,7 +2971,14 @@ public class MainActivity extends Activity {
                 .setNegativeButton(I18n.get(this, StringsTable.BUTTON_CANCEL), null)
                 .setPositiveButton(I18n.get(this,
                         StringsTable.STORAGE_RESYNC_CONFIRM_BUTTON),
-                        (d, which) -> runChainResync())
+                        (d, which) -> {
+                            ((AlertDialog) d).getButton(
+                                    AlertDialog.BUTTON_POSITIVE)
+                                    .performHapticFeedback(
+                                            HapticFeedbackConstants
+                                                    .LONG_PRESS);
+                            runChainResync();
+                        })
                 .create();
         dialog.show();
         styleDialog(dialog);
@@ -2589,7 +3058,7 @@ public class MainActivity extends Activity {
      */
     private void buildMiningSection(LinearLayout root) {
         TextView heading = text(I18n.get(
-                this, StringsTable.MINING_SECTION), 16, LABEL2, true);
+                this, StringsTable.MINING_SECTION), 16, Tokens.MUTED, true);
         root.addView(heading, matchLpTop(8));
         miningSwitch = settingsSwitch(root, 8, ID_ANCHOR_MINING,
                 I18n.get(this, StringsTable.MINING_TOGGLE),
@@ -2601,16 +3070,16 @@ public class MainActivity extends Activity {
                     onMiningToggled(isChecked);
                 });
         miningRow = (LinearLayout) miningSwitch.getParent();
-        miningPendingView = text("", 14, ACCENT, false);
+        miningPendingView = text("", 14, Tokens.FLARE, false);
         miningPendingView.setVisibility(View.GONE);
         root.addView(miningPendingView, matchLpTop(4));
-        miningAppliedView = text("", 14, FAINT, false);
+        miningAppliedView = text("", 14, Tokens.FAINT, false);
         miningAppliedView.setVisibility(View.GONE);
         root.addView(miningAppliedView, matchLpTop(4));
         root.addView(text(I18n.get(this, StringsTable.MINING_NOTE),
-                14, FAINT, false), matchLpTop(4));
+                14, Tokens.FAINT, false), matchLpTop(4));
         miningLockedView = text(I18n.get(
-                this, StringsTable.SETTINGS_LOCKED_NOTICE), 14, FAINT, false);
+                this, StringsTable.SETTINGS_LOCKED_NOTICE), 14, Tokens.FAINT, false);
         miningLockedView.setVisibility(View.GONE);
         root.addView(miningLockedView, matchLpTop(4));
 
@@ -2622,7 +3091,7 @@ public class MainActivity extends Activity {
                     }
                 });
         miningRewardsRow = (LinearLayout) miningRewardsValue.getParent();
-        miningRewardsPendingView = text("", 14, ACCENT, false);
+        miningRewardsPendingView = text("", 14, Tokens.FLARE, false);
         miningRewardsPendingView.setVisibility(View.GONE);
         root.addView(miningRewardsPendingView, matchLpTop(0));
 
@@ -2633,7 +3102,7 @@ public class MainActivity extends Activity {
                     }
                 });
         miningWorkersRow = (LinearLayout) miningWorkersValue.getParent();
-        miningWorkersPendingView = text("", 14, ACCENT, false);
+        miningWorkersPendingView = text("", 14, Tokens.FLARE, false);
         miningWorkersPendingView.setVisibility(View.GONE);
         root.addView(miningWorkersPendingView, matchLpTop(0));
 
@@ -2644,21 +3113,21 @@ public class MainActivity extends Activity {
         root.addView(miningStatusBox, matchLpTop(8));
         miningStateValue = infoRow(miningStatusBox,
                 I18n.get(this, StringsTable.MINING_STATE_LABEL), true);
-        miningReasonView = text("", 14, LABEL2, false);
+        miningReasonView = text("", 14, Tokens.MUTED, false);
         miningReasonView.setVisibility(View.GONE);
         miningStatusBox.addView(miningReasonView, matchLpTop(0));
-        miningPendingNoteView = text("", 14, ACCENT, false);
+        miningPendingNoteView = text("", 14, Tokens.FLARE, false);
         miningPendingNoteView.setVisibility(View.GONE);
         miningStatusBox.addView(miningPendingNoteView, matchLpTop(4));
         miningNodeFailedView = text(I18n.get(
                 this, StringsTable.MINING_NODE_FAILED_HINT),
-                14, STATE_FAILED, false);
+                14, Tokens.STATE_FAILED, false);
         miningNodeFailedView.setVisibility(View.GONE);
         miningStatusBox.addView(miningNodeFailedView, matchLpTop(4));
         // Waiting is the normal picture while the node catches up;
         // the sentence that says so is always there with the state.
         miningStatusBox.addView(text(I18n.get(
-                this, StringsTable.MINING_WAITING_NOTE), 14, FAINT, false),
+                this, StringsTable.MINING_WAITING_NOTE), 14, Tokens.FAINT, false),
                 matchLpTop(8));
 
         // What a node launched with mining reports.
@@ -2675,7 +3144,7 @@ public class MainActivity extends Activity {
         miningAcceptedValue = infoRow(miningStatsBox,
                 I18n.get(this, StringsTable.MINING_LABEL_ACCEPTED), true);
         miningStatsBox.addView(text(I18n.get(
-                this, StringsTable.MINING_STATS_NOTE), 14, FAINT, false),
+                this, StringsTable.MINING_STATS_NOTE), 14, Tokens.FAINT, false),
                 matchLpTop(4));
         // The address is the node's own report for the inner hash it
         // was launched with — public information, shown in full so it
@@ -2685,7 +3154,7 @@ public class MainActivity extends Activity {
                 I18n.get(this, StringsTable.MINING_LABEL_ADDRESS), true);
         miningAddressValue.setTextIsSelectable(true);
         miningStatsBox.addView(text(I18n.get(
-                this, StringsTable.MINING_ADDRESS_NOTE), 14, FAINT, false),
+                this, StringsTable.MINING_ADDRESS_NOTE), 14, Tokens.FAINT, false),
                 matchLpTop(4));
 
         miningRestartButton = linkButton(
@@ -2704,12 +3173,12 @@ public class MainActivity extends Activity {
         miningStatsBox.addView(miningRestartButton, matchLpTop(8));
         miningStatsBox.addView(text(I18n.get(
                 this, StringsTable.MINING_RESTART_MINER_NOTE),
-                14, FAINT, false), matchLpTop(2));
+                14, Tokens.FAINT, false), matchLpTop(4));
 
         miningStatsBox.addView(text(I18n.get(
-                this, StringsTable.MINING_LOG_LABEL), 14, LABEL2, true),
+                this, StringsTable.MINING_LOG_LABEL), 14, Tokens.MUTED, true),
                 matchLpTop(12));
-        miningLogView = text("", 11, LABEL2, false);
+        miningLogView = text("", 11, Tokens.MUTED, false);
         miningLogView.setTypeface(Typeface.MONOSPACE);
         miningLogView.setTextIsSelectable(true);
         miningStatsBox.addView(miningLogView, matchLpTop(4));
@@ -2731,15 +3200,15 @@ public class MainActivity extends Activity {
         r.setClickable(true);
         r.setFocusable(true);
         r.setOnClickListener(click);
-        TextView l = text(label, 16, LABEL2, false);
+        TextView l = text(label, 16, Tokens.MUTED, false);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
                 0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
         lp.setMarginEnd(dp(24));
         r.addView(l, lp);
-        TextView v = text("", 16, LABEL1, false);
+        TextView v = text("", 16, Tokens.CONTENT, false);
         v.setGravity(Gravity.END);
         r.addView(v);
-        TextView chev = text(I18n.isRtl(this) ? "‹" : "›", 22, FAINT, false);
+        TextView chev = text(I18n.isRtl(this) ? "‹" : "›", 22, Tokens.FAINT, false);
         LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT);
@@ -2754,12 +3223,12 @@ public class MainActivity extends Activity {
         Button b = new Button(this);
         b.setText(label);
         b.setTextSize(15);
-        b.setTextColor(ACCENT);
+        b.setTextColor(Tokens.FLARE);
         b.setAllCaps(false);
         b.setBackground(ripple(null));
         b.setStateListAnimator(null);
         b.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
-        b.setMinHeight(dp(44));
+        b.setMinHeight(dp(48));
         b.setOnClickListener(click);
         return b;
     }
@@ -2798,13 +3267,13 @@ public class MainActivity extends Activity {
         box.setOrientation(LinearLayout.VERTICAL);
         box.setPadding(dp(24), dp(8), dp(24), dp(8));
         box.addView(text(I18n.get(this, StringsTable.MINING_CONFIRM_HEAT),
-                14, LABEL1, false), matchLp());
+                14, Tokens.CONTENT, false), matchLp());
         box.addView(text(I18n.get(this, StringsTable.MINING_CONFIRM_ROLE),
-                14, LABEL1, false), matchLpTop(12));
+                14, Tokens.CONTENT, false), matchLpTop(12));
         box.addView(text(I18n.get(this, StringsTable.MINING_CONFIRM_PORT),
-                14, LABEL2, false), matchLpTop(12));
+                14, Tokens.MUTED, false), matchLpTop(12));
         box.addView(text(I18n.get(this, StringsTable.MINING_CONFIRM_RESTART),
-                14, LABEL2, false), matchLpTop(12));
+                14, Tokens.MUTED, false), matchLpTop(12));
         ScrollView scroll = new ScrollView(this);
         scroll.addView(box);
         miningDialog = new AlertDialog.Builder(this)
@@ -2853,22 +3322,22 @@ public class MainActivity extends Activity {
         box.setOrientation(LinearLayout.VERTICAL);
         box.setPadding(dp(24), dp(8), dp(24), dp(8));
         box.addView(text(I18n.get(this, StringsTable.MINING_REWARDS_INFO_DEST),
-                14, LABEL1, false), matchLp());
+                14, Tokens.CONTENT, false), matchLp());
         box.addView(text(I18n.get(this, StringsTable.MINING_REWARDS_INFO_HOW),
-                14, LABEL2, false), matchLpTop(10));
+                14, Tokens.MUTED, false), matchLpTop(8));
         box.addView(text(I18n.get(this, StringsTable.MINING_REWARDS_INFO_WALLET),
-                14, LABEL2, false), matchLpTop(10));
+                14, Tokens.MUTED, false), matchLpTop(8));
         box.addView(text(I18n.get(this, StringsTable.MINING_REWARDS_INFO_WRONG),
-                14, STATE_FAILED, false), matchLpTop(10));
+                14, Tokens.STATE_FAILED, false), matchLpTop(8));
         box.addView(text(I18n.get(this, StringsTable.MINING_REWARDS_INFO_ONLY),
-                14, STATE_FAILED, false), matchLpTop(10));
+                14, Tokens.STATE_FAILED, false), matchLpTop(8));
         box.addView(text(I18n.get(this, StringsTable.MINING_REWARDS_INFO_PRIVATE),
-                14, FAINT, false), matchLpTop(10));
+                14, Tokens.FAINT, false), matchLpTop(8));
         final boolean hadValue = NodeSettings.hasRewardsInnerHash(this);
         if (hadValue) {
             box.addView(text(I18n.get(
                     this, StringsTable.MINING_REWARDS_REPLACE_NOTE),
-                    14, LABEL2, false), matchLpTop(10));
+                    14, Tokens.MUTED, false), matchLpTop(8));
         }
 
         final EditText input = new EditText(this);
@@ -2884,13 +3353,13 @@ public class MainActivity extends Activity {
         input.setHint(I18n.get(this, StringsTable.MINING_REWARDS_HINT));
         input.setTypeface(Typeface.MONOSPACE);
         input.setTextSize(14);
-        input.setTextColor(LABEL1);
-        input.setHintTextColor(FAINT);
-        input.setBackground(rounded(SURFACE, 12, density, FIELD_BORDER, 1));
+        input.setTextColor(Tokens.CONTENT);
+        input.setHintTextColor(Tokens.FAINT);
+        input.setBackground(rounded(Tokens.SURFACE, 12, density, Tokens.FIELD_BORDER, 1));
         input.setPadding(dp(16), dp(12), dp(16), dp(12));
         input.setMinHeight(dp(56));
         box.addView(input, matchLpTop(12));
-        final TextView error = text("", 14, STATE_FAILED, false);
+        final TextView error = text("", 14, Tokens.STATE_FAILED, false);
         error.setVisibility(View.GONE);
         box.addView(error, matchLpTop(4));
 
@@ -2915,7 +3384,7 @@ public class MainActivity extends Activity {
                     v -> confirmRewardsDelete(dialog)), matchLpTop(8));
             box.addView(text(I18n.get(
                     this, StringsTable.MINING_REWARDS_DELETE_NOTE),
-                    14, FAINT, false), matchLpTop(2));
+                    14, Tokens.FAINT, false), matchLpTop(4));
         }
 
         dialog.setOnShowListener(dlg -> {
@@ -3049,13 +3518,13 @@ public class MainActivity extends Activity {
         box.setOrientation(LinearLayout.VERTICAL);
         box.setPadding(dp(24), dp(8), dp(24), dp(8));
         box.addView(text(I18n.get(this, StringsTable.MINING_WORKERS_NOTE),
-                14, FAINT, false), matchLp());
+                14, Tokens.FAINT, false), matchLp());
         ListView list = new ListView(this);
         list.setChoiceMode(ListView.CHOICE_MODE_SINGLE);
         list.setAdapter(new ArrayAdapter<>(this,
                 android.R.layout.simple_list_item_single_choice, items));
         list.setItemChecked(checkedIndex, true);
-        list.setDivider(new ColorDrawable(HAIRLINE));
+        list.setDivider(new ColorDrawable(Tokens.HAIRLINE));
         list.setDividerHeight(Math.max(1, dp(1)));
         LinearLayout.LayoutParams listLp = matchLpTop(8);
         listLp.height = Math.min(dp(56) * items.length, dp(400));
@@ -3093,13 +3562,7 @@ public class MainActivity extends Activity {
 
     /** Home card and pending link: the mining settings, switch on top. */
     private void openMiningSettings() {
-        showScreen(SCREEN_SETTINGS);
-        final ScrollView ssv = (ScrollView) screens[SCREEN_SETTINGS];
-        if (ssv == null || miningRow == null) {
-            return;
-        }
-        ssv.post(() -> ssv.scrollTo(0, Math.max(0, offsetInContent(
-                miningRow, ssv.getChildAt(0)) - dp(24))));
+        showScreen(SCREEN_SET_MINING);
     }
 
     /**
@@ -3109,7 +3572,7 @@ public class MainActivity extends Activity {
      * and the home card GONE, and returns.
      */
     private void refreshMining(NodeState st, long now) {
-        if (miningSwitch == null || homeMiningBox == null) {
+        if (miningSwitch == null || homeMiningRow == null) {
             return;
         }
         String tag = I18n.effectiveTag(this);
@@ -3179,7 +3642,7 @@ public class MainActivity extends Activity {
         }
 
         miningStatusBox.setVisibility(inUse ? View.VISIBLE : View.GONE);
-        homeMiningBox.setVisibility(inUse ? View.VISIBLE : View.GONE);
+        homeMiningRow.setVisibility(inUse ? View.VISIBLE : View.GONE);
         if (!inUse) {
             return;
         }
@@ -3190,9 +3653,9 @@ public class MainActivity extends Activity {
         String stateText = MiningLogic.stateText(tag, p);
         setTextIfChanged(miningStateValue, stateText);
         miningStateValue.setTextColor(
-                p.state == MiningLogic.UiState.MINING ? STATE_SYNCED
+                p.state == MiningLogic.UiState.MINING ? Tokens.STATE_SYNCED
                         : p.state == MiningLogic.UiState.STOPPED
-                                ? STATE_FAILED : LABEL1);
+                                ? Tokens.STATE_FAILED : Tokens.CONTENT);
         String reason = MiningLogic.reasonText(tag, p);
         miningReasonView.setVisibility(
                 reason == null ? View.GONE : View.VISIBLE);
@@ -3381,7 +3844,7 @@ public class MainActivity extends Activity {
         row.setClickable(true);
         row.setId(anchorId);
         settingsAnchors.add(row);
-        TextView labelView = text(label, 16, LABEL1, false);
+        TextView labelView = text(label, 16, Tokens.CONTENT, false);
         row.addView(labelView, new LinearLayout.LayoutParams(
                 0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
         ToggleView toggle = new ToggleView(this);
@@ -3412,6 +3875,12 @@ public class MainActivity extends Activity {
         }
         if (depinSwitch != null) {
             depinSwitch.setEnabled(!locked);
+        }
+        if (priceSwitch != null) {
+            priceSwitch.setEnabled(!locked);
+        }
+        if (priceSwitchRow != null) {
+            priceSwitchRow.setEnabled(!locked);
         }
         if (depinRow != null) {
             // Same as the telemetry row: the row is the tap target
@@ -3475,6 +3944,8 @@ public class MainActivity extends Activity {
     // ------------------------------------------------------------------
 
     private void onMainButtonClicked() {
+        mainButton.performHapticFeedback(
+                HapticFeedbackConstants.CONFIRM);
         if (stopping) {
             return;
         }
@@ -3513,22 +3984,20 @@ public class MainActivity extends Activity {
 
     /** Pending-settings link: settings screen, first pending item. */
     private void openPendingSettings() {
-        showScreen(SCREEN_SETTINGS);
         NodeState st = NodeState.get();
         int pending = UiLogic.settingsPending(st.serviceRunning,
                 st.launchedTelemetry, NodeSettings.telemetryEnabled(this),
                 st.launchedNodeName, NodeSettings.effectiveNodeName(this));
-        // v4.0.0: with neither of the two pending, the link was shown
-        // for a pending mining change — go to the mining switch.
-        final View target = (pending & UiLogic.PENDING_TELEMETRY) != 0
-                ? telemetryRow
-                : pending == 0 && miningRow != null
-                        && miningPendingKind(st)
-                        != MiningLogic.PendingKind.NONE
-                        ? miningRow : nameRow;
-        ScrollView ssv = (ScrollView) screens[SCREEN_SETTINGS];
-        ssv.post(() -> ssv.scrollTo(0, Math.max(0, offsetInContent(
-                target, ssv.getChildAt(0)) - dp(24))));
+        // Telemetry and the display name both live on the node
+        // page now; a pending mining change goes to the mining
+        // page (the hub replaced the one long scroll in the
+        // UI/UX phase 1 work).
+        if (pending == 0 && miningRow != null
+                && miningPendingKind(st) != MiningLogic.PendingKind.NONE) {
+            showScreen(SCREEN_SET_MINING);
+        } else {
+            showScreen(SCREEN_SET_NODE);
+        }
     }
 
     /**
@@ -3611,7 +4080,7 @@ public class MainActivity extends Activity {
         row.setClickable(true);
         row.setFocusable(true);
         TextView maskLabel = text(I18n.get(this, StringsTable.SHARE_MASK_LABEL),
-                16, LABEL1, false);
+                16, Tokens.CONTENT, false);
         row.addView(maskLabel, new LinearLayout.LayoutParams(
                 0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
         final ToggleView maskToggle = new ToggleView(this);
@@ -3633,7 +4102,7 @@ public class MainActivity extends Activity {
         box.addView(row, matchLp());
 
         TextView maskNote = text(I18n.get(this, StringsTable.SHARE_MASK_NOTE),
-                14, FAINT, false);
+                14, Tokens.FAINT, false);
         box.addView(maskNote, matchLpTop(4));
 
         AlertDialog dialog = new AlertDialog.Builder(this)
@@ -3958,7 +4427,7 @@ public class MainActivity extends Activity {
         box.setPadding(dp(24), dp(8), dp(24), dp(8));
 
         TextView hint = text(I18n.get(
-                this, StringsTable.SETTINGS_NAME_EMPTY_HINT), 14, FAINT, false);
+                this, StringsTable.SETTINGS_NAME_EMPTY_HINT), 14, Tokens.FAINT, false);
         box.addView(hint, matchLp());
 
         final EditText input = new EditText(this);
@@ -3968,9 +4437,9 @@ public class MainActivity extends Activity {
                 | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
         input.setHint(NodeSettings.DEFAULT_NODE_NAME);
         input.setTextSize(16);
-        input.setTextColor(LABEL1);
-        input.setHintTextColor(FAINT);
-        input.setBackground(rounded(SURFACE, 12, density, FIELD_BORDER, 1));
+        input.setTextColor(Tokens.CONTENT);
+        input.setHintTextColor(Tokens.FAINT);
+        input.setBackground(rounded(Tokens.SURFACE, 12, density, Tokens.FIELD_BORDER, 1));
         input.setPadding(dp(16), dp(12), dp(16), dp(12));
         input.setMinHeight(dp(56));
         String raw = NodeSettings.nodeNameRaw(this);
@@ -3978,17 +4447,17 @@ public class MainActivity extends Activity {
         input.setSelection(input.getText().length());
         box.addView(input, matchLpTop(12));
 
-        final TextView counter = text("", 14, FAINT, false);
+        final TextView counter = text("", 14, Tokens.FAINT, false);
         box.addView(counter, matchLpTop(8));
         // display_name_limit is a quantity string: resolve its
         // wording for the limit value itself.
         final TextView error = text(UiLogic.quantityText(I18n.effectiveTag(this),
                 StringsTable.DISPLAY_NAME_LIMIT,
                 NodeSettings.nameLimitCodePoints()),
-                14, STATE_FAILED, false);
+                14, Tokens.STATE_FAILED, false);
         error.setVisibility(View.GONE);
         box.addView(error, matchLpTop(4));
-        final TextView preview = text("", 14, FAINT, false);
+        final TextView preview = text("", 14, Tokens.FAINT, false);
         preview.setVisibility(View.GONE);
         box.addView(preview, matchLpTop(4));
 
@@ -4127,14 +4596,14 @@ public class MainActivity extends Activity {
         box.setPadding(dp(24), dp(8), dp(24), dp(8));
         TextView note = text(I18n.get(
                 this, StringsTable.SETTINGS_LANGUAGE_IMMEDIATE),
-                14, FAINT, false);
+                14, Tokens.FAINT, false);
         box.addView(note, matchLp());
         ListView list = new ListView(this);
         list.setChoiceMode(ListView.CHOICE_MODE_SINGLE);
         list.setAdapter(new ArrayAdapter<>(this,
                 android.R.layout.simple_list_item_single_choice, items));
         list.setItemChecked(checked, true);
-        list.setDivider(new ColorDrawable(HAIRLINE));
+        list.setDivider(new ColorDrawable(Tokens.HAIRLINE));
         list.setDividerHeight(Math.max(1, dp(1)));
         LinearLayout.LayoutParams listLp = matchLpTop(8);
         listLp.height = Math.min(dp(56) * items.length, dp(400));
@@ -4252,30 +4721,30 @@ public class MainActivity extends Activity {
         String statusKey;
         switch (hs) {
             case STARTING:
-                stateColor = STATE_STARTING;
+                stateColor = Tokens.STATE_STARTING;
                 statusKey = StringsTable.STATUS_STARTING;
                 break;
             case SYNCING:
-                stateColor = STATE_SYNCING;
+                stateColor = Tokens.STATE_SYNCING;
                 statusKey = StringsTable.STATUS_SYNCING;
                 break;
             case SYNCED:
-                stateColor = STATE_SYNCED;
+                stateColor = Tokens.STATE_SYNCED;
                 statusKey = StringsTable.VISION_SYNCED;
                 break;
             case FAILED_START:
             case FAILED_BINARY:
-                stateColor = STATE_FAILED;
+                stateColor = Tokens.STATE_FAILED;
                 statusKey = StringsTable.STATUS_START_FAILED;
                 break;
             case FAILED_UNEXPECTED:
-                stateColor = STATE_FAILED;
+                stateColor = Tokens.STATE_FAILED;
                 statusKey = StringsTable.STATUS_UNEXPECTED_STOP;
                 break;
             case STOPPED:
             case STOPPED_TIME_LIMIT:
             default:
-                stateColor = STATE_STOPPED;
+                stateColor = Tokens.STATE_STOPPED;
                 statusKey = StringsTable.VISION_STOPPED;
                 break;
         }
@@ -4285,9 +4754,9 @@ public class MainActivity extends Activity {
             stateDotView.setBackground(
                     rounded(stateColor, 999, density, 0, 0));
         }
-        statusView.setTextColor(stateColor == STATE_SYNCED
-                ? STATE_SYNCED : stateColor == STATE_STOPPED
-                        ? LABEL2 : LABEL1);
+        statusView.setTextColor(stateColor == Tokens.STATE_SYNCED
+                ? Tokens.STATE_SYNCED : stateColor == Tokens.STATE_STOPPED
+                        ? Tokens.MUTED : Tokens.CONTENT);
         // Syncing shows its numbers in the hero itself (stage
         // 1 spec S1-06 / S1-10): the percent and the blocks to
         // go, computed here from the two heights. While either
@@ -4317,16 +4786,17 @@ public class MainActivity extends Activity {
                     new android.text.SpannableString(bestText);
             if (bestText.startsWith("#")) {
                 span.setSpan(new android.text.style.ForegroundColorSpan(
-                                FAINT), 0, 1,
+                                Tokens.FAINT), 0, 1,
                         android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
             }
             vhBestValue.setText(span);
         }
-        // Cap the display size at 16% of the screen width (spec
-        // section 2), 64 sp at most.
-        float widthDp = getResources().getDisplayMetrics().widthPixels
-                / getResources().getDisplayMetrics().density;
-        vhBestValue.setTextSize(Math.min(64f, widthDp * 0.16f));
+        // Fit the number to its line (B-4): the old formula
+        // sized it from the screen's width alone and let it
+        // wrap once the font scale passed about 1.15. The fit
+        // measures the text itself, px-based like the member
+        // card's (B-3): 56 down to a 32 floor.
+        fitSingleLinePx(vhBestValue, 56f, 40f, 32f);
 
         vhPeersValue.setText(st.peers >= 0
                 ? UiLogic.grouped(st.peers)
@@ -4338,27 +4808,23 @@ public class MainActivity extends Activity {
                 ? agoText(now - st.lastObservedElapsedMs)
                 : "\u2014");
 
-        // Supplement + cause-specific detail link (unchanged
-        // rules from the previous home: facts only, from the
-        // service's own records).
+        // Supplement (unchanged rules from the previous home:
+        // facts only, from the service's own records). The old
+        // cause-specific detail link is absorbed into the node
+        // details row of the list (design 7.1).
         String supplement = null;
-        String linkKey = null;
         switch (hs) {
             case STOPPED_TIME_LIMIT:
                 supplement = I18n.get(this, StringsTable.MESSAGE_TIME_LIMIT_STOP);
-                linkKey = StringsTable.ACTION_STOP_DETAILS;
                 break;
             case FAILED_START:
                 supplement = I18n.get(this, StringsTable.MESSAGE_START_FAILED);
-                linkKey = StringsTable.ACTION_FAILURE_DETAILS;
                 break;
             case FAILED_UNEXPECTED:
                 supplement = I18n.get(this, StringsTable.MESSAGE_UNEXPECTED_STOP);
-                linkKey = StringsTable.ACTION_FAILURE_DETAILS;
                 break;
             case FAILED_BINARY:
                 supplement = I18n.get(this, StringsTable.MESSAGE_BINARY_MISSING);
-                linkKey = StringsTable.ACTION_FAILURE_DETAILS;
                 break;
             case SYNCING: {
                 if (!heroSync) {
@@ -4387,10 +4853,11 @@ public class MainActivity extends Activity {
         if (supplement != null) {
             setTextIfChanged(supplementView, supplement);
         }
-        detailLinkView.setVisibility(linkKey != null ? View.VISIBLE : View.GONE);
-        if (linkKey != null) {
-            setTextIfChanged(detailLinkView, I18n.get(this, linkKey));
-        }
+        // First-run paragraph (design 3.2): visible only while
+        // the node has never run and is not running now.
+        boolean firstRun = !st.serviceRunning
+                && TrackStore.uptimeMs(this) == 0;
+        firstRunView.setVisibility(firstRun ? View.VISIBLE : View.GONE);
 
         // The primary button: the vision wording (start / stop
         // from the spec's dictionary) over the same state machine
@@ -4400,7 +4867,7 @@ public class MainActivity extends Activity {
             mainButton.setText(I18n.get(this, StringsTable.BUTTON_STOPPING));
             mainButton.setEnabled(false);
             mainButton.setBackground(stoppingButtonBg());
-            mainButton.setTextColor(FAINT);
+            mainButton.setTextColor(Tokens.FAINT);
             mainButton.setTypeface(VisionFonts.displayMedium(this));
         } else {
             mainButton.setEnabled(true);
@@ -4410,7 +4877,7 @@ public class MainActivity extends Activity {
                     mainButton.setText(
                             I18n.get(this, StringsTable.VISION_START));
                     mainButton.setBackground(accentButtonBg());
-                    mainButton.setTextColor(ON_ACCENT);
+                    mainButton.setTextColor(Tokens.VOID);
                     mainButton.setTypeface(VisionFonts.displayBold(this));
                     break;
                 case FAILED_START:
@@ -4418,14 +4885,14 @@ public class MainActivity extends Activity {
                 case FAILED_BINARY:
                     mainButton.setText(I18n.get(this, StringsTable.BUTTON_RETRY));
                     mainButton.setBackground(accentButtonBg());
-                    mainButton.setTextColor(ON_ACCENT);
+                    mainButton.setTextColor(Tokens.VOID);
                     mainButton.setTypeface(VisionFonts.displayBold(this));
                     break;
                 case STARTING:
                     mainButton.setText(
                             I18n.get(this, StringsTable.BUTTON_CANCEL_STARTUP));
                     mainButton.setBackground(surfaceButtonBg());
-                    mainButton.setTextColor(LABEL1);
+                    mainButton.setTextColor(Tokens.CONTENT);
                     mainButton.setTypeface(VisionFonts.displayMedium(this));
                     break;
                 case SYNCING:
@@ -4434,7 +4901,7 @@ public class MainActivity extends Activity {
                     mainButton.setText(
                             I18n.get(this, StringsTable.VISION_STOP));
                     mainButton.setBackground(surfaceButtonBg());
-                    mainButton.setTextColor(LABEL1);
+                    mainButton.setTextColor(Tokens.CONTENT);
                     mainButton.setTypeface(VisionFonts.displayMedium(this));
                     break;
             }
@@ -4458,7 +4925,8 @@ public class MainActivity extends Activity {
                     I18n.get(this, StringsTable.SETTINGS_PENDING_LINK));
         }
 
-        refreshPriceCard();
+        refreshPriceViews();
+        refreshSettingsHub();
         refreshTodayRow();
     }
 
@@ -4504,15 +4972,44 @@ public class MainActivity extends Activity {
                 live, ds.updatedWallMs, System.currentTimeMillis());
     }
 
+    /** The settings hub's row values (design 6.2): each page's
+     *  state, readable without opening it. */
+    private void refreshSettingsHub() {
+        if (hubNodeValue == null) {
+            return;
+        }
+        setTextIfChanged(hubNodeValue, I18n.get(this,
+                NodeSettings.telemetryEnabled(this)
+                        ? StringsTable.VALUE_ON : StringsTable.VALUE_OFF));
+        setTextIfChanged(hubMiningValue, I18n.get(this,
+                NodeSettings.miningEnabled(this)
+                        ? StringsTable.VALUE_ON : StringsTable.VALUE_OFF));
+        DepinStatus ds = DepinModule.get(this).latestStatus();
+        setTextIfChanged(hubDepinValue, I18n.get(this,
+                ds != null && ds.enabled
+                        ? StringsTable.VALUE_ON : StringsTable.VALUE_OFF));
+        if (storageTotalValue != null
+                && storageTotalValue.getText() != null) {
+            setTextIfChanged(hubStorageValue,
+                    storageTotalValue.getText().toString());
+        }
+        setTextIfChanged(hubExternalValue, I18n.get(this,
+                PriceStore.isEnabled(this)
+                        ? StringsTable.VALUE_ON : StringsTable.VALUE_OFF));
+        String langName = StringsTable.LANGUAGE_NAMES.get(
+                I18n.effectiveTag(this));
+        setTextIfChanged(hubLanguageValue, langName != null ? langName : "");
+    }
+
     private void refreshTodayRow() {
         DepinStatus ds = DepinModule.get(this).latestStatus();
         if (ds == null || !ds.enabled || ds.todayCheckpoints < 0
                 || ds.todaySlotsElapsed < 0
                 || !depinAggregatesCurrent(ds)) {
-            homeTodayBox.setVisibility(View.GONE);
+            homeTodayRow.setVisibility(View.GONE);
             return;
         }
-        homeTodayBox.setVisibility(View.VISIBLE);
+        homeTodayRow.setVisibility(View.VISIBLE);
         if (ds.state == DepinStatus.STATE_HELD || ds.holdActive) {
             setTextIfChanged(homeTodayText,
                     I18n.get(this, StringsTable.HOME_HELD_TODAY));
@@ -4556,29 +5053,41 @@ public class MainActivity extends Activity {
     }
 
     /**
-     * The price card from {@link PriceStore}'s snapshot: no value
-     * yet is a dash and nothing else (design 2.5); a stale value
-     * dims and its source line says so. Stage 1 spec S1-07 /
-     * S1-08: a fetch that carried no 24 h change shows "24h —"
-     * in the same slot at the same width (never a computed-
-     * looking 0.0%), tapping it explains why, and the source
-     * tag's time is CoinGecko's own update time, formatted
+     * The price row and sheet from {@link PriceStore}'s snapshot
+     * (design 7.1): the row carries the price and the 24 h change
+     * in one line; the sheet carries the big number and the
+     * source. No value yet is a dash and nothing else (design
+     * 2.5); a stale value dims and its source line says so. Stage
+     * 1 spec S1-07 / S1-08: a fetch that carried no 24 h change
+     * shows "24h —" in the sheet at the same width (never a
+     * computed-looking 0.0%), tapping it explains why, and the
+     * source tag's time is CoinGecko's own update time, formatted
      * HH:mm for today and M/d HH:mm for older values. The
      * change's ▲▼ stays, in the neutral label colour — never
-     * green or red.
+     * green or red. With the fetch switched off (14-2) the row
+     * says so and the sheet is empty; nothing is fetched.
      */
-    private void refreshPriceCard() {
+    private void refreshPriceViews() {
+        if (priceSwitch != null) {
+            syncSwitch(priceSwitch, PriceStore.isEnabled(this));
+        }
         PriceStore.Snapshot snap = PriceStore.snapshot(this);
-        if (!snap.hasValue) {
+        if (!PriceStore.isEnabled(this) || !snap.hasValue) {
+            setTextIfChanged(priceRowValue,
+                    !PriceStore.isEnabled(this)
+                            ? I18n.get(this, StringsTable.VALUE_OFF)
+                            : "\u2014");
             setTextIfChanged(priceValueView, "\u2014");
-            priceValueView.setTextColor(LABEL1);
+            priceValueView.setTextColor(Tokens.CONTENT);
             setTextIfChanged(priceDeltaView, "");
             setTextIfChanged(priceSrcView, "");
             return;
         }
-        setTextIfChanged(priceValueView, priceText(snap.usd));
-        priceValueView.setTextColor(snap.stale ? LABEL2 : LABEL1);
-        priceDeltaView.setTextColor(LABEL2);
+        String price = priceText(snap.usd);
+        setTextIfChanged(priceValueView, price);
+        priceValueView.setTextColor(snap.stale ? Tokens.MUTED : Tokens.CONTENT);
+        priceDeltaView.setTextColor(Tokens.MUTED);
+        String rowText = price;
         if (snap.hasChange) {
             double ch = snap.change24h;
             // Residual F-22: an exactly-zero change wore an
@@ -4591,9 +5100,14 @@ public class MainActivity extends Activity {
                     : String.format(Locale.US, "%s %.1f%% 24H",
                             ch > 0 ? "\u25B2" : "\u25BC", shown);
             setTextIfChanged(priceDeltaView, delta);
+            if (shown != 0.0) {
+                rowText = price + "  " + (ch > 0 ? "\u25B2" : "\u25BC")
+                        + String.format(Locale.US, " %.1f%%", shown);
+            }
         } else {
             setTextIfChanged(priceDeltaView, "24h \u2014");
         }
+        setTextIfChanged(priceRowValue, rowText);
         long srcMs = snap.updatedUnix > 0
                 ? snap.updatedUnix * 1000L : snap.fetchedWallMs;
         String time = priceTimeText(srcMs);
@@ -4700,13 +5214,13 @@ public class MainActivity extends Activity {
         switch (ns) {
             case OFFLINE:
                 setTextIfChanged(netNumView, "\u2014");
-                netNumView.setTextColor(FAINT);
+                netNumView.setTextColor(Tokens.FAINT);
                 sub = I18n.get(this, StringsTable.STATE_OFFLINE);
                 tagVisible = false;
                 break;
             case STOPPED:
                 setTextIfChanged(netNumView, "\u2014");
-                netNumView.setTextColor(FAINT);
+                netNumView.setTextColor(Tokens.FAINT);
                 sub = I18n.get(this, StringsTable.VISION_NET_OFF);
                 tagVisible = false;
                 break;
@@ -4715,14 +5229,14 @@ public class MainActivity extends Activity {
                 // it is shown AS a stale value, never as a live
                 // one. The state line carries the last success.
                 setTextIfChanged(netNumView, peersText);
-                netNumView.setTextColor(FAINT);
+                netNumView.setTextColor(Tokens.FAINT);
                 sub = I18n.format(this, StringsTable.STATE_RPC_FAIL,
                         timeHhMmSs(st.lastRpcOkWallMs));
                 tagVisible = false;
                 break;
             case SYNCING: {
                 setTextIfChanged(netNumView, peersText);
-                netNumView.setTextColor(ACCENT);
+                netNumView.setTextColor(Tokens.FLARE);
                 long gap = UiLogic.syncGap(st.bestBlock,
                         st.highestBlock);
                 if (gap >= 0 && st.highestBlock > 0) {
@@ -4749,7 +5263,7 @@ public class MainActivity extends Activity {
                 // in a long-running session).
                 setTextIfChanged(netNumView,
                         st.peers == 0 ? "0" : "\u2014");
-                netNumView.setTextColor(ACCENT);
+                netNumView.setTextColor(Tokens.FLARE);
                 boolean measuredZero = st.peers == 0;
                 if (netSearchSinceElapsedMs < 0
                         || netSearchMeasuredZero != measuredZero) {
@@ -4768,7 +5282,7 @@ public class MainActivity extends Activity {
             }
             case STALLED:
                 setTextIfChanged(netNumView, peersText);
-                netNumView.setTextColor(ACCENT);
+                netNumView.setTextColor(Tokens.FLARE);
                 sub = I18n.format(this, StringsTable.STATE_STALLED,
                         UiLogic.durationText(tag,
                                 Math.max(0, advanceAgeSec) * 1000L,
@@ -4777,7 +5291,7 @@ public class MainActivity extends Activity {
             case NORMAL:
             default:
                 setTextIfChanged(netNumView, peersText);
-                netNumView.setTextColor(ACCENT);
+                netNumView.setTextColor(Tokens.FLARE);
                 sub = I18n.get(this, StringsTable.NET_LABEL_PEERS);
                 break;
         }
@@ -4938,13 +5452,16 @@ public class MainActivity extends Activity {
             return;
         }
         tickerBox.removeAllViews();
-        int show = Math.min(12, tickerLines.size());
+        // One line only (A-12): the ticker names the newest
+        // event; the stream it used to stack lives in the log.
+        int show = Math.min(1, tickerLines.size());
         for (int i = 0; i < show; i++) {
             TextView row = text(tickerLines.get(i), 13,
-                    i == 0 ? LABEL1 : LABEL2, false);
+                    Tokens.CONTENT, false);
             row.setTypeface(VisionFonts.mono(this));
-            tickerBox.addView(row, i == 0
-                    ? matchLp() : matchLpTop(6));
+            row.setSingleLine(true);
+            row.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            tickerBox.addView(row, matchLp());
         }
     }
 
@@ -4989,7 +5506,7 @@ public class MainActivity extends Activity {
         for (TextView val : statValueViews) {
             fitSingleLinePx(val, 20f, 14f, 9f);
         }
-        // Keep the 1.586:1 ratio via the spacer (see
+        // Keep the 1.42:1 ratio via the spacer (see
         // buildMember): the target height comes from the
         // card's own width; content taller than the target
         // keeps its full height (the spacer floors at 0).
@@ -4999,7 +5516,7 @@ public class MainActivity extends Activity {
                     || memberSpacer == null) {
                 return;
             }
-            int target = Math.round(w / 1.586f);
+            int target = Math.round(w / 1.42f);
             int contentH = memberContent.getHeight();
             int spacerH = memberSpacer.getHeight();
             int want = Math.max(0, target - (contentH - spacerH));
@@ -5585,15 +6102,15 @@ public class MainActivity extends Activity {
         Button b = new Button(this);
         b.setText(I18n.get(this, labelKey));
         b.setTextSize(15);
-        b.setTextColor(ACCENT);
+        b.setTextColor(Tokens.FLARE);
         b.setAllCaps(false);
         b.setBackground(ripple(null));
         b.setStateListAnimator(null);
         b.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
-        b.setMinHeight(dp(44));
+        b.setMinHeight(dp(48));
         b.setOnClickListener(v -> runTransferAction(action));
         depinTransferButtons.add(b);
-        root.addView(b, matchLpTop(2));
+        root.addView(b, matchLpTop(4));
         return b;
     }
 
@@ -5603,12 +6120,12 @@ public class MainActivity extends Activity {
     private Button mainTransferButton(View.OnClickListener listener) {
         Button b = new Button(this);
         b.setTextSize(15);
-        b.setTextColor(ACCENT);
+        b.setTextColor(Tokens.FLARE);
         b.setAllCaps(false);
         b.setBackground(ripple(null));
         b.setStateListAnimator(null);
         b.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
-        b.setMinHeight(dp(44));
+        b.setMinHeight(dp(48));
         b.setOnClickListener(listener);
         depinTransferButtons.add(b);
         return b;
@@ -5620,7 +6137,7 @@ public class MainActivity extends Activity {
                                   final boolean receiver) {
         final TextView t = text(I18n.get(
                 this, StringsTable.DEPIN_TRANSFER_OTHER_OPS) + " ▸",
-                14, FAINT, false);
+                14, Tokens.FAINT, false);
         t.setClickable(true);
         t.setFocusable(true);
         t.setMinHeight(dp(40));

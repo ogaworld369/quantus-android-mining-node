@@ -61,9 +61,6 @@ import java.util.List;
  */
 public class NetworkFieldView extends View {
 
-    private static final int FLARE = Color.rgb(0xFF, 0x6B, 0x35);
-    private static final int CONTENT = Color.rgb(0xE8, 0xE6, 0xE0);
-    private static final int STOPPED = Color.rgb(0x65, 0x64, 0x62);
 
     /** Drawing cap for orbs (design 2.2); counts above it still
      *  show as their real number in the text beside the field. */
@@ -431,7 +428,7 @@ public class NetworkFieldView extends View {
             long nowSec = System.currentTimeMillis() / 1000L;
             java.time.ZoneId zone = java.time.ZoneId.systemDefault();
             paint.setStyle(Paint.Style.FILL);
-            paint.setColor(FLARE);
+            paint.setColor(Tokens.FLARE);
             int count = Math.min(ghostTs.length, ghostPeers.length);
             for (int i = 0; i < count; i++) {
                 long age = nowSec - ghostTs[i];
@@ -463,12 +460,12 @@ public class NetworkFieldView extends View {
             float ringR = fieldR * RING_FR;
             paint.setStyle(Paint.Style.STROKE);
             paint.setStrokeWidth(Math.max(1f, 0.75f * d));
-            paint.setColor(FLARE);
+            paint.setColor(Tokens.FLARE);
             paint.setAlpha((int) (0.22f * dim * 255f));
             canvas.drawCircle(cx, cy, ringR, paint);
             paint.setAlpha(255);
             if (running && bestBlock >= 0) {
-                textPaint.setColor(CONTENT);
+                textPaint.setColor(Tokens.CONTENT);
                 textPaint.setTextSize(11f * d);
                 textPaint.setAlpha((int) (dim * 255f));
                 canvas.drawText("#" + UiLogic.grouped(bestBlock),
@@ -481,7 +478,7 @@ public class NetworkFieldView extends View {
         // the total of the connections, never a per-peer claim.
         paint.setStyle(Paint.Style.STROKE);
         paint.setStrokeWidth(1f * d);
-        paint.setColor(CONTENT);
+        paint.setColor(Tokens.CONTENT);
         for (int i = 0; i < MAX_ORBS; i++) {
             if (orbAlpha[i] <= 0f) {
                 continue;
@@ -513,7 +510,7 @@ public class NetworkFieldView extends View {
             arrivalLive = true;
             paint.setStyle(Paint.Style.STROKE);
             paint.setStrokeWidth(1.6f * d);
-            paint.setColor(FLARE);
+            paint.setColor(Tokens.FLARE);
             for (int i = 0; i < MAX_ORBS; i++) {
                 if (orbAlpha[i] <= 0f) {
                     continue;
@@ -551,7 +548,7 @@ public class NetworkFieldView extends View {
             float radius = (22f * d) + (fieldR * 1.05f - 22f * d) * eased;
             paint.setStyle(Paint.Style.STROKE);
             paint.setStrokeWidth(1.5f * d);
-            paint.setColor(FLARE);
+            paint.setColor(Tokens.FLARE);
             paint.setAlpha((int) (0.42f * (1f - t) * (1f - t) * 255f));
             canvas.drawCircle(cx, cy, radius, paint);
         }
@@ -564,7 +561,7 @@ public class NetworkFieldView extends View {
             }
             float a = orbAlpha[i] * dim;
             paint.setStyle(Paint.Style.FILL);
-            paint.setColor(CONTENT);
+            paint.setColor(Tokens.CONTENT);
             paint.setAlpha((int) (0.16f * a * 255f));
             canvas.drawCircle(orbPos[i][0], orbPos[i][1],
                     3.5f * 2.2f * d, paint);
@@ -614,7 +611,7 @@ public class NetworkFieldView extends View {
                         && recordRing[slot] >= 0;
                 float len = 4f * d;
                 if (lit) {
-                    paint.setColor(FLARE);
+                    paint.setColor(Tokens.FLARE);
                     paint.setStrokeWidth(1.4f * d);
                     paint.setAlpha((int) (0.85f * dim * 255f));
                 } else {
@@ -625,7 +622,7 @@ public class NetworkFieldView extends View {
                 }
                 if (slot == 47 && flash > 0f) {
                     len += 4f * d * flash;
-                    paint.setColor(FLARE);
+                    paint.setColor(Tokens.FLARE);
                     paint.setStrokeWidth(1.4f * d + 1f * d * flash);
                     paint.setAlpha(255);
                 }
@@ -642,7 +639,7 @@ public class NetworkFieldView extends View {
         // phase-free effect, instead of minting a new
         // DashPathEffect every frame (audit F3-L10).
         paint.setStyle(Paint.Style.STROKE);
-        paint.setColor(running ? FLARE : STOPPED);
+        paint.setColor(running ? Tokens.FLARE : Tokens.STATE_STOPPED);
         paint.setStrokeWidth(1.2f * d);
         if (dashEffect == null || dashDensity != d) {
             dashEffect = new DashPathEffect(
@@ -668,7 +665,7 @@ public class NetworkFieldView extends View {
         }
         if (running) {
             paint.setStyle(Paint.Style.FILL);
-            paint.setColor(FLARE);
+            paint.setColor(Tokens.FLARE);
             paint.setAlpha((int) (0.10f * 255f));
             canvas.drawCircle(cx, cy, 30f * d * breathe, paint);
             paint.setAlpha((int) (0.18f * 255f));
@@ -678,7 +675,7 @@ public class NetworkFieldView extends View {
         } else {
             paint.setStyle(Paint.Style.STROKE);
             paint.setStrokeWidth(1.5f * d);
-            paint.setColor(STOPPED);
+            paint.setColor(Tokens.STATE_STOPPED);
             paint.setAlpha(255);
             canvas.drawCircle(cx, cy, 10f * d, paint);
         }

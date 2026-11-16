@@ -31,9 +31,6 @@ import android.view.View;
  */
 public class GlowCardView extends View {
 
-    private static final int FLARE = Color.rgb(0xFF, 0x6B, 0x35);
-    private static final int SURFACE2 = Color.rgb(0x20, 0x20, 0x20);
-    private static final int VOID = Color.rgb(0x0E, 0x0E, 0x0E);
     private static final long SPIN_MS = 10_000L;
     private static final long GLOSS_MS = 9_000L;
 
@@ -61,11 +58,11 @@ public class GlowCardView extends View {
         shaderH = h;
         bodyShader = new LinearGradient(
                 0, 0, w * 0.3f, h,
-                SURFACE2, VOID, Shader.TileMode.CLAMP);
+                Tokens.SURFACE2, Tokens.VOID, Shader.TileMode.CLAMP);
         edgeShader = new SweepGradient(w / 2f, h / 2f,
                 new int[]{Color.argb(26, 0xFF, 0x6B, 0x35),
                         Color.argb(26, 0xFF, 0x6B, 0x35),
-                        FLARE,
+                        Tokens.FLARE,
                         Color.argb(26, 0xFF, 0x6B, 0x35)},
                 new float[]{0f, 0.58f, 0.79f, 0.94f});
         glossBaseX = w * 0.2f;

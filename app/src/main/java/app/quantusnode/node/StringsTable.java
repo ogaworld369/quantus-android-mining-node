@@ -573,6 +573,26 @@ public final class StringsTable {
     /** Start was refused because a chain database reset could not be
      *  completed. No technical detail is included. */
     public static final String NOTE_RESET_INCOMPLETE = "note_reset_incomplete";
+    /** First-run paragraph in the stopped status card (UI/UX phase 1,
+     *  design 3.2). Shown only until the node has run once. */
+    public static final String FIRST_RUN_NODE = "first_run_node";
+    public static final String FIRST_RUN_CHAIN = "first_run_chain";
+    public static final String FIRST_RUN_RECORD = "first_run_record";
+    public static final String FIRST_RUN_SYNC = "first_run_sync";
+    /** Price sheet and Settings: the fetch switch's label. */
+    public static final String PRICE_FETCH = "price_fetch";
+    /** What turning the price fetch on does, in plain words. */
+    public static final String PRICE_DISCLOSURE = "price_disclosure";
+    /** Settings hub (UI/UX phase 1): page titles. */
+    public static final String SET_NODE_TITLE = "set_node_title";
+    public static final String SET_EXTERNAL_TITLE = "set_external_title";
+    public static final String SET_ABOUT_TITLE = "set_about_title";
+    /** The record tab's standing note: the first principle,
+     *  always on screen there (design 7.3). */
+    public static final String RECORD_PRINCIPLE = "record_principle";
+    /** Toast after a long-press copies the member number
+     *  (A-18). */
+    public static final String MEMBER_ID_COPIED = "member_id_copied";
 
     /** Supported language tags, in picker order. "zh" is Simplified Chinese. */
     public static final String[] TAGS = {
@@ -744,7 +764,7 @@ public final class StringsTable {
                 STATUS_STARTING, "起動中",
                 STATUS_SYNCING, "同期中",
                 STATUS_SYNCED, "同期完了",
-                LABEL_BEST_BLOCK, "ベストブロック（この端末）",
+                LABEL_BEST_BLOCK, "最新ブロック（この端末）",
                 LABEL_HIGHEST_BLOCK, "最高ブロック（観測値）",
                 LABEL_PEERS, "接続ピア数",
                 BUTTON_START_NODE, "ノードを開始",
@@ -800,7 +820,7 @@ public final class StringsTable {
                 SCREEN_NODE_DETAILS, "ノード詳細",
                 SECTION_DIAGNOSTICS, "診断",
                 LABEL_SYNC_GAP, "同期差（目安）",
-                SYNC_GAP_NOTE, "同期差は最高ブロックとベストブロックの差です。差が0でも、同期完了はノードの状態で判定します。",
+                SYNC_GAP_NOTE, "同期差は最高ブロックと最新ブロックの差です。差が0でも、同期完了はノードの状態で判定します。",
                 STOPPED_CUMULATIVE_NOTE, "停止中は累計記録を表示しています。",
                 TRACK_LOCAL_NOTE, "この端末内の記録です。送信されません。",
                 RPC_LOCAL_NOTE, "RPCはこの端末内でのみ利用できます。",
@@ -1168,7 +1188,22 @@ public final class StringsTable {
                 BUTTON_CANCEL, "キャンセル",
                 BUTTON_OK, "OK",
                 STORAGE_RESYNC_PENDING, "再同期の準備ができています。次にノードを開始すると、残りのチェーンDBを削除してから同期を始めます。",
-                NOTE_RESET_INCOMPLETE, "チェーンDBの削除を完了できなかったため、ノードを開始しませんでした。"
+                NOTE_RESET_INCOMPLETE, "チェーンDBの削除を完了できなかったため、ノードを開始しませんでした。",
+                // UI/UX phase 1: first-run paragraph.
+                FIRST_RUN_NODE, "この電話を Quantus ネットワークの一員として動かします。",
+                FIRST_RUN_CHAIN, "チェーンの写しを受け取り、持っている高さを表示します。",
+                FIRST_RUN_RECORD, "記録はこの端末の中だけに残ります。金額には換算されず、順位も付きません。",
+                FIRST_RUN_SYNC, "最初の同期には時間がかかります。Wi-Fi と充電をおすすめします。",
+                // UI/UX phase 1: price fetch switch and disclosure.
+                PRICE_FETCH, "価格を取得する",
+                PRICE_DISCLOSURE, "オンにすると、この端末から api.coingecko.com に接続します。接続先にはこの端末の IP アドレスが見えます。送るのは価格の問い合わせだけで、ノードの情報・会員番号・記録は一切送りません。",
+                // UI/UX phase 1: settings hub page titles.
+                SET_NODE_TITLE, "ノード",
+                SET_EXTERNAL_TITLE, "外部からの情報",
+                SET_ABOUT_TITLE, "このアプリについて",
+                // UI/UX phase 1: the record tab's standing note.
+                RECORD_PRINCIPLE, "記録はこの端末の中だけにあります。金額には換算されず、順位も付きません。",
+                MEMBER_ID_COPIED, "会員番号をコピーしました"
         );
     }
 
@@ -1607,7 +1642,22 @@ public final class StringsTable {
                 BUTTON_CANCEL, "Cancel",
                 BUTTON_OK, "OK",
                 STORAGE_RESYNC_PENDING, "A resync is ready. The next time the node starts, the rest of the chain database will be deleted before syncing begins.",
-                NOTE_RESET_INCOMPLETE, "The node was not started, because the chain database deletion could not be completed."
+                NOTE_RESET_INCOMPLETE, "The node was not started, because the chain database deletion could not be completed.",
+                // UI/UX phase 1: first-run paragraph.
+                FIRST_RUN_NODE, "This phone runs as a member of the Quantus network.",
+                FIRST_RUN_CHAIN, "It receives a copy of the chain and shows the height it holds.",
+                FIRST_RUN_RECORD, "Records stay only on this device. They are never converted into money, and there is no ranking.",
+                FIRST_RUN_SYNC, "The first sync takes time. Wi-Fi and charging are recommended.",
+                // UI/UX phase 1: price fetch switch and disclosure.
+                PRICE_FETCH, "Fetch the price",
+                PRICE_DISCLOSURE, "When on, this device connects to api.coingecko.com. The destination can see this device's IP address. Only a price query is sent - no node information, membership number or records are ever sent.",
+                // UI/UX phase 1: settings hub page titles.
+                SET_NODE_TITLE, "Node",
+                SET_EXTERNAL_TITLE, "Information from outside",
+                SET_ABOUT_TITLE, "About this app",
+                // UI/UX phase 1: the record tab's standing note.
+                RECORD_PRINCIPLE, "Records live only on this device. They are never converted into money, and there is no ranking.",
+                MEMBER_ID_COPIED, "Member number copied"
         );
     }
 
@@ -2046,7 +2096,22 @@ public final class StringsTable {
                 BUTTON_CANCEL, "取消",
                 BUTTON_OK, "确定",
                 STORAGE_RESYNC_PENDING, "重新同步已准备就绪。下次启动节点时，将先删除剩余的链数据库，然后开始同步。",
-                NOTE_RESET_INCOMPLETE, "由于链数据库删除未能完成，节点未启动。"
+                NOTE_RESET_INCOMPLETE, "由于链数据库删除未能完成，节点未启动。",
+                // UI/UX phase 1: first-run paragraph.
+                FIRST_RUN_NODE, "这部手机将作为 Quantus 网络的一员运行。",
+                FIRST_RUN_CHAIN, "它会接收链的副本，并显示自己所持有的高度。",
+                FIRST_RUN_RECORD, "记录只保留在这台设备中。不会折算成金额，也没有排名。",
+                FIRST_RUN_SYNC, "首次同步需要一些时间。建议连接 Wi-Fi 并充电。",
+                // UI/UX phase 1: price fetch switch and disclosure.
+                PRICE_FETCH, "获取价格",
+                PRICE_DISCLOSURE, "开启后，本设备将连接 api.coingecko.com。连接方可以看到本设备的 IP 地址。发送的只有价格查询，绝不发送节点信息、会员编号或记录。",
+                // UI/UX phase 1: settings hub page titles.
+                SET_NODE_TITLE, "节点",
+                SET_EXTERNAL_TITLE, "来自外部的信息",
+                SET_ABOUT_TITLE, "关于本应用",
+                // UI/UX phase 1: the record tab's standing note.
+                RECORD_PRINCIPLE, "记录只存在于这台设备中。不会折算成金额，也没有排名。",
+                MEMBER_ID_COPIED, "已复制会员编号"
         );
     }
 
@@ -2485,7 +2550,22 @@ public final class StringsTable {
                 BUTTON_CANCEL, "Cancelar",
                 BUTTON_OK, "Aceptar",
                 STORAGE_RESYNC_PENDING, "La resincronización está lista. La próxima vez que se inicie el nodo, se eliminará el resto de la base de datos de la cadena antes de comenzar la sincronización.",
-                NOTE_RESET_INCOMPLETE, "El nodo no se inició porque no se pudo completar la eliminación de la base de datos de la cadena."
+                NOTE_RESET_INCOMPLETE, "El nodo no se inició porque no se pudo completar la eliminación de la base de datos de la cadena.",
+                // UI/UX phase 1: first-run paragraph.
+                FIRST_RUN_NODE, "Este teléfono funciona como miembro de la red Quantus.",
+                FIRST_RUN_CHAIN, "Recibe una copia de la cadena y muestra la altura que guarda.",
+                FIRST_RUN_RECORD, "Los registros permanecen solo en este dispositivo. Nunca se convierten en dinero y no hay clasificación.",
+                FIRST_RUN_SYNC, "La primera sincronización lleva tiempo. Se recomienda usar Wi-Fi y cargar el teléfono.",
+                // UI/UX phase 1: price fetch switch and disclosure.
+                PRICE_FETCH, "Obtener el precio",
+                PRICE_DISCLOSURE, "Al activarlo, este dispositivo se conecta a api.coingecko.com. El destino puede ver la dirección IP de este dispositivo. Solo se envía una consulta de precio; nunca se envía información del nodo, número de miembro ni registros.",
+                // UI/UX phase 1: settings hub page titles.
+                SET_NODE_TITLE, "Nodo",
+                SET_EXTERNAL_TITLE, "Información del exterior",
+                SET_ABOUT_TITLE, "Acerca de esta app",
+                // UI/UX phase 1: the record tab's standing note.
+                RECORD_PRINCIPLE, "Los registros existen solo en este dispositivo. Nunca se convierten en dinero y no hay clasificación.",
+                MEMBER_ID_COPIED, "Número de miembro copiado"
         );
     }
 
@@ -2924,7 +3004,22 @@ public final class StringsTable {
                 BUTTON_CANCEL, "रद्द करें",
                 BUTTON_OK, "ठीक है",
                 STORAGE_RESYNC_PENDING, "रीसिंक तैयार है। अगली बार नोड शुरू होने पर, सिंक शुरू होने से पहले चेन डेटाबेस का शेष भाग हटा दिया जाएगा।",
-                NOTE_RESET_INCOMPLETE, "चेन डेटाबेस का विलोपन पूरा नहीं हो सका, इसलिए नोड शुरू नहीं किया गया।"
+                NOTE_RESET_INCOMPLETE, "चेन डेटाबेस का विलोपन पूरा नहीं हो सका, इसलिए नोड शुरू नहीं किया गया।",
+                // UI/UX phase 1: first-run paragraph.
+                FIRST_RUN_NODE, "यह फ़ोन Quantus नेटवर्क के सदस्य के रूप में काम करता है।",
+                FIRST_RUN_CHAIN, "यह चेन की एक प्रति प्राप्त करता है और अपने पास मौजूद ऊँचाई दिखाता है।",
+                FIRST_RUN_RECORD, "रिकॉर्ड केवल इस डिवाइस में ही रहते हैं। इन्हें कभी पैसे में नहीं बदला जाता और कोई रैंकिंग नहीं होती।",
+                FIRST_RUN_SYNC, "पहले सिंक में समय लगता है। Wi-Fi और चार्जिंग की सलाह दी जाती है।",
+                // UI/UX phase 1: price fetch switch and disclosure.
+                PRICE_FETCH, "कीमत प्राप्त करें",
+                PRICE_DISCLOSURE, "चालू होने पर, यह डिवाइस api.coingecko.com से जुड़ता है। गंतव्य इस डिवाइस का IP पता देख सकता है। केवल कीमत की क्वेरी भेजी जाती है - नोड की जानकारी, सदस्य संख्या या रिकॉर्ड कभी नहीं भेजे जाते।",
+                // UI/UX phase 1: settings hub page titles.
+                SET_NODE_TITLE, "नोड",
+                SET_EXTERNAL_TITLE, "बाहर से जानकारी",
+                SET_ABOUT_TITLE, "इस ऐप के बारे में",
+                // UI/UX phase 1: the record tab's standing note.
+                RECORD_PRINCIPLE, "रिकॉर्ड केवल इस डिवाइस में होते हैं। इन्हें कभी पैसे में नहीं बदला जाता और कोई रैंकिंग नहीं होती।",
+                MEMBER_ID_COPIED, "सदस्य संख्या कॉपी की गई"
         );
     }
 
@@ -3363,7 +3458,22 @@ public final class StringsTable {
                 BUTTON_CANCEL, "إلغاء",
                 BUTTON_OK, "موافق",
                 STORAGE_RESYNC_PENDING, "إعادة المزامنة جاهزة. في المرة التالية التي يبدأ فيها العقدة، سيتم حذف ما تبقى من قاعدة بيانات السلسلة قبل بدء المزامنة.",
-                NOTE_RESET_INCOMPLETE, "لم يتم بدء العقدة لأنه تعذر إكمال حذف قاعدة بيانات السلسلة."
+                NOTE_RESET_INCOMPLETE, "لم يتم بدء العقدة لأنه تعذر إكمال حذف قاعدة بيانات السلسلة.",
+                // UI/UX phase 1: first-run paragraph.
+                FIRST_RUN_NODE, "يعمل هذا الهاتف كعضو في شبكة Quantus.",
+                FIRST_RUN_CHAIN, "يستقبل نسخة من السلسلة ويعرض الارتفاع الذي يحتفظ به.",
+                FIRST_RUN_RECORD, "تبقى السجلات على هذا الجهاز فقط. لا تُحوَّل أبدًا إلى أموال، ولا يوجد أي ترتيب.",
+                FIRST_RUN_SYNC, "تستغرق المزامنة الأولى وقتًا. يُنصح باستخدام Wi-Fi والشحن.",
+                // UI/UX phase 1: price fetch switch and disclosure.
+                PRICE_FETCH, "جلب السعر",
+                PRICE_DISCLOSURE, "عند التشغيل، يتصل هذا الجهاز بـ api.coingecko.com. يمكن للوجهة رؤية عنوان IP الخاص بهذا الجهاز. يُرسل استعلام السعر فقط - لا تُرسل أبدًا معلومات العقدة أو رقم العضوية أو السجلات.",
+                // UI/UX phase 1: settings hub page titles.
+                SET_NODE_TITLE, "العقدة",
+                SET_EXTERNAL_TITLE, "معلومات من الخارج",
+                SET_ABOUT_TITLE, "حول هذا التطبيق",
+                // UI/UX phase 1: the record tab's standing note.
+                RECORD_PRINCIPLE, "توجد السجلات على هذا الجهاز فقط. لا تُحوَّل أبدًا إلى أموال، ولا يوجد ترتيب.",
+                MEMBER_ID_COPIED, "تم نسخ رقم العضو"
         );
     }
 
@@ -3802,7 +3912,22 @@ public final class StringsTable {
                 BUTTON_CANCEL, "취소",
                 BUTTON_OK, "확인",
                 STORAGE_RESYNC_PENDING, "재동기화 준비가 되었습니다. 다음에 노드를 시작하면 나머지 체인 데이터베이스를 삭제한 뒤 동기화를 시작합니다.",
-                NOTE_RESET_INCOMPLETE, "체인 데이터베이스 삭제를 완료할 수 없어 노드를 시작하지 않았습니다."
+                NOTE_RESET_INCOMPLETE, "체인 데이터베이스 삭제를 완료할 수 없어 노드를 시작하지 않았습니다.",
+                // UI/UX phase 1: first-run paragraph.
+                FIRST_RUN_NODE, "이 전화는 Quantus 네트워크의 일원으로 동작합니다.",
+                FIRST_RUN_CHAIN, "체인의 복사본을 받아, 보유한 높이를 표시합니다.",
+                FIRST_RUN_RECORD, "기록은 이 기기 안에만 남습니다. 금액으로 환산되지 않으며, 순위도 없습니다.",
+                FIRST_RUN_SYNC, "첫 동기화에는 시간이 걸립니다. Wi-Fi와 충전을 권장합니다.",
+                // UI/UX phase 1: price fetch switch and disclosure.
+                PRICE_FETCH, "가격 가져오기",
+                PRICE_DISCLOSURE, "켜면 이 기기가 api.coingecko.com에 연결합니다. 연결 상대는 이 기기의 IP 주소를 볼 수 있습니다. 보내는 것은 가격 조회뿐이며, 노드 정보·회원 번호·기록은 절대 보내지 않습니다.",
+                // UI/UX phase 1: settings hub page titles.
+                SET_NODE_TITLE, "노드",
+                SET_EXTERNAL_TITLE, "외부 정보",
+                SET_ABOUT_TITLE, "이 앱 정보",
+                // UI/UX phase 1: the record tab's standing note.
+                RECORD_PRINCIPLE, "기록은 이 기기 안에만 있습니다. 금액으로 환산되지 않으며, 순위도 없습니다.",
+                MEMBER_ID_COPIED, "회원 번호를 복사했습니다"
         );
     }
 
@@ -4241,7 +4366,22 @@ public final class StringsTable {
                 BUTTON_CANCEL, "Отмена",
                 BUTTON_OK, "ОК",
                 STORAGE_RESYNC_PENDING, "Ресинхронизация готова. При следующем запуске узла остаток базы данных цепочки будет удалён перед началом синхронизации.",
-                NOTE_RESET_INCOMPLETE, "Узел не был запущен, так как не удалось завершить удаление базы данных цепочки."
+                NOTE_RESET_INCOMPLETE, "Узел не был запущен, так как не удалось завершить удаление базы данных цепочки.",
+                // UI/UX phase 1: first-run paragraph.
+                FIRST_RUN_NODE, "Этот телефон работает как участник сети Quantus.",
+                FIRST_RUN_CHAIN, "Он получает копию цепочки и показывает высоту, которой располагает.",
+                FIRST_RUN_RECORD, "Записи остаются только на этом устройстве. Они никогда не переводятся в деньги, и рейтинга нет.",
+                FIRST_RUN_SYNC, "Первая синхронизация занимает время. Рекомендуются Wi-Fi и зарядка.",
+                // UI/UX phase 1: price fetch switch and disclosure.
+                PRICE_FETCH, "Получать цену",
+                PRICE_DISCLOSURE, "Когда включено, это устройство подключается к api.coingecko.com. Адресат видит IP-адрес этого устройства. Отправляется только запрос цены - информация об узле, номер участника и записи никогда не отправляются.",
+                // UI/UX phase 1: settings hub page titles.
+                SET_NODE_TITLE, "Узел",
+                SET_EXTERNAL_TITLE, "Информация извне",
+                SET_ABOUT_TITLE, "О приложении",
+                // UI/UX phase 1: the record tab's standing note.
+                RECORD_PRINCIPLE, "Записи существуют только на этом устройстве. Они никогда не переводятся в деньги, и рейтинга нет.",
+                MEMBER_ID_COPIED, "Номер участника скопирован"
         );
     }
 
@@ -4680,7 +4820,22 @@ public final class StringsTable {
                 BUTTON_CANCEL, "Annuler",
                 BUTTON_OK, "OK",
                 STORAGE_RESYNC_PENDING, "La resynchronisation est prête. Au prochain démarrage du nœud, le reste de la base de données de la chaîne sera supprimé avant le début de la synchronisation.",
-                NOTE_RESET_INCOMPLETE, "Le nœud n'a pas été démarré car la suppression de la base de données de la chaîne n'a pas pu être terminée."
+                NOTE_RESET_INCOMPLETE, "Le nœud n'a pas été démarré car la suppression de la base de données de la chaîne n'a pas pu être terminée.",
+                // UI/UX phase 1: first-run paragraph.
+                FIRST_RUN_NODE, "Ce téléphone fonctionne comme membre du réseau Quantus.",
+                FIRST_RUN_CHAIN, "Il reçoit une copie de la chaîne et affiche la hauteur qu'il détient.",
+                FIRST_RUN_RECORD, "Les relevés restent uniquement sur cet appareil. Ils ne sont jamais convertis en argent, et il n'y a aucun classement.",
+                FIRST_RUN_SYNC, "La première synchronisation prend du temps. Le Wi-Fi et la charge sont recommandés.",
+                // UI/UX phase 1: price fetch switch and disclosure.
+                PRICE_FETCH, "Récupérer le prix",
+                PRICE_DISCLOSURE, "Une fois activé, cet appareil se connecte à api.coingecko.com. La destination peut voir l'adresse IP de cet appareil. Seule une demande de prix est envoyée - aucune information sur le nœud, aucun numéro de membre ni aucun relevé ne sont jamais envoyés.",
+                // UI/UX phase 1: settings hub page titles.
+                SET_NODE_TITLE, "Nœud",
+                SET_EXTERNAL_TITLE, "Informations de l'extérieur",
+                SET_ABOUT_TITLE, "À propos de cette application",
+                // UI/UX phase 1: the record tab's standing note.
+                RECORD_PRINCIPLE, "Les relevés n'existent que sur cet appareil. Ils ne sont jamais convertis en argent, et il n'y a aucun classement.",
+                MEMBER_ID_COPIED, "Numéro de membre copié"
         );
     }
 }

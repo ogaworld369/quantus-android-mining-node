@@ -4,6 +4,7 @@ import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.RectF;
+import android.view.HapticFeedbackConstants;
 import android.view.View;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
@@ -94,6 +95,9 @@ public class ToggleView extends View {
     public boolean performClick() {
         if (isEnabled()) {
             toggle();
+            // A toggle flip answers the tap at once (design 9,
+            // layer 3); programmatic setChecked stays silent.
+            performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK);
         }
         return super.performClick();
     }

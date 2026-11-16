@@ -105,6 +105,21 @@ public final class I18n {
      * no digit grouping in every language — see {@link StringsTable}.
      */
     public static String format(Context ctx, String key, Object... args) {
+        // In right-to-left text, a Latin-script argument (an
+        // address, a name, a hash) can drag the surrounding
+        // words into the wrong visual order; Unicode isolates
+        // keep each argument in its own direction run (design
+        // 12.1). Only text arguments are wrapped: numbers keep
+        // their %d formatting untouched.
+        if (isRtl(ctx) && args.length > 0) {
+            Object[] wrapped = new Object[args.length];
+            for (int i = 0; i < args.length; i++) {
+                Object a = args[i];
+                wrapped[i] = a instanceof CharSequence
+                        ? "\u2066" + a + "\u2069" : a;
+            }
+            args = wrapped;
+        }
         return String.format(Locale.US, get(ctx, key), args);
     }
 

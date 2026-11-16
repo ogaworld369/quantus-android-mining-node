@@ -4493,11 +4493,13 @@ public final class MiningHarnessMain {
 
     private static void testStrings() {
         java.util.Set<String> keys = StringsTable.keys();
-        check("strings: the table holds 427 keys - the 329 of v3.0.1, 67 for"
+        check("strings: the table holds 438 keys - the 329 of v3.0.1, 67 for"
                 + " mining, the thermal stop's one, the donation footer's"
-                + " three, the 24 of v4.1.0's storage section and the four"
-                + " of the UI/UX phase 0 (found "
-                + keys.size() + ")", keys.size() == 427);
+                + " three, the 24 of v4.1.0's storage section, the four"
+                + " of the UI/UX phase 0, the four first-run keys and the"
+                + " five settings keys and the one record key of the"
+                + " UI/UX phase 1 (found "
+                + keys.size() + ")", keys.size() == 438);
         int miningKeys = 0;
         int donateKeys = 0;
         int storageKeys = 0;
@@ -4524,15 +4526,17 @@ public final class MiningHarnessMain {
         check("strings: 24 keys are storage keys (found " + storageKeys + ")",
                 storageKeys == 24);
         check("strings: the donation footer's toast ends the pre-storage"
-                        + " run in the constant order, and the UI/UX phase 0"
-                        + " keys close the table after the storage section",
+                        + " run in the constant order, and the UI/UX phase 1"
+                        + " settings keys close the table after the phase 0"
+                        + " keys and the first-run keys that follow the"
+                        + " storage section",
                 "donate_copied".equals(StringsTable.DONATE_COPIED)
-                        && "note_reset_incomplete".equals(lastBeforeStorage)
+                        && "member_id_copied".equals(lastBeforeStorage)
                         && "storage_resync_failed".equals(
                         StringsTable.STORAGE_RESYNC_FAILED)
                         && "storage_fail_internal".equals(
                         StringsTable.STORAGE_FAIL_INTERNAL)
-                        && "note_reset_incomplete".equals(lastKey));
+                        && "member_id_copied".equals(lastKey));
         check("strings: nine languages, Japanese first",
                 Arrays.asList("ja", "en", "zh", "es", "hi", "ar", "ko", "ru",
                         "fr").equals(Arrays.asList(StringsTable.TAGS)));

@@ -20,7 +20,6 @@ import android.view.View;
  */
 public class SparklineView extends View {
 
-    private static final int LINE = Color.rgb(0xE8, 0xE6, 0xE0);
 
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
 
@@ -65,7 +64,7 @@ public class SparklineView extends View {
         float topY = pad;
         paint.setStyle(Paint.Style.STROKE);
         paint.setStrokeWidth(1.5f * d);
-        paint.setColor(LINE);
+        paint.setColor(Tokens.CONTENT);
         paint.setAlpha(230);
         float prevX = 0;
         float prevY = 0;

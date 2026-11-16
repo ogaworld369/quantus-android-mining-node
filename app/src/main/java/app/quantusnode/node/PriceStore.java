@@ -48,16 +48,22 @@ public final class PriceStore {
      *  indistinguishable from the app never trying. */
     private static final String KEY_LAST_ERROR = "last_error";
     private static final String KEY_LAST_ERROR_MS = "last_error_wall_ms";
+    /** The user's price-fetch switch (UI/UX phase 1, decided in
+     *  14-2): default on, shown in the price sheet and in
+     *  Settings. Off means no connection is ever made. */
+    private static final String KEY_ENABLED = "enabled";
 
     private static final String ENDPOINT =
             "https://api.coingecko.com/api/v3/simple/price"
                     + "?ids=quantus&vs_currencies=usd"
                     + "&include_24hr_change=true"
                     + "&include_last_updated_at=true";
-    /** Foreground refresh cadence after a success. */
-    private static final long REFRESH_MS = 5L * 60 * 1000;
+    /** Foreground refresh cadence after a success. One hour
+     *  since the UI/UX phase 1 work (decided in 14-2); it was
+     *  five minutes before, twelve times the intended rate. */
+    private static final long REFRESH_MS = 60L * 60 * 1000;
     /** A cached value older than this is presented as stale. */
-    private static final long STALE_MS = 10L * 60 * 1000;
+    private static final long STALE_MS = 2 * REFRESH_MS;
 
     private static final java.util.concurrent.atomic.AtomicBoolean
             IN_FLIGHT = new java.util.concurrent.atomic.AtomicBoolean();
@@ -106,6 +112,19 @@ public final class PriceStore {
             this.fetchedWallMs = fetchedWallMs;
             this.stale = stale;
         }
+    }
+
+    /** Whether the user lets the app fetch the price at all
+     *  (default on; the switch lives in the price sheet and in
+     *  Settings, over this one preference). */
+    public static boolean isEnabled(Context ctx) {
+        return ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .getBoolean(KEY_ENABLED, true);
+    }
+
+    public static void setEnabled(Context ctx, boolean on) {
+        ctx.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
+                .edit().putBoolean(KEY_ENABLED, on).apply();
     }
 
     public static Snapshot snapshot(Context ctx) {
@@ -163,6 +182,9 @@ public final class PriceStore {
      * At most one request is ever in flight.
      */
     public static void maybeFetch(Context ctx) {
+        if (!isEnabled(ctx)) {
+            return;
+        }
         long now = System.currentTimeMillis();
         // Residual F-25: the in-flight flag used to be a
         // volatile check-then-set, so two callers (the UI

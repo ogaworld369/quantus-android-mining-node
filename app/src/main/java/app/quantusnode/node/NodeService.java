@@ -5016,7 +5016,7 @@ public class NodeService extends Service {
         PendingIntent stopPi = PendingIntent.getService(this, 1, stop,
                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE);
         return new Notification.Builder(this, CHANNEL_ID)
-                .setSmallIcon(android.R.drawable.stat_notify_sync)
+                .setSmallIcon(R.drawable.ic_notify_node)
                 .setContentTitle("Quantus Node")
                 .setContentText(text.toString())
                 .setContentIntent(content)

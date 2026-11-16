@@ -1,0 +1,17 @@
+<!-- The notification small icon (14-7): the eye as a plain
+     monochrome silhouette - the ring's outline and the pupil,
+     nothing else. Notification icons render as alpha masks,
+     so the paths are solid white shapes. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFFFFF"
+        android:fillType="evenOdd"
+        android:pathData="M1,12 a11,11 0 1,0 22,0 a11,11 0 1,0 -22,0 M5.5,12 a6.5,6.5 0 1,0 13,0 a6.5,6.5 0 1,0 -13,0" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M9.5,12 a2.5,2.5 0 1,0 5,0 a2.5,2.5 0 1,0 -5,0" />
+</vector>

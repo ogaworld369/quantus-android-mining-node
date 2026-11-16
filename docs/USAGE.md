@@ -4,7 +4,7 @@
 
 This app runs a **non-validator full node** for Quantus Network (QTC mainnet) on an Android phone. It syncs the chain, verifies every block itself, and relays data to peers. It does **not** mine, and it has **no wallet** — it never touches seed phrases or reward keys.
 
-> Status: v4.1.0 released (2026-11-16), the current release — storage management in Settings, including a “delete the chain database and resync” action; a daily activity record kept on the device (the foundation for a later activity-track view; nothing is displayed yet); and a set of readability fixes (v4.0.0, also released 2026-11-16, added on-device mining as an opt-in, off by default, with thermal protection). The signed APK is published on [GitHub Releases](https://github.com/ogaworld369/quantus-android-node/releases) with a SHA-256 checksum. Earlier test builds were shared directly by the maintainer.
+> Status: v4.2.0 released (2026-11-16), the current release — the home screen is now a list under the status card (rows for today's record, mining, the QTC price, node details, the activity track and donations; the price and the donation address open as sheets, and price fetching can be switched off); Settings is a hub of pages, each row showing its current value; the member tab scrolls and its card has a declared 1.42:1 ratio; screen changes and presses have brief motion and touch feedback; and the notification icon is a monochrome silhouette (v4.1.0, also released 2026-11-16, added storage management in Settings and a daily activity record kept on the device). The signed APK is published on [GitHub Releases](https://github.com/ogaworld369/quantus-android-node/releases) with a SHA-256 checksum. Earlier test builds were shared directly by the maintainer.
 
 ## Requirements
 
