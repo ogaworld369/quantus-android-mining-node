@@ -4493,13 +4493,14 @@ public final class MiningHarnessMain {
 
     private static void testStrings() {
         java.util.Set<String> keys = StringsTable.keys();
-        check("strings: the table holds 438 keys - the 329 of v3.0.1, 67 for"
+        check("strings: the table holds 439 keys - the 329 of v3.0.1, 67 for"
                 + " mining, the thermal stop's one, the donation footer's"
                 + " three, the 24 of v4.1.0's storage section, the four"
                 + " of the UI/UX phase 0, the four first-run keys and the"
                 + " five settings keys and the one record key of the"
-                + " UI/UX phase 1 (found "
-                + keys.size() + ")", keys.size() == 438);
+                + " UI/UX phase 1 and the one licences key of the"
+                + " gap-inventory fixes (found "
+                + keys.size() + ")", keys.size() == 439);
         int miningKeys = 0;
         int donateKeys = 0;
         int storageKeys = 0;

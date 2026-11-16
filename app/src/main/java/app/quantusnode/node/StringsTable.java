@@ -587,6 +587,7 @@ public final class StringsTable {
     public static final String SET_NODE_TITLE = "set_node_title";
     public static final String SET_EXTERNAL_TITLE = "set_external_title";
     public static final String SET_ABOUT_TITLE = "set_about_title";
+    public static final String SET_LICENSES_TITLE = "set_licenses_title";
     /** The record tab's standing note: the first principle,
      *  always on screen there (design 7.3). */
     public static final String RECORD_PRINCIPLE = "record_principle";
@@ -1201,6 +1202,7 @@ public final class StringsTable {
                 SET_NODE_TITLE, "ノード",
                 SET_EXTERNAL_TITLE, "外部からの情報",
                 SET_ABOUT_TITLE, "このアプリについて",
+                SET_LICENSES_TITLE, "オープンソースライセンス",
                 // UI/UX phase 1: the record tab's standing note.
                 RECORD_PRINCIPLE, "記録はこの端末の中だけにあります。金額には換算されず、順位も付きません。",
                 MEMBER_ID_COPIED, "会員番号をコピーしました"
@@ -1655,6 +1657,7 @@ public final class StringsTable {
                 SET_NODE_TITLE, "Node",
                 SET_EXTERNAL_TITLE, "Information from outside",
                 SET_ABOUT_TITLE, "About this app",
+                SET_LICENSES_TITLE, "Open-source licences",
                 // UI/UX phase 1: the record tab's standing note.
                 RECORD_PRINCIPLE, "Records live only on this device. They are never converted into money, and there is no ranking.",
                 MEMBER_ID_COPIED, "Member number copied"
@@ -2109,6 +2112,7 @@ public final class StringsTable {
                 SET_NODE_TITLE, "节点",
                 SET_EXTERNAL_TITLE, "来自外部的信息",
                 SET_ABOUT_TITLE, "关于本应用",
+                SET_LICENSES_TITLE, "开源许可证",
                 // UI/UX phase 1: the record tab's standing note.
                 RECORD_PRINCIPLE, "记录只存在于这台设备中。不会折算成金额，也没有排名。",
                 MEMBER_ID_COPIED, "已复制会员编号"
@@ -2563,6 +2567,7 @@ public final class StringsTable {
                 SET_NODE_TITLE, "Nodo",
                 SET_EXTERNAL_TITLE, "Información del exterior",
                 SET_ABOUT_TITLE, "Acerca de esta app",
+                SET_LICENSES_TITLE, "Licencias de código abierto",
                 // UI/UX phase 1: the record tab's standing note.
                 RECORD_PRINCIPLE, "Los registros existen solo en este dispositivo. Nunca se convierten en dinero y no hay clasificación.",
                 MEMBER_ID_COPIED, "Número de miembro copiado"
@@ -3017,6 +3022,7 @@ public final class StringsTable {
                 SET_NODE_TITLE, "नोड",
                 SET_EXTERNAL_TITLE, "बाहर से जानकारी",
                 SET_ABOUT_TITLE, "इस ऐप के बारे में",
+                SET_LICENSES_TITLE, "ओपन-सोर्स लाइसेंस",
                 // UI/UX phase 1: the record tab's standing note.
                 RECORD_PRINCIPLE, "रिकॉर्ड केवल इस डिवाइस में होते हैं। इन्हें कभी पैसे में नहीं बदला जाता और कोई रैंकिंग नहीं होती।",
                 MEMBER_ID_COPIED, "सदस्य संख्या कॉपी की गई"
@@ -3471,6 +3477,7 @@ public final class StringsTable {
                 SET_NODE_TITLE, "العقدة",
                 SET_EXTERNAL_TITLE, "معلومات من الخارج",
                 SET_ABOUT_TITLE, "حول هذا التطبيق",
+                SET_LICENSES_TITLE, "تراخيص المصادر المفتوحة",
                 // UI/UX phase 1: the record tab's standing note.
                 RECORD_PRINCIPLE, "توجد السجلات على هذا الجهاز فقط. لا تُحوَّل أبدًا إلى أموال، ولا يوجد ترتيب.",
                 MEMBER_ID_COPIED, "تم نسخ رقم العضو"
@@ -3925,6 +3932,7 @@ public final class StringsTable {
                 SET_NODE_TITLE, "노드",
                 SET_EXTERNAL_TITLE, "외부 정보",
                 SET_ABOUT_TITLE, "이 앱 정보",
+                SET_LICENSES_TITLE, "오픈소스 라이선스",
                 // UI/UX phase 1: the record tab's standing note.
                 RECORD_PRINCIPLE, "기록은 이 기기 안에만 있습니다. 금액으로 환산되지 않으며, 순위도 없습니다.",
                 MEMBER_ID_COPIED, "회원 번호를 복사했습니다"
@@ -4379,6 +4387,7 @@ public final class StringsTable {
                 SET_NODE_TITLE, "Узел",
                 SET_EXTERNAL_TITLE, "Информация извне",
                 SET_ABOUT_TITLE, "О приложении",
+                SET_LICENSES_TITLE, "Лицензии открытого ПО",
                 // UI/UX phase 1: the record tab's standing note.
                 RECORD_PRINCIPLE, "Записи существуют только на этом устройстве. Они никогда не переводятся в деньги, и рейтинга нет.",
                 MEMBER_ID_COPIED, "Номер участника скопирован"
@@ -4833,6 +4842,7 @@ public final class StringsTable {
                 SET_NODE_TITLE, "Nœud",
                 SET_EXTERNAL_TITLE, "Informations de l'extérieur",
                 SET_ABOUT_TITLE, "À propos de cette application",
+                SET_LICENSES_TITLE, "Licences open source",
                 // UI/UX phase 1: the record tab's standing note.
                 RECORD_PRINCIPLE, "Les relevés n'existent que sur cet appareil. Ils ne sont jamais convertis en argent, et il n'y a aucun classement.",
                 MEMBER_ID_COPIED, "Numéro de membre copié"

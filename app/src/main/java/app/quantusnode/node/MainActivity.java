@@ -144,8 +144,9 @@ public class MainActivity extends Activity {
     private static final int SCREEN_SET_EXTERNAL = 11;
     private static final int SCREEN_SET_LANGUAGE = 12;
     private static final int SCREEN_SET_ABOUT = 13;
+    private static final int SCREEN_SET_LICENSES = 14;
 
-    private final View[] screens = new View[14];
+    private final View[] screens = new View[15];
     private int currentScreen = SCREEN_HOME;
     /** The tab a sub-screen's back returns to. */
     private int tabScreen = SCREEN_HOME;
@@ -818,6 +819,8 @@ public class MainActivity extends Activity {
         screens[SCREEN_SET_LANGUAGE] =
                 buildLanguageSettingsPage(container, dir);
         screens[SCREEN_SET_ABOUT] = buildAboutSettingsPage(container, dir);
+        screens[SCREEN_SET_LICENSES] =
+                buildLicencesPage(container, dir);
         screens[SCREEN_NETWORK] = buildNetwork(container, dir);
         screens[SCREEN_MEMBER] = buildMember(container, dir);
         buildBottomNav(container, dir);
@@ -851,7 +854,7 @@ public class MainActivity extends Activity {
     }
 
     private static boolean isSettingsPage(int screen) {
-        return screen >= SCREEN_SET_NODE && screen <= SCREEN_SET_ABOUT;
+        return screen >= SCREEN_SET_NODE && screen <= SCREEN_SET_LICENSES;
     }
 
     private static boolean isTabScreen(int screen) {
@@ -926,6 +929,8 @@ public class MainActivity extends Activity {
                 return I18n.get(this, StringsTable.SETTINGS_LANGUAGE);
             case SCREEN_SET_ABOUT:
                 return I18n.get(this, StringsTable.SET_ABOUT_TITLE);
+            case SCREEN_SET_LICENSES:
+                return I18n.get(this, StringsTable.SET_LICENSES_TITLE);
             default:
                 return null;
         }
@@ -2801,11 +2806,50 @@ public class MainActivity extends Activity {
         LinearLayout root = screenContent(container, SCREEN_SET_ABOUT, dir);
         subHeaderTo(root, I18n.get(this, StringsTable.SET_ABOUT_TITLE),
                 SCREEN_SETTINGS);
+        navRow(root, I18n.get(this, StringsTable.SET_LICENSES_TITLE), 8,
+                v -> showScreen(SCREEN_SET_LICENSES));
         // Version, at the very bottom.
         TextView version = text(versionText(), 14, Tokens.FAINT, false);
         version.setGravity(Gravity.CENTER);
         root.addView(version, matchLpTop(32));
         return (ScrollView) screens[SCREEN_SET_ABOUT];
+    }
+
+    /**
+     * Settings page: the bundled binaries' licence notices (gap
+     * inventory A-1). The text is generated into
+     * assets/licenses/NOTICES.txt from the two projects' locked
+     * dependency trees; the same lists live in the repository as
+     * docs/THIRD-PARTY-LICENSES.md.
+     */
+    private ScrollView buildLicencesPage(FrameLayout container,
+                                         int dir) {
+        LinearLayout root = screenContent(container, SCREEN_SET_LICENSES,
+                dir);
+        subHeaderTo(root, I18n.get(this, StringsTable.SET_LICENSES_TITLE),
+                SCREEN_SET_ABOUT);
+        TextView body = text(readLicenceNotices(), 11, Tokens.CONTENT,
+                false);
+        body.setTypeface(android.graphics.Typeface.MONOSPACE);
+        root.addView(body, matchLpTop(16));
+        return (ScrollView) screens[SCREEN_SET_LICENSES];
+    }
+
+    private String readLicenceNotices() {
+        try (java.io.InputStream in =
+                     getAssets().open("licenses/NOTICES.txt")) {
+            java.io.ByteArrayOutputStream buf =
+                    new java.io.ByteArrayOutputStream();
+            byte[] chunk = new byte[8192];
+            int n;
+            while ((n = in.read(chunk)) >= 0) {
+                buf.write(chunk, 0, n);
+            }
+            return buf.toString(
+                    java.nio.charset.StandardCharsets.UTF_8.name());
+        } catch (Exception e) {
+            return "";
+        }
     }
 
     // ------------------------------------------------------------------

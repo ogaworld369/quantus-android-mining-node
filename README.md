@@ -109,7 +109,14 @@ The secrets on the device are identity keys: the node's P2P identity key, and �
 
 ## License
 
-Apache License 2.0 — see [LICENSE](LICENSE). (The upstream node's crates declare Apache-2.0; its repository root LICENSE is MIT — the two are compatible for this use, and this app itself is Apache-2.0.)
+Apache License 2.0 — see [LICENSE](LICENSE). That licence covers this app's own code.
+
+The app bundles two prebuilt Rust binaries, whose licensing is mixed:
+
+- `libquantus_node.so` (the node) is built from the upstream Quantus chain. Most of its crates are MIT and/or Apache-2.0, but the Substrate client crates are GPL-3.0-or-later WITH Classpath-exception-2.0, two crates (`qp-rusty-crystals-dilithium`, `qp-rusty-crystals-hdwallet`) are GPL-3.0, and one crate (`option-ext`) is MPL-2.0. This project patches one of the GPL crates (`client/executor-wasmtime`); the patch is in [patches/](patches/), and the corresponding source is the upstream repository at the pinned revision plus that patch, built exactly as [docs/BUILD-android.md](docs/BUILD-android.md) describes.
+- `libquantus_miner.so` (the miner, bundled since v4.0.0) is Apache-2.0, with MIT/Apache-2.0 dependencies.
+
+The full per-crate lists for both binaries are in [docs/THIRD-PARTY-LICENSES.md](docs/THIRD-PARTY-LICENSES.md) and inside the app under Settings → About → Open-source licences, together with the licence texts. The bundled fonts are under the SIL Open Font License (texts in `app/src/main/assets/fonts/`).
 
 ## Support
 
