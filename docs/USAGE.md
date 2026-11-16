@@ -4,7 +4,7 @@
 
 This app runs a **full node** for Quantus Network (QTC mainnet) on an Android phone. It syncs the chain, verifies every block itself, and relays data to peers. By default it runs as a non-validator; it can also mine, as an option that is off by default (see **Mining** below). It has **no wallet** and never touches seed phrases — the one secret it can hold is the mining rewards Inner Hash you paste in yourself.
 
-> Status: v4.2.0 released (2026-11-16), the current release — the home screen is now a list under the status card (rows for today's record, mining, the QTC price, node details, the activity track and donations; the price and the donation address open as sheets, and price fetching can be switched off); Settings is a hub of pages, each row showing its current value; the member tab scrolls and its card has a declared 1.42:1 ratio; screen changes and presses have brief motion and touch feedback; and the notification icon is a monochrome silhouette (v4.1.0, also released 2026-11-16, added storage management in Settings and a daily activity record kept on the device). The signed APK is published on [GitHub Releases](https://github.com/ogaworld369/quantus-android-node/releases) with a SHA-256 checksum. Earlier test builds were shared directly by the maintainer.
+> Status: v4.2.0 released (2026-11-16), the current release — the home screen is now a list under the status card (rows for today's record, mining, the QTC price, node details, the activity track and donations; the price and the donation address open as sheets, and price fetching can be switched off); Settings is a hub of pages, each row showing its current value; the member tab scrolls and its card has a declared 1.42:1 ratio; screen changes and presses have brief motion and touch feedback; and the notification icon is a monochrome silhouette (v4.1.0, also released 2026-11-16, added storage management in Settings and a daily activity record kept on the device). The signed APK is published on [GitHub Releases](https://github.com/ogaworld369/quantus-android-mining-node/releases) with a SHA-256 checksum. Earlier test builds were shared directly by the maintainer.
 
 ## Requirements
 
@@ -16,7 +16,7 @@ Verified so far: **Pixel 9a running GrapheneOS**. Other devices are expected to 
 
 ## Install
 
-1. Get the APK file from [GitHub Releases](https://github.com/ogaworld369/quantus-android-node/releases) — verify the SHA-256 checksum published with the release before installing.
+1. Get the APK file from [GitHub Releases](https://github.com/ogaworld369/quantus-android-mining-node/releases) — verify the SHA-256 checksum published with the release before installing.
 2. Open the APK with your Files app and allow installation from that source when Android asks.
 3. Install, then open **Quantus Node**.
 

@@ -10,9 +10,9 @@ The design concept is to make the node's pulse visible: live block/peer visualiz
 
 | | |
 |---|---|
-| Current release | **v4.2.0** (versionCode 66), published 2026-11-16 — [release page](https://github.com/ogaworld369/quantus-android-node/releases/tag/v4.2.0) |
+| Current release | **v4.2.0** (versionCode 66), published 2026-11-16 — [release page](https://github.com/ogaworld369/quantus-android-mining-node/releases/tag/v4.2.0) |
 | First public release | v0.1.0, published 2026-11-04 |
-| Download | Signed APK from [GitHub Releases](https://github.com/ogaworld369/quantus-android-node/releases) |
+| Download | Signed APK from [GitHub Releases](https://github.com/ogaworld369/quantus-android-mining-node/releases) |
 | Requirements | Android 12 or later, arm64 device |
 | Verified device | Pixel 9a running GrapheneOS |
 | Languages | 9 (438 strings per language; see [docs/I18N.md](docs/I18N.md); native-speaker improvements are very welcome) |
@@ -70,7 +70,7 @@ Details and the full version history: [CHANGELOG.md](CHANGELOG.md).
 
 ## Download
 
-Get the signed APK from [GitHub Releases](https://github.com/ogaworld369/quantus-android-node/releases). The current release is [v4.2.0](https://github.com/ogaworld369/quantus-android-node/releases/tag/v4.2.0); its APK size and SHA-256 are listed on the release page and in the [CHANGELOG](CHANGELOG.md), so you can verify your download. v4.2.0 installs over v4.1.0 keeping settings and records — the same code is verified in place on the reference device.
+Get the signed APK from [GitHub Releases](https://github.com/ogaworld369/quantus-android-mining-node/releases). The current release is [v4.2.0](https://github.com/ogaworld369/quantus-android-mining-node/releases/tag/v4.2.0); its APK size and SHA-256 are listed on the release page and in the [CHANGELOG](CHANGELOG.md), so you can verify your download. v4.2.0 installs over v4.1.0 keeping settings and records — the same code is verified in place on the reference device.
 
 ## Usage
 

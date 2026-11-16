@@ -4,7 +4,7 @@
 
 Esta aplicación ejecuta un **nodo completo** de Quantus Network (red principal de QTC) en un teléfono Android. Sincroniza la cadena, verifica cada bloque por sí mismo y retransmite datos a sus pares. Por defecto funciona como no validador; también puede minar, como opción desactivada por defecto (véase **Minería** más abajo). **No** tiene billetera y nunca toca frases semilla: el único secreto que puede guardar es el Inner Hash de recompensas de minería que pegues tú mismo.
 
-> Estado: v4.2.0 publicada (2026-11-16), la versión actual: la pantalla principal es ahora una lista bajo la tarjeta de estado (filas para el registro de hoy, la minería, el precio de QTC, los detalles del nodo, la trayectoria de actividad y las donaciones; el precio y la dirección de donación se abren en hojas, y la obtención del precio puede desactivarse); Ajustes es un centro de páginas, cada fila con su valor actual; la pestaña de miembro se desplaza y su tarjeta tiene una proporción declarada de 1.42:1; los cambios de pantalla y las pulsaciones tienen movimiento breve y respuesta táctil; y el icono de notificación es una silueta monocroma (v4.1.0, también de 2026-11-16, añadió la gestión del almacenamiento y un registro diario de actividad guardado en el dispositivo). El APK firmado está disponible en [GitHub Releases](https://github.com/ogaworld369/quantus-android-node/releases) con suma de verificación SHA-256. Las compilaciones de prueba anteriores las compartía directamente el mantenedor.
+> Estado: v4.2.0 publicada (2026-11-16), la versión actual: la pantalla principal es ahora una lista bajo la tarjeta de estado (filas para el registro de hoy, la minería, el precio de QTC, los detalles del nodo, la trayectoria de actividad y las donaciones; el precio y la dirección de donación se abren en hojas, y la obtención del precio puede desactivarse); Ajustes es un centro de páginas, cada fila con su valor actual; la pestaña de miembro se desplaza y su tarjeta tiene una proporción declarada de 1.42:1; los cambios de pantalla y las pulsaciones tienen movimiento breve y respuesta táctil; y el icono de notificación es una silueta monocroma (v4.1.0, también de 2026-11-16, añadió la gestión del almacenamiento y un registro diario de actividad guardado en el dispositivo). El APK firmado está disponible en [GitHub Releases](https://github.com/ogaworld369/quantus-android-mining-node/releases) con suma de verificación SHA-256. Las compilaciones de prueba anteriores las compartía directamente el mantenedor.
 
 ## Requisitos
 
@@ -16,7 +16,7 @@ Verificado hasta ahora: **Pixel 9a con GrapheneOS**. Se espera que otros disposi
 
 ## Instalación
 
-1. Obtén el archivo APK en [GitHub Releases](https://github.com/ogaworld369/quantus-android-node/releases) (verifica la suma SHA-256 publicada con la versión antes de instalar).
+1. Obtén el archivo APK en [GitHub Releases](https://github.com/ogaworld369/quantus-android-mining-node/releases) (verifica la suma SHA-256 publicada con la versión antes de instalar).
 2. Abre el APK con tu aplicación de Archivos y permite la instalación desde esa fuente cuando Android lo pida.
 3. Instala y abre **Quantus Node**.
 
