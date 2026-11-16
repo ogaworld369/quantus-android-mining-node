@@ -37,7 +37,7 @@ La aplicación tiene tres pestañas en la parte inferior: Inicio, Conexión y Ta
 - **Conexión** — una imagen viva del campo de red de tu nodo: los pares a los que está conectado y los ecos de sus propios puntos de control registrados. Muestra relaciones, no cifras para competir: no hay clasificación
 - **Detalles del nodo** — mejor bloque / bloque más alto (dónde está tu nodo frente a la punta de la red que conoce), la brecha de sincronización, los pares y el tiempo de funcionamiento, y la sección **Diagnóstico**: código de salida, notas del servicio, el registro de cada intento de inicio y **Compartir registro** (ver más abajo). Mientras el nodo está detenido, esta pantalla muestra tu trayectoria acumulada en lugar de los valores de la sesión anterior
 - **Tarjeta de miembro** — tu tarjeta de miembro: tu número de miembro (el ID de tu dispositivo) y tres cifras de tu registro local: la fecha de tu primer punto de control, tu número de puntos de control y tu racha más larga de días. El registro se guarda solo en este dispositivo; nunca se sube y no vale dinero: es simplemente tu propia huella de contribución, y mostrarla o no es decisión tuya
-- **Ajustes** — los ajustes siguientes; la versión de la aplicación se muestra al final
+- **Ajustes** — los ajustes siguientes, organizados como un centro de páginas. La versión de la aplicación se muestra en la página **Acerca de esta app**, que también enumera las **Licencias de código abierto** de los binarios incluidos del nodo y del minero
 
 ## Ajustes
 
@@ -45,12 +45,22 @@ La aplicación tiene tres pestañas en la parte inferior: Inicio, Conexión y Ta
 - **Nombre visible** — el nombre que usa tu nodo (también se muestra en la telemetría si está activada), que se edita en un diálogo. Déjalo vacío para usar el nombre por defecto `quantus-android-node`. Se aplica desde el siguiente inicio del nodo.
 - **Idioma** — sigue el ajuste del dispositivo o elige uno de 9 idiomas (japonés, inglés, chino simplificado, español, hindi, árabe, coreano, ruso, francés). Se aplica de inmediato.
 - **Registrar mi actividad (DePIN)** (desactivado por defecto): cuando está activado, la aplicación guarda en este dispositivo un registro firmado del tiempo de funcionamiento y del trabajo de retransmisión del nodo (un punto de control cada 10 minutos). Nada se envía solo a ninguna parte; desde Ajustes puedes exportar el registro como un archivo de paquete de prueba y compartirlo tú mismo. Al desactivarlo el registro se detiene; lo ya registrado permanece en el dispositivo
-- **Bloquear ajustes** — bloquea los ajustes anteriores (telemetría, nombre visible, idioma y registro de actividad) para que no se cambien por accidente mientras el teléfono queda ejecutando el nodo. Es solo una protección contra toques involuntarios: no hay PIN, y el inicio y la detención del nodo nunca se bloquean. Desactiva **Bloquear ajustes** cuando quieras volver a cambiarlos.
+- **Bloquear ajustes** — bloquea los ajustes anteriores (telemetría, nombre visible, idioma y registro de actividad) y los ajustes de minería (el interruptor de minería y el Inner Hash) para que no se cambien por accidente mientras el teléfono queda ejecutando el nodo. Es solo una protección contra toques involuntarios: no hay PIN, y el inicio y la detención del nodo nunca se bloquean. Desactiva **Bloquear ajustes** cuando quieras volver a cambiarlos.
 - **Minería** (desactivada por defecto) — el nodo también puede minar en este dispositivo, con el minero oficial incluido. Primero necesita un Inner Hash de recompensas; véase **Minería (opcional)** más abajo.
 
 Los ajustes nunca reinician el nodo por sí solos. Si cambias la telemetría o el nombre visible con el nodo en marcha, el elemento cambiado se marca en Ajustes como aún no aplicado, e Inicio muestra un enlace para revisar los ajustes pendientes; el cambio entra en vigor en el siguiente inicio del nodo (Detener → Iniciar).
 
 **Compartir registro** está en **Detalles del nodo → Diagnóstico**: comparte el registro del nodo como texto, y es lo que debes adjuntar al informar de un problema. Antes de pegar un registro en un lugar público, revisa su contenido: puede incluir la dirección IP pública de tu nodo e información de los pares. El diálogo para compartir puede enmascarar el nombre visible, las direcciones de las interfaces de este dispositivo y las rutas privadas de la aplicación (activado por defecto); la dirección exterior que el nodo conoce a través de sus pares no se enmascara.
+
+## Almacenamiento
+
+**Ajustes → Almacenamiento** muestra cuánto espacio usa la aplicación, en cinco cifras: la **base de datos de la cadena**, el resto de los **datos del nodo**, los **registros (logs)**, el **registro de actividad** (DePIN) y el **total**. Mientras el nodo funciona, las cifras cambian sin parar, así que tómalas como estimaciones.
+
+Su única acción, **Eliminar la base de datos de la cadena y resincronizar**, elimina solo la base de datos de la cadena: los datos de bloques que este dispositivo ha sincronizado hasta ahora. Se conservan la clave de red del nodo, los ajustes de minería y el Inner Hash guardado, tu identidad DePIN y su registro, la trayectoria, los registros y los ajustes de la aplicación. La acción solo funciona con el nodo detenido y no se puede deshacer: la próxima vez que inicies el nodo, la sincronización empezará desde el principio, lo que lleva tiempo y datos (unas 2 horas en un Pixel 9a).
+
+## Precio
+
+Inicio muestra el precio actual de QTC, que la aplicación obtiene de **CoinGecko** (api.coingecko.com) aproximadamente una vez por hora. La obtención está **activada por defecto**; el interruptor está en la hoja de precio (toca el precio en Inicio) y en **Ajustes → Información del exterior**. Una obtención envía solo la consulta del precio —nunca se envía información del nodo, número de miembro ni registros—, pero CoinGecko puede ver la dirección IP de este dispositivo, como cualquier servidor al que te conectas. Con el interruptor desactivado no se obtiene nada: la fila del precio sigue mostrando el último valor conocido, con la hora en que se obtuvo y atenuado cuando es antiguo, o no muestra nada si nunca se ha obtenido un precio.
 
 ## Minería (opcional)
 
@@ -75,6 +85,19 @@ Después, en la aplicación:
 
 **Expectativas honestas:** con la tasa de hash de un teléfono, la espera esperada hasta encontrar un bloque es muy larga, mucho más que cualquier sesión de prueba. Minar aquí es una forma de participar, no de ganar dinero.
 
+## Pasar a un dispositivo nuevo
+
+Tu identidad DePIN y su registro pueden pasar a un teléfono nuevo. Abre **Ajustes → Transferencia entre dispositivos** en ambos dispositivos; la forma sencilla necesita un solo archivo:
+
+1. En el **dispositivo antiguo**, toca **Crear un archivo de traspaso sencillo**. La aplicación crea el archivo y muestra un **código de transferencia** una sola vez: anótalo. En este momento, el registro en el dispositivo antiguo se detiene.
+2. Lleva el archivo al **dispositivo nuevo** (como prefieras). Allí, toca **Importar un paquete de transferencia**, elige el archivo e introduce el código de transferencia.
+3. El dispositivo nuevo verifica el paquete y muestra la identidad que va a asumir: el ID del dispositivo, el número de puntos de control y las fechas del primer y el último registro. Comprueba los valores y luego confirma con **Confirmar con traspaso sencillo**. La identidad ya es propia de este dispositivo, y el registro puede empezar aquí.
+4. El dispositivo nuevo muestra entonces un **número de confirmación** de 8 dígitos. En el dispositivo antiguo, toca **Ingrese el número de confirmación: borrar la clave de este dispositivo** e introdúcelo: la clave antigua solo se borra cuando el número coincide. Después, borra también el archivo de traspaso donde aún quede.
+
+Hasta que se complete el paso 4, existen dos copias de la identidad. **Trata el archivo de traspaso como una clave**: contiene la semilla de la identidad cifrada con el código de transferencia, así que quien tenga el archivo y el código puede asumir la identidad y todo su historial. Mantén ambos separados en lo posible y no publiques ninguno en un lugar público. Si el archivo nunca llegó al dispositivo nuevo, **Cancelar el traspaso sencillo** en el dispositivo antiguo permite reanudar allí el registro; pero no canceles nunca una vez que el dispositivo nuevo lo haya importado.
+
+En **Otras acciones**, la misma página ofrece también la transferencia estricta paso a paso: en lugar del único número de confirmación, los dos dispositivos intercambian un aviso de preparación, un permiso de confirmación, un recibo y una confirmación de finalización, un archivo cada vez.
+
 ## Uso diario
 
 - El nodo solo se detiene cuando tocas **Detener nodo**, fuerzas la detención de la aplicación o reinicias el teléfono.
@@ -88,6 +111,6 @@ Después, en la aplicación:
 - **Los pares se quedan en 0** — revisa la conexión y luego Detener → Iniciar una vez.
 - **La sincronización se atasca (tu mejor bloque se detiene mientras la red avanza)** — la aplicación detecta esta situación y reinicia el nodo por sí sola (como máximo 3 veces en 24 horas). Si se repite, ayuda una conexión Wi-Fi estable; después, Detener → Iniciar una vez
 - **Tu nodo no aparece en la telemetría** — asegúrate de que la opción de telemetría está activada y de que reiniciaste el nodo después de activarla. (El listado está verificado: el nodo del propio mantenedor aparece en la lista oficial).
-- **Dudas de almacenamiento** — la base de datos está podada a los últimos 256 bloques por diseño. Desinstalar la aplicación borra la base de datos y la clave de identidad del nodo; una reinstalación empieza una sincronización nueva con una identidad nueva.
+- **Dudas de almacenamiento** — la base de datos está podada a los últimos 256 bloques por diseño. Desinstalar la aplicación borra la base de datos y la clave de identidad del nodo, y también el Inner Hash guardado y tu identidad DePIN con todo su registro. Una reinstalación empieza una sincronización nueva con una identidad nueva, así que, si el registro debe sobrevivir, pásalo primero al dispositivo nuevo (véase **Pasar a un dispositivo nuevo** arriba).
 
 Preguntas, informes de dispositivos e ideas son bienvenidos como Issues de GitHub. Los problemas de seguridad siguen [SECURITY.md](../SECURITY.md) en lugar de un Issue público.

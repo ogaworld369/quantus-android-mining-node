@@ -37,7 +37,7 @@ L'application compte trois onglets en bas : Accueil, Connexion et Carte de membr
 - **Connexion** — une image vivante du champ réseau de votre nœud : les pairs auxquels il est connecté et les échos de ses propres points de contrôle enregistrés. Elle montre des relations, pas des chiffres pour se comparer — il n'y a aucun classement
 - **Détails du nœud** — meilleur bloc / bloc le plus haut (où en est votre nœud par rapport à la pointe du réseau qu'il connaît), l'écart de synchronisation, les pairs et la durée de fonctionnement, ainsi que la section **Diagnostics** : code de sortie, notes du service, l'historique de chaque tentative de démarrage et **Partager le journal** (voir ci-dessous). Pendant que le nœud est arrêté, cet écran affiche votre trace cumulée plutôt que les valeurs de la session précédente
 - **Carte de membre** — votre carte de membre : votre numéro de membre (l'identifiant de votre appareil) et trois chiffres de votre journal local — la date de votre premier point de contrôle, votre nombre de points de contrôle et votre plus longue série de jours. Le journal est stocké uniquement sur cet appareil ; il n'est jamais envoyé et n'a aucune valeur monétaire — c'est simplement la trace de votre contribution, et la montrer ou non vous appartient
-- **Réglages** — les réglages ci-dessous ; la version de l'application est affichée tout en bas
+- **Réglages** — les réglages ci-dessous, organisés en un hub de pages. La version de l'application est affichée sur la page **À propos de cette application**, qui liste aussi les **Licences open source** des binaires embarqués du nœud et du mineur
 
 ## Réglages
 
@@ -45,12 +45,22 @@ L'application compte trois onglets en bas : Accueil, Connexion et Carte de membr
 - **Nom d'affichage** — le nom qu'utilise votre nœud (également affiché dans la télémétrie si elle est activée), qui se modifie dans une boîte de dialogue. Laissez vide pour utiliser le nom par défaut `quantus-android-node`. S'applique au prochain démarrage du nœud.
 - **Langue** — suivre le réglage de l'appareil, ou choisir parmi 9 langues (japonais, anglais, chinois simplifié, espagnol, hindi, arabe, coréen, russe, français). S'applique immédiatement.
 - **Enregistrer mon activité (DePIN)** (désactivé par défaut) — quand c'est activé, l'application conserve sur cet appareil un journal signé du temps de fonctionnement et du travail de relais du nœud (un point de contrôle toutes les 10 minutes). Rien n'est envoyé nulle part de lui-même ; depuis les Réglages, vous pouvez exporter le journal sous forme de fichier de preuves et le partager vous-même. La désactivation arrête l'enregistrement ; le journal reste sur l'appareil
-- **Verrouiller les réglages** — verrouille les réglages ci-dessus (télémétrie, nom d'affichage, langue et enregistrement d'activité) pour qu'ils ne changent pas par accident pendant que le téléphone reste à faire tourner le nœud. C'est uniquement une protection contre les manipulations involontaires : il n'y a pas de code PIN, et le démarrage ou l'arrêt du nœud ne sont jamais verrouillés. Désactivez **Verrouiller les réglages** pour pouvoir les modifier à nouveau.
+- **Verrouiller les réglages** — verrouille les réglages ci-dessus (télémétrie, nom d'affichage, langue et enregistrement d'activité) et les réglages de minage (l'interrupteur du minage et l'Inner Hash) pour qu'ils ne changent pas par accident pendant que le téléphone reste à faire tourner le nœud. C'est uniquement une protection contre les manipulations involontaires : il n'y a pas de code PIN, et le démarrage ou l'arrêt du nœud ne sont jamais verrouillés. Désactivez **Verrouiller les réglages** pour pouvoir les modifier à nouveau.
 - **Minage** (désactivé par défaut) — le nœud peut aussi miner sur cet appareil, avec le mineur officiel embarqué. Il lui faut d'abord un Inner Hash de récompenses ; voir **Minage (facultatif)** ci-dessous.
 
 Les réglages ne redémarrent jamais le nœud d'eux-mêmes. Si vous changez la télémétrie ou le nom d'affichage pendant que le nœud tourne, l'élément modifié est marqué dans les Réglages comme pas encore appliqué, et l'accueil affiche un lien pour vérifier les réglages en attente ; le changement prend effet au prochain démarrage du nœud (Arrêter → Démarrer).
 
 **Partager le journal** se trouve dans **Détails du nœud → Diagnostics** : il partage le journal du nœud en texte, et c'est ce qu'il faut joindre quand vous signalez un problème. Avant de coller un journal dans un lieu public, vérifiez d'abord son contenu : il peut inclure l'adresse IP publique de votre nœud et des informations sur les pairs. La boîte de dialogue de partage peut masquer le nom d'affichage, les adresses des interfaces de cet appareil et les chemins privés de l'application (activé par défaut) ; l'adresse extérieure que le nœud apprend par ses pairs n'est pas masquée.
+
+## Stockage
+
+**Réglages → Stockage** montre l'espace utilisé par l'application, en cinq chiffres : la **base de données de la chaîne**, le reste des **données du nœud**, les **journaux**, le **journal d'activité** (DePIN) et le **total**. Pendant que le nœud tourne, les chiffres changent sans arrêt : considérez-les comme des estimations.
+
+Sa seule action, **Supprimer la base de données de la chaîne et resynchroniser**, supprime uniquement la base de données de la chaîne — les données de blocs que cet appareil a synchronisées jusqu'ici. La clé réseau du nœud, les réglages de minage et l'Inner Hash enregistré, votre identité DePIN et son journal, la trace, les journaux et les réglages de l'application sont conservés. L'action ne fonctionne que lorsque le nœud est arrêté, et elle est irréversible : au prochain démarrage du nœud, la synchronisation repart du début, ce qui prend du temps et des données (environ 2 heures sur un Pixel 9a).
+
+## Prix
+
+L'accueil affiche le prix actuel du QTC, que l'application récupère auprès de **CoinGecko** (api.coingecko.com) environ une fois par heure. La récupération est **activée par défaut** ; l'interrupteur se trouve dans la feuille de prix (touchez le prix sur l'accueil) et dans **Réglages → Informations de l'extérieur**. Une récupération n'envoie que la demande de prix — aucune information sur le nœud, aucun numéro de membre ni aucun journal ne sont jamais envoyés —, mais CoinGecko peut voir l'adresse IP de cet appareil, comme tout serveur auquel vous vous connectez. Interrupteur désactivé, rien n'est récupéré : la ligne de prix continue d'afficher la dernière valeur connue, avec l'heure de sa récupération et estompée lorsqu'elle est ancienne — ou n'affiche rien si aucun prix n'a jamais été récupéré.
 
 ## Minage (facultatif)
 
@@ -75,6 +85,19 @@ Ensuite, dans l'application :
 
 **Attente honnête :** au taux de hachage d'un téléphone, l'attente moyenne avant de trouver un bloc est très longue — bien plus longue que n'importe quelle session de test. Miner ici est une façon de participer, pas de gagner de l'argent.
 
+## Passer à un nouvel appareil
+
+Votre identité DePIN et son journal peuvent passer à un nouveau téléphone. Ouvrez **Réglages → Transfert entre appareils** sur les deux appareils ; la méthode simple tient en un seul fichier :
+
+1. Sur l'**ancien appareil**, touchez **Créer un fichier de transfert simple**. L'application crée le fichier et affiche un **code de transfert** une seule fois — notez-le. À cet instant, l'enregistrement sur l'ancien appareil s'arrête.
+2. Faites parvenir le fichier au **nouvel appareil** (par le moyen de votre choix). Là, touchez **Importer un paquet de transfert**, choisissez le fichier et saisissez le code de transfert.
+3. Le nouvel appareil vérifie le paquet et affiche l'identité qu'il s'apprête à reprendre : l'identifiant de l'appareil, le nombre de points de contrôle et les dates du premier et du dernier enregistrement. Vérifiez les valeurs, puis confirmez avec **Confirmer avec le transfert simple**. L'identité appartient désormais à cet appareil, et l'enregistrement peut commencer ici.
+4. Le nouvel appareil affiche ensuite un **numéro de confirmation** à 8 chiffres. Sur l'ancien appareil, touchez **Saisissez le numéro de confirmation : effacer la clé de cet appareil** et saisissez-le — l'ancienne clé n'est effacée que si le numéro correspond. Supprimez ensuite le fichier de transfert partout où il se trouve encore.
+
+Tant que l'étape 4 n'est pas terminée, il existe deux copies de l'identité. **Traitez le fichier de transfert comme une clé** : il contient la graine de l'identité chiffrée avec le code de transfert, donc quiconque possède à la fois le fichier et le code peut s'emparer de l'identité et de tout son historique. Gardez les deux séparés autant que possible, et ne publiez jamais ni l'un ni l'autre dans un lieu public. Si le fichier n'est jamais arrivé au nouvel appareil, **Annuler le transfert simple** sur l'ancien appareil permet d'y reprendre l'enregistrement — mais n'annulez jamais une fois que le nouvel appareil l'a importé.
+
+Sous **Autres actions**, la même page propose aussi le transfert strict, étape par étape : au lieu de l'unique numéro de confirmation, les deux appareils échangent un avis de préparation, une autorisation de confirmation, un reçu et un accusé d'achèvement, un fichier à la fois.
+
 ## Au quotidien
 
 - Le nœud ne s'arrête que lorsque vous touchez **Arrêter le nœud**, forcez l'arrêt de l'application, ou redémarrez le téléphone.
@@ -88,6 +111,6 @@ Ensuite, dans l'application :
 - **Les pairs restent à 0** — vérifiez la connexion, puis Arrêter → Démarrer une fois.
 - **La synchronisation se bloque (votre meilleur bloc s'arrête pendant que le réseau avance)** — l'application détecte cette situation et redémarre le nœud d'elle-même (au maximum 3 fois par 24 heures). Si cela se répète, une connexion Wi-Fi stable aide ; puis Arrêter → Démarrer une fois
 - **Votre nœud n'apparaît pas dans la télémétrie** — vérifiez que l'option de télémétrie est activée et que le nœud a été redémarré après l'activation. (L'apparition dans la liste est vérifiée : le nœud du mainteneur lui-même figure dans la liste officielle.)
-- **Questions de stockage** — la base de données est élaguée aux 256 derniers blocs par conception. Désinstaller l'application supprime la base de données et la clé d'identité du nœud ; une réinstallation repart pour une nouvelle synchronisation avec une nouvelle identité.
+- **Questions de stockage** — la base de données est élaguée aux 256 derniers blocs par conception. Désinstaller l'application supprime la base de données et la clé d'identité du nœud — ainsi que l'Inner Hash enregistré et votre identité DePIN avec tout son journal. Une réinstallation repart pour une nouvelle synchronisation avec une nouvelle identité : si le journal doit survivre, transférez-le d'abord vers le nouvel appareil (voir **Passer à un nouvel appareil** ci-dessus).
 
 Questions, rapports d'appareils et idées sont bienvenus en Issues GitHub. Pour les problèmes de sécurité, suivez [SECURITY.md](../SECURITY.md) plutôt qu'une Issue publique.
