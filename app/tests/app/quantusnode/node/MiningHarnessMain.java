@@ -91,6 +91,7 @@ public final class MiningHarnessMain {
         testStorageUsage();
         testDailyRecords();
         testDailySampler();
+        testDailySamplerFinalTick();
         testDailySamplerClock();
         testStorageResetState();
         testInnerHashEntry();
@@ -2248,6 +2249,17 @@ public final class MiningHarnessMain {
                 rig.runs() == 0);
         check("thermal carry-over: the supervisor ended by itself",
                 s.awaitTermination(5000));
+        // The snapshot check above cannot tell WHOSE latch it is
+        // reading: MinerSnapshot ORs the supervisor's own flag
+        // with the governor's, so it passed even if the
+        // supervisor's requestThermalStop never ran (final-check
+        // FC-7). The supervisor's own log line is the evidence
+        // its latch fired.
+        check("thermal carry-over: the supervisor's own thermal latch"
+                        + " fired - its log line is present, not only the"
+                        + " governor's state in the snapshot",
+                rig.appLogContains(
+                        "miner: stopped by thermal protection"));
         s.requestStop("test done");
     }
 
@@ -2348,6 +2360,30 @@ public final class MiningHarnessMain {
                 }, 8000));
         s.requestStop("test over");
         check("cap carry-over: (cleanup) stops", s.awaitTermination(8000));
+
+        // The session continues: the next node process gets a NEW
+        // supervisor, which adopts the same governor — the cap it
+        // already holds still decides that supervisor's first
+        // start (the session latch of fix2 audit L-2, shown
+        // across supervisors, not only across miner restarts).
+        rig.workers.set(4);
+        final MinerSupervisor s2 = rig.supervisor(
+                MiningLogic.SecretScrubber.of(VALID, null));
+        s2.setThermalGovernor(gov);
+        s2.start();
+        check("cap carry-over: the next supervisor starts under the same"
+                        + " cap",
+                eventually(new Cond() {
+                    @Override
+                    public boolean ok() throws Exception {
+                        List<String> args = argLines(rig);
+                        return args.size() == 4 && args.get(3).contains(
+                                " --cpu-workers 2 ");
+                    }
+                }, 8000));
+        s2.requestStop("test over");
+        check("cap carry-over: (cleanup) the second supervisor stops",
+                s2.awaitTermination(8000));
     }
 
     private static void testSupervisorCapDuringStart() throws Exception {
@@ -3970,9 +4006,19 @@ public final class MiningHarnessMain {
                 DailyTrackStore.merge(null, day("2025-10-12",
                         inc(1, 0, 0, 0, 0, 0, 0, 0)), "2025-10-12"),
                 day("2026-11-16", inc(2, 0, 0, 0, 0, 0, 0, 0)), today);
-        check("daily: retention goes by date, not by line count - a day 401"
-                        + " days back is dropped even from a short file",
-                sparse.size() == 1 && "2026-11-16".equals(sparse.get(0).date));
+        check("daily: a save 401 days after the last record keeps the old"
+                        + " day - the anchor moves at most a day past the"
+                        + " newest record, so the window cannot jump",
+                sparse.size() == 2 && "2025-10-12".equals(sparse.get(0).date)
+                        && "2026-11-16".equals(sparse.get(1).date));
+        List<DailyTrackStore.Record> sparseNext = DailyTrackStore.merge(
+                sparse, day("2026-11-17", inc(3, 0, 0, 0, 0, 0, 0, 0)),
+                "2026-11-17");
+        check("daily: the next day's save drops it - the window has caught"
+                        + " up, so retention still goes by date",
+                sparseNext.size() == 2
+                        && "2026-11-16".equals(sparseNext.get(0).date)
+                        && "2026-11-17".equals(sparseNext.get(1).date));
         List<DailyTrackStore.Record> clockBack = DailyTrackStore.merge(kept,
                 day("2026-11-10", inc(1000, 0, 0, 0, 0, 0, 0, 0)), today);
         check("daily: a clock set back adds to the earlier day and drops"
@@ -4027,6 +4073,80 @@ public final class MiningHarnessMain {
                         && DailyTrackStore.merge(kept, day("2026-11-16",
                         inc(1, 0, 0, 0, 0, 0, 0, 0)), "today").get(399)
                         .uptimeDeltaMs == 1);
+
+        // Gap inventory B-4 (v4.2.2), as fixed after the v4.2.2
+        // audit (M1/L3): the retention anchor is the earlier of
+        // today and one day past the newest day on record, and
+        // the day being written is always merged in full. A save
+        // whose clock reads far in the future therefore prunes at
+        // most the oldest day of the window — never a mass loss —
+        // and a user who returns after a long gap is recorded
+        // again at once instead of being refused for good.
+        List<DailyTrackStore.Record> futureSave = DailyTrackStore.merge(kept,
+                day("2099-01-01", inc(9, 0, 0, 0, 0, 0, 0, 0)), "2099-01-01");
+        check("daily: a save made while the clock reads 2099 records the"
+                        + " day it was told to, and prunes at most the"
+                        + " oldest day - the anchor is capped at a day past"
+                        + " the newest real record, so the real history"
+                        + " stands",
+                futureSave.size() == 400
+                        && "2025-10-14".equals(futureSave.get(0).date)
+                        && "2026-11-16".equals(futureSave.get(398).date)
+                        && "2099-01-01".equals(futureSave.get(399).date));
+        List<DailyTrackStore.Record> futureHealed = DailyTrackStore.merge(
+                futureSave, day("2026-11-16", inc(1, 0, 0, 0, 0, 0, 0, 0)),
+                today);
+        check("daily: the next real save still prunes nothing, and the"
+                        + " planted future day cannot hold the record"
+                        + " hostage - the anchor stays at today",
+                futureHealed.size() == 400
+                        && "2025-10-14".equals(futureHealed.get(0).date)
+                        && "2026-11-16".equals(futureHealed.get(398).date)
+                        && futureHealed.get(398).uptimeDeltaMs == 1 + 1
+                        && "2099-01-01".equals(futureHealed.get(399).date));
+        List<DailyTrackStore.Record> shortFile = DailyTrackStore.merge(null,
+                day("2025-10-12", inc(1, 0, 0, 0, 0, 0, 0, 0)), "2025-10-12");
+        // v4.2.2 audit, M1: after a gap of more than KEEP_DAYS, a
+        // run of real days is recorded in full — the old horizon
+        // refused every one of them, and the record stopped for
+        // good. The first save keeps the old day (the anchor moves
+        // at most a day); the window catches up from the next save.
+        List<DailyTrackStore.Record> gapDay1 = DailyTrackStore.merge(
+                shortFile, day("2026-11-16", inc(2, 0, 0, 0, 0, 0, 0, 0)),
+                "2026-11-16");
+        List<DailyTrackStore.Record> gapDay2 = DailyTrackStore.merge(
+                gapDay1, day("2026-11-17", inc(3, 0, 0, 0, 0, 0, 0, 0)),
+                "2026-11-17");
+        List<DailyTrackStore.Record> gapDay3 = DailyTrackStore.merge(
+                gapDay2, day("2026-11-18", inc(4, 0, 0, 0, 0, 0, 0, 0)),
+                "2026-11-18");
+        check("daily: after a 401-day gap, a run of real days is recorded"
+                        + " in full - nothing is refused, and the old day"
+                        + " drops only once the window has caught up",
+                gapDay1.size() == 2
+                        && "2025-10-12".equals(gapDay1.get(0).date)
+                        && gapDay1.get(1).uptimeDeltaMs == 2
+                        && gapDay2.size() == 2
+                        && "2026-11-16".equals(gapDay2.get(0).date)
+                        && gapDay2.get(1).uptimeDeltaMs == 3
+                        && gapDay3.size() == 3
+                        && "2026-11-16".equals(gapDay3.get(0).date)
+                        && "2026-11-18".equals(gapDay3.get(2).date)
+                        && gapDay3.get(2).uptimeDeltaMs == 4);
+        // v4.2.2 audit, L3: one save 200 days ahead of a full
+        // 400-day file prunes at most a day or so, never a mass
+        // loss — the anchor moves at most a day past the newest
+        // real record.
+        List<DailyTrackStore.Record> ahead200 = DailyTrackStore.merge(kept,
+                day("2027-06-04", inc(9, 0, 0, 0, 0, 0, 0, 0)),
+                "2027-06-04");
+        check("daily: one save 200 days ahead of a full file prunes one day"
+                        + " only - the oldest - and records the day it was"
+                        + " told to",
+                ahead200.size() == 400
+                        && "2025-10-14".equals(ahead200.get(0).date)
+                        && "2026-11-16".equals(ahead200.get(398).date)
+                        && "2027-06-04".equals(ahead200.get(399).date));
 
         // The file.
         File dir = tempDir("daily");
@@ -4250,9 +4370,9 @@ public final class MiningHarnessMain {
         check("daily sampler: the first reading is a baseline and adds"
                         + " nothing",
                 !due && s.pendingForTest().isEmpty() && !f.exists());
-        s.observePeers(8);
-        s.observePeers(12);
-        s.observePeers(-1);
+        s.observePeers(8, 2000, wall + 1000, utc);
+        s.observePeers(12, 3000, wall + 2000, utc);
+        s.observePeers(-1, 3500, wall + 2500, utc);
         due = s.tick(4000, wall + 3000, utc, 5_003_000L, 40_002L,
                 null, false, 0, -1);
         DailyTrackStore.Increment p = s.pendingForTest().get("2026-11-16");
@@ -4314,9 +4434,12 @@ public final class MiningHarnessMain {
         s.tick(31000 + 61_000, wall + 91000, utc, 5_086_000L, 40_003L,
                 sup1, true, 5, 1000.0);
         p = s.pendingForTest().get("2026-11-16");
-        check("daily sampler: a gap longer than a minute between ticks is not"
-                        + " mining time (uptime still follows its total)",
-                p.miningMs == 9000 && p.uptimeDeltaMs == 86000);
+        check("daily sampler: a gap longer than a minute between ticks"
+                        + " still counts as mining time - the miner does"
+                        + " not stop for a delayed tick (v4.2.2, audit"
+                        + " I-6; uptime still follows its total)",
+                p.miningMs == 70000 && p.approxHashes == 67003
+                        && p.uptimeDeltaMs == 86000);
         Object sup2 = new Object();
         s.tick(95000, wall + 94000, utc, 5_089_000L, 40_003L,
                 sup2, true, 1, 1000.0);
@@ -4324,7 +4447,7 @@ public final class MiningHarnessMain {
         check("daily sampler: the next node process's supervisor starts its"
                         + " own count (5 + 1 jobs), and its first tick adds"
                         + " no mining time",
-                p.jobsDelta == 6 && p.miningMs == 9000);
+                p.jobsDelta == 6 && p.miningMs == 70000);
         s.tick(98000, wall + 97000, utc, 5_092_000L, 40_003L,
                 null, false, 0, -1);
         s.tick(101000, wall + 100000, utc, 5_095_000L, 40_003L,
@@ -4334,7 +4457,64 @@ public final class MiningHarnessMain {
                         + " from zero a second time",
                 s.pendingForTest().get("2026-11-16").jobsDelta == 6
                         && s.pendingForTest().get("2026-11-16").miningMs
-                        == 9000);
+                        == 70000);
+
+        // v4.2.2 audit, L4: a suspended stretch counts toward
+        // uptime but not toward mining time or hashes. The elapsed
+        // clock jumps six minutes while the uptime clock stands
+        // still — the miner froze with the CPU, so nothing is
+        // credited for it, and mining resumes from where it left
+        // off once the device wakes.
+        DailyTrackStore.Sampler susp = new DailyTrackStore.Sampler(
+                DailyTrackStore.file(tempDir("sampler-suspend")), 60_000);
+        Object supS = new Object();
+        susp.tick(1000, 1000, wall, utc, 5_000_000L, 40_000L,
+                null, false, 0, -1);
+        susp.tick(4000, 4000, wall + 3000, utc, 5_003_000L, 40_002L,
+                supS, true, 0, 1000.0);
+        susp.tick(7000, 7000, wall + 6000, utc, 5_006_000L, 40_002L,
+                supS, true, 0, 1000.0);
+        p = susp.pendingForTest().get("2026-11-16");
+        check("daily sampler: awake mining counts (setup)",
+                p != null && p.miningMs == 3000 && p.approxHashes == 3000
+                        && p.uptimeDeltaMs == 6000);
+        susp.tick(367000, 7000, wall + 366000, utc, 5_366_000L, 40_002L,
+                supS, true, 0, 1000.0);
+        p = susp.pendingForTest().get("2026-11-16");
+        check("daily sampler: a suspend gap counts toward uptime but not"
+                        + " toward mining time or hashes (v4.2.2 audit, L4)",
+                p.miningMs == 3000 && p.approxHashes == 3000
+                        && p.uptimeDeltaMs == 366000);
+        susp.tick(370000, 10000, wall + 369000, utc, 5_369_000L, 40_002L,
+                supS, true, 0, 1000.0);
+        p = susp.pendingForTest().get("2026-11-16");
+        check("daily sampler: mining resumes from where it left off after"
+                        + " the wake",
+                p.miningMs == 6000 && p.approxHashes == 6000
+                        && p.uptimeDeltaMs == 369000);
+
+        // v4.2.2 audit, I1: a peer observation must not move the
+        // believed clock. The observation's wall clock jumps more
+        // than a day ahead of what the ticks believe (past the
+        // 24 h jump threshold); the sample is filed under the
+        // believed day, and the next tick counts its interval
+        // once, under the same day.
+        DailyTrackStore.Sampler obs = new DailyTrackStore.Sampler(
+                DailyTrackStore.file(tempDir("sampler-observe")), 60_000);
+        obs.tick(0, wall, utc, 1000, 0, null, false, 0, -1);
+        obs.tick(3000, wall + 3000, utc, 4000, 0, null, false, 0, -1);
+        obs.observePeers(5, 3000, wall + 25 * 3600_000L, utc);
+        obs.tick(6000, wall + 6000, utc, 7000, 0, null, false, 0, -1);
+        java.util.Map<String, DailyTrackStore.Increment> pendV =
+                obs.pendingForTest();
+        check("daily sampler: an observation far ahead of the believed clock"
+                        + " files under the believed day and moves nothing"
+                        + " - the next tick counts its interval once"
+                        + " (v4.2.2 audit, I1)",
+                pendV.size() == 1 && pendV.containsKey("2026-11-16")
+                        && pendV.get("2026-11-16").uptimeDeltaMs == 6000
+                        && pendV.get("2026-11-16").peerMax == 5
+                        && pendV.get("2026-11-16").peerSamples == 1);
 
         // Saving.
         check("daily sampler: tick() itself never touches the file",
@@ -4364,10 +4544,16 @@ public final class MiningHarnessMain {
         check("daily sampler: the interval starts again after a save", !d4);
 
         // Midnight: what was pending belongs to the old day.
+        // Peer observations are dated by their own clocks now
+        // (v4.2.2, audit I-6): the 9 seen before midnight and the
+        // 11 seen after it both belong to the 16th, because the
+        // second was taken a second before the day turned in
+        // believed time; a sample taken after the turn belongs
+        // to the 17th at once.
         long beforeMidnight = day16 + 86_400_000L - 2000;
-        t.observePeers(9);
+        t.observePeers(9, 65_000, beforeMidnight - 1000, utc);
         t.tick(66_000, beforeMidnight, utc, 66_100, 13, null, false, 0, -1);
-        t.observePeers(11);
+        t.observePeers(11, 68_000, beforeMidnight + 1000, utc);
         boolean d5 = t.tick(69_000, beforeMidnight + 3000, utc, 69_100, 15,
                 null, false, 0, -1);
         java.util.Map<String, DailyTrackStore.Increment> pend =
@@ -4380,7 +4566,16 @@ public final class MiningHarnessMain {
                         && pend.get("2026-11-16").blocksDelta == 3
                         && pend.get("2026-11-16").peerMax == 11
                         && pend.get("2026-11-16").peerSamples == 2);
-        t.observePeers(4);
+        t.observePeers(3, 69_500, beforeMidnight + 2500, utc);
+        pend = t.pendingForTest();
+        check("daily sampler: the first peer sample after midnight belongs"
+                        + " to its own day at once, not to the day of the"
+                        + " tick that folds it (v4.2.2, audit I-6)",
+                pend.size() == 2 && pend.get("2026-11-17") != null
+                        && pend.get("2026-11-17").peerMax == 3
+                        && pend.get("2026-11-17").peerSamples == 1
+                        && pend.get("2026-11-17").uptimeDeltaMs == 0);
+        t.observePeers(4, 71_000, beforeMidnight + 5000, utc);
         t.tick(72_000, beforeMidnight + 6000, utc, 72_100, 16,
                 null, false, 0, -1);
         pend = t.pendingForTest();
@@ -4416,6 +4611,36 @@ public final class MiningHarnessMain {
                         && DailyTrackStore.read(f2).size() == 1
                         && DailyTrackStore.read(f2).get(0).uptimeDeltaMs == 6000
                         && DailyTrackStore.read(f2).get(0).blocksDelta == 2);
+    }
+
+    private static void testDailySamplerFinalTick() throws Exception {
+        // Audit I-6 (v4.2.2): a replaced poller's final fold used
+        // to be an ordinary tick with a null miner supervisor,
+        // which cleared lastMinerRunning — and the LIVE session's
+        // next interval then counted no mining time. tickFinal
+        // folds the closing totals and touches no miner baseline.
+        final java.util.TimeZone utc = java.util.TimeZone.getTimeZone("UTC");
+        final long day16 = 1794787200000L; // 2026-11-16T00:00:00Z
+        File f = DailyTrackStore.file(tempDir("sampler-final"));
+        DailyTrackStore.Sampler s = new DailyTrackStore.Sampler(f, 60_000);
+        long wall = day16 + 3600_000L;
+        Object sup = new Object();
+        s.tick(1000, wall, utc, 5_000_000L, 40_000L, sup, true, 2, 1000.0);
+        s.tick(4000, wall + 3000, utc, 5_003_000L, 40_002L,
+                sup, true, 5, 1000.0);
+        s.tickFinal(5000, wall + 4000, utc, 5_004_000L, 40_003L);
+        DailyTrackStore.Increment p = s.pendingForTest().get("2026-11-16");
+        check("daily sampler: the final fold records the closing totals"
+                        + " and no mining accounting of its own",
+                p != null && p.uptimeDeltaMs == 4000 && p.blocksDelta == 3
+                        && p.jobsDelta == 5 && p.miningMs == 3000);
+        s.tick(7000, wall + 6000, utc, 5_006_000L, 40_004L,
+                sup, true, 6, 1000.0);
+        p = s.pendingForTest().get("2026-11-16");
+        check("daily sampler: after a stale poller's final fold, the live"
+                        + " interval's mining time is counted in full",
+                p.miningMs == 6000 && p.jobsDelta == 6
+                        && p.uptimeDeltaMs == 6000);
     }
 
     // ---------------- share assembly ----------------
@@ -4493,14 +4718,16 @@ public final class MiningHarnessMain {
 
     private static void testStrings() {
         java.util.Set<String> keys = StringsTable.keys();
-        check("strings: the table holds 439 keys - the 329 of v3.0.1, 67 for"
+        check("strings: the table holds 447 keys - the 329 of v3.0.1, 67 for"
                 + " mining, the thermal stop's one, the donation footer's"
                 + " three, the 24 of v4.1.0's storage section, the four"
                 + " of the UI/UX phase 0, the four first-run keys and the"
                 + " five settings keys and the one record key of the"
                 + " UI/UX phase 1 and the one licences key of the"
-                + " gap-inventory fixes (found "
-                + keys.size() + ")", keys.size() == 439);
+                + " gap-inventory fixes and the three keys of v4.2.2 and"
+                + " the five extra category keys of the day-unit quantity"
+                + " (v4.2.2 audit, I9; one plain key became six) (found "
+                + keys.size() + ")", keys.size() == 447);
         int miningKeys = 0;
         int donateKeys = 0;
         int storageKeys = 0;
@@ -4522,10 +4749,11 @@ public final class MiningHarnessMain {
         }
         check("strings: 68 keys are mining keys (found " + miningKeys + ")",
                 miningKeys == 68);
-        check("strings: 3 keys are donation keys (found " + donateKeys + ")",
-                donateKeys == 3);
-        check("strings: 24 keys are storage keys (found " + storageKeys + ")",
-                storageKeys == 24);
+        check("strings: 4 keys are donation keys (found " + donateKeys + ")",
+                donateKeys == 4);
+        check("strings: 25 keys are storage keys - the 24 of v4.1.0 and the"
+                + " free-space key of v4.2.2 (found " + storageKeys + ")",
+                storageKeys == 25);
         check("strings: the donation footer's toast ends the pre-storage"
                         + " run in the constant order, and the UI/UX phase 1"
                         + " settings keys close the table after the phase 0"

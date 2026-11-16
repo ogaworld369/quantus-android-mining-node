@@ -4,7 +4,7 @@
 
 This app runs a **full node** for Quantus Network (QTC mainnet) on an Android phone. It syncs the chain, verifies every block itself, and relays data to peers. By default it runs as a non-validator; it can also mine, as an option that is off by default (see **Mining** below). It has **no wallet** and never touches seed phrases — the one secret it can hold is the mining rewards Inner Hash you paste in yourself.
 
-> Status: v4.2.1 released (2026-11-16), the current release — a fix release for the external audit of v4.2.0: the Storage page measures its sizes again, including right after a resync; the price and donation sheets no longer slide under the bottom navigation, so the donation address is fully visible and copies on tap; after a failed start, Node details opens with the diagnostics expanded; the Settings hub's Node row no longer shows the telemetry switch as the node's own state; a stale price now dims on the home row too; and the first-run paragraph no longer pushes the Start button down (v4.2.0, also released 2026-11-16, made the home screen a list under the status card, Settings a hub of pages and the member tab a scrolling column). The signed APK is published on [GitHub Releases](https://github.com/ogaworld369/quantus-android-mining-node/releases) with a SHA-256 checksum. Earlier test builds were shared directly by the maintainer.
+> Status: v4.2.2 released (2026-11-16), the current release — a polish release: the member card's streak is now labelled as the longest streak it is; the Storage page also shows this device's free space; the donation sheet gains a copy button, the sheets' close buttons are named for screen readers, and the content behind an open sheet is hidden from accessibility services; the settings lock also covers the price switch in the price sheet, and the External information page says why it is disabled; value rows and the home today row use the stacking row layout, so long values no longer crush their labels; price freshness is judged on the monotonic clock and failed fetches retry after 15, then 30, then 60 minutes; the daily record is written at most every 15 minutes; and the miner restart button is disabled while a thermal stop is latched (v4.2.1, also released 2026-11-16, fixed the findings of the external audit of v4.2.0). The signed APK is published on [GitHub Releases](https://github.com/ogaworld369/quantus-android-mining-node/releases) with a SHA-256 checksum. Earlier test builds were shared directly by the maintainer.
 
 ## Requirements
 
@@ -54,13 +54,13 @@ Settings never restart the node by themselves. If you change telemetry or the di
 
 ## Storage
 
-**Settings → Storage** shows how much space the app uses, in five figures: the **chain database**, the rest of the **node data**, **logs**, the **activity record** (DePIN) and the **total**. While the node is running the figures keep changing, so treat them as estimates.
+**Settings → Storage** shows how much space the app uses, in six figures: the **chain database**, the rest of the **node data**, **logs**, the **activity record** (DePIN), the **total** and the **free space** on this device. While the node is running the figures keep changing, so treat them as estimates.
 
 Its one action, **Delete the chain database and resync**, deletes only the chain database — the block data this device has synced so far. The node's network key, the mining settings and the saved Inner Hash, your DePIN identity and its record, the track record, the logs and the app's settings are all kept. The action works only while the node is stopped, and it cannot be undone: the next time you start the node, syncing begins from the start again, which takes time and data (about 2 hours on a Pixel 9a).
 
 ## Price
 
-Home shows the current QTC price, which the app fetches from **CoinGecko** (api.coingecko.com) about once an hour. Fetching is **on by default**; the switch is in the price sheet (tap the price on Home) and under **Settings → Information from outside**. A fetch sends only the price query — no node information, member number or records are ever sent — but CoinGecko can see this device's IP address, as any server you connect to can. With the switch off, nothing is fetched: the price row keeps showing the last known value, with the time it was fetched and dimmed once it is old — or shows nothing if no price has ever been fetched.
+Home shows the current QTC price, which the app fetches from **CoinGecko** (api.coingecko.com) about once an hour. Fetching is **on by default**; the switch is in the price sheet (tap the price on Home) and under **Settings → Information from outside**. A fetch sends only the price query — no node information, member number or records are ever sent — but CoinGecko can see this device's IP address, as any server you connect to can. With the switch off, nothing is fetched: the price row shows "Off" and the sheet shows a dash — even if a price was fetched before.
 
 ## Mining (optional)
 

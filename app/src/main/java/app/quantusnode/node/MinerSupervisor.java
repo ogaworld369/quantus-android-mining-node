@@ -180,11 +180,12 @@ public final class MinerSupervisor implements MiningLogic.MinerView,
     /** Set when the thermal protection ended this miner (fix2). */
     private boolean thermalStop;
     /** This session's thermal governor (fix2); the service feeds it
-     *  platform thermal statuses and reads the cap back for the
-     *  environment's worker count. Shared across the session's node
-     *  processes (the service hands it to each supervisor), so the
-     *  cap and the stop survive the app's own restarts and reset
-     *  only at the user's next start (fix2 audit L-2). */
+     *  platform thermal statuses, and this supervisor applies its
+     *  cap to the environment's worker count itself. Shared across
+     *  the session's node processes (the service hands it to each
+     *  supervisor), so the cap and the stop survive the app's own
+     *  restarts and reset only at the user's next start (fix2
+     *  audit L-2). */
     private volatile MiningLogic.ThermalGovernor thermalGovernor =
             new MiningLogic.ThermalGovernor();
 
@@ -333,11 +334,18 @@ public final class MinerSupervisor implements MiningLogic.MinerView,
         if (!live) {
             return;
         }
-        safeLog("miner: stop requested (" + why + ")");
+        // The process is ended BEFORE the log line is written
+        // (v4.2.2, final-check FC-4): the log appends to a file,
+        // and if that call threw, the miner would be left running
+        // while every later stop returns early on the flag. Only
+        // an Error can escape the log at all — LogSink already
+        // swallows an IOException — but the stop must not depend
+        // on the log in any case.
         if (p != null) {
             destroyQuietly(p);
             escalateAsync(p);
         }
+        safeLog("miner: stop requested (" + why + ")");
     }
 
     /**
@@ -357,11 +365,13 @@ public final class MinerSupervisor implements MiningLogic.MinerView,
             p = current;
             lock.notifyAll();
         }
-        safeLog("miner: restart requested");
+        // Ended before the log line, as in requestStop (v4.2.2,
+        // final-check FC-4): the stop must not depend on the log.
         if (p != null) {
             destroyQuietly(p);
             escalateAsync(p);
         }
+        safeLog("miner: restart requested");
     }
 
     /** This session's thermal governor (fix2). */
@@ -389,7 +399,14 @@ public final class MinerSupervisor implements MiningLogic.MinerView,
      * is too hot (fix2, {@link MiningLogic.ThermalControl}). The
      * stop is the ordinary bounded one; the flag is what the
      * snapshot reports, so the status can name the cause. The miner
-     * starts again with the node, never on its own.
+     * does not come back on its own, nor with the app's own
+     * restarts; it starts again only at the user's next start.
+     *
+     * The stop is requested before the log line is written
+     * (v4.2.2, final-check FC-4): the log appends to a file, and
+     * an Error escaping that call — a full disk cannot do it,
+     * LogSink already swallows an IOException — must never be
+     * able to leave the miner running.
      */
     @Override
     public void requestThermalStop() {
@@ -401,8 +418,8 @@ public final class MinerSupervisor implements MiningLogic.MinerView,
             }
             thermalStop = true;
         }
-        safeLog("miner: stopped by thermal protection");
         requestStop("thermal protection");
+        safeLog("miner: stopped by thermal protection");
     }
 
     @Override
@@ -1226,7 +1243,12 @@ public final class MinerSupervisor implements MiningLogic.MinerView,
     private void safeLog(String message) {
         try {
             env.log(message);
-        } catch (RuntimeException ignored) {
+        } catch (Throwable ignored) {
+            // Logging must never break control flow: the stop
+            // paths call this after ending the process, and a
+            // caller must not fail for a log line (v4.2.2 audit,
+            // L1 — an Error escaping here used to leave the miner
+            // running while later stops returned early).
         }
     }
 

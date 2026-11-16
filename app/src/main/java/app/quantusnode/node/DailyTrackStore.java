@@ -25,8 +25,15 @@ import java.util.regex.Pattern;
 /**
  * The day-by-day side of the track record (v4.1.0): one record per
  * local calendar day in {@code <files>/track/daily.jsonl}, kept for
- * the last {@link #KEEP_DAYS} days (counted back from the day of
- * the save, never from the newest date in the file). {@link TrackStore} holds running
+ * the last {@link #KEEP_DAYS} days — counted back from an anchor
+ * that a single save may move at most one day past the newest day
+ * already on record (v4.2.2, gap inventory B-4, as fixed after the
+ * v4.2.2 audit, M1/L3): the anchor is the earlier of the day being
+ * written and one day past that newest day, so a clock far ahead
+ * can neither prune the real history in one save nor stop the
+ * record for good, and a day the file already holds is never
+ * dropped for being dated after today (pre-release audit, M-1).
+ * {@link TrackStore} holds running
  * totals only; this file is what a later version draws a history
  * from. Nothing reads it for display yet — this version only
  * records.
@@ -47,7 +54,8 @@ import java.util.regex.Pattern;
  * (on one line in the file). {@code peerSum / peerSamples} is the
  * day's average peer count. {@code approxHashes} is an ESTIMATE and
  * named as one: the miner's own reported hash rate multiplied by the
- * time it ran, summed over the day — not a count of hashes.
+ * time it ran while the device was awake, summed over the day — not
+ * a count of hashes.
  *
  * Every save rewrites the whole file — a few hundred short lines —
  * into a temporary file beside it and renames that over the old one,
@@ -58,7 +66,9 @@ public final class DailyTrackStore {
 
     static final String DIR_NAME = "track";
     static final String FILE_NAME = "daily.jsonl";
-    /** Days kept, counted back from the day being written. */
+    /** Days kept, counted back from the retention anchor — the
+     *  earlier of the day being written and one day past the
+     *  newest day already on record (see {@link #merge}). */
     static final int KEEP_DAYS = 400;
 
     /** A line longer than this is not one of ours. */
@@ -97,7 +107,9 @@ public final class DailyTrackStore {
         public long peerSamples;
         /** Jobs the miner received. */
         public long jobsDelta;
-        /** Time a miner process was running. */
+        /** Time a miner process was running while the device was
+         *  awake (an uptimeMillis gap — time the CPU spent
+         *  suspended is not counted, v4.2.2 audit L4). */
         public long miningMs;
         /** Reported hash rate x time; an estimate. */
         public long approxHashes;
@@ -285,21 +297,33 @@ public final class DailyTrackStore {
      * Fold increments into their days and return the record to save,
      * oldest first. Pure; touches no file.
      *
-     * {@code today} — the day being written — is the only anchor
-     * (pre-release audit, M-1; the newest date in the file used to
-     * be, and one record dated 2099 then pruned every real one and
-     * kept new ones out until 2099):
+     * {@code today} — the day being written — bounds what may be
+     * added (pre-release audit, M-1):
      *
      *  - an increment dated more than a day after {@code today} is
      *    ignored (one day is allowed for a time-zone change between
      *    the reading and the save);
-     *  - records older than the {@link #KEEP_DAYS} days ending at
-     *    {@code today} are dropped;
      *  - a record already in the file is never dropped for being
      *    dated after {@code today}: it moves no anchor, so it can
      *    neither prune nor block anything, and dropping it would let
      *    a clock that reads a past date for one save erase the real
      *    record.
+     *
+     * Retention drops records older than the {@link #KEEP_DAYS}
+     * days ending at the anchor. The anchor is the earlier of
+     * {@code today} and one day past the newest day already on
+     * record (with no record yet, {@code today} itself) — never
+     * {@code today} alone, and never past that newest day plus
+     * one. A single save therefore cannot move the window far in
+     * either direction: a save whose clock reads far in the
+     * future prunes at most the oldest day of the window (v4.2.2
+     * audit, L3), and a user who returns after more than
+     * {@link #KEEP_DAYS} days is recorded again at once — the
+     * first new day is kept, and the window catches up at the
+     * next save, instead of refusing every day for good (v4.2.2
+     * audit, M1). In the ordinary case, where the newest day on
+     * record is {@code today} itself, the window is the one it
+     * always was.
      *
      * An invalid {@code today} adds nothing and prunes nothing.
      */
@@ -309,10 +333,15 @@ public final class DailyTrackStore {
         String ceiling = anchored
                 ? LocalDate.parse(today).plusDays(1).toString() : null;
         TreeMap<String, Record> all = new TreeMap<>();
+        String newestExisting = null;
         if (existing != null) {
             for (Record r : existing) {
                 if (r != null && validDate(r.date)) {
                     all.put(r.date, r);
+                    if (newestExisting == null
+                            || r.date.compareTo(newestExisting) > 0) {
+                        newestExisting = r.date;
+                    }
                 }
             }
         }
@@ -337,7 +366,15 @@ public final class DailyTrackStore {
         if (!anchored) {
             return new ArrayList<>(all.values());
         }
-        String floor = LocalDate.parse(today)
+        String anchor;
+        if (newestExisting == null) {
+            anchor = today;
+        } else {
+            String cap = LocalDate.parse(newestExisting)
+                    .plusDays(1).toString();
+            anchor = today.compareTo(cap) <= 0 ? today : cap;
+        }
+        String floor = LocalDate.parse(anchor)
                 .minusDays(KEEP_DAYS - 1L).toString();
         return new ArrayList<>(all.tailMap(floor, true).values());
     }
@@ -411,9 +448,15 @@ public final class DailyTrackStore {
      * unsaved when the app process is killed is lost: at most one
      * save interval's worth.
      *
-     * Increments are attributed to the local date of the tick that
-     * saw them; when the date changes between two ticks, what was
-     * pending is saved under the old date first.
+     * Increments from the running totals are attributed to the day
+     * that was current at the start of the interval they accrued
+     * over — the previous tick's day — so a tick that crosses
+     * midnight closes the old day with what the interval actually
+     * produced, and its save falls due at once. Peer observations
+     * carry their own time and are filed under the day they were
+     * taken on, so the first sample after midnight — or after a
+     * long stop, which used to inherit the day of the tick that
+     * folded it — belongs to its own day (v4.2.2, audit I-6).
      *
      * The date comes from the wall clock, and the wall clock can be
      * wrong for a moment (pre-release audit, M-1). So it is checked
@@ -428,9 +471,6 @@ public final class DailyTrackStore {
      * stays wrong for longer than that is taken at its word.
      */
     public static final class Sampler {
-        /** A gap between two ticks longer than this is not counted
-         *  as mining time (the poller was not running across it). */
-        static final long MAX_TICK_GAP_MS = 60_000L;
         /** How far the wall clock may move against the monotonic
          *  clock between two ticks and still be believed at once. */
         static final long CLOCK_JUMP_MS = 24L * 3600_000L;
@@ -453,12 +493,17 @@ public final class DailyTrackStore {
         private long lastJobs;
         private boolean lastMinerRunning;
         private long lastTickElapsedMs = -1;
+        /** The uptimeMillis reading of the last regular tick:
+         *  the mining gap is measured on this clock, which
+         *  stops while the device sleeps, so suspended time is
+         *  never credited as mining time (v4.2.2 audit, L4). */
+        private long lastTickUptimeMs = -1;
         private double hashCarry;
 
-        /** Peers observed since the last tick; dated by that tick. */
-        private Increment undated = new Increment();
         /** Unsaved increments by date, oldest first. */
         private final Map<String, Increment> pending = new LinkedHashMap<>();
+        /** The day the next totals increment belongs to: the day
+         *  current at the previous tick (the interval's start). */
         private String currentDate;
         private long lastSaveElapsedMs = -1;
         /** The wall clock as believed at the last tick. */
@@ -472,21 +517,44 @@ public final class DailyTrackStore {
             this.saveEveryMs = saveEveryMs;
         }
 
-        /** One answered peer count (cheap; no file access). */
-        public synchronized void observePeers(int peers) {
+        /**
+         * One answered peer count (cheap; no file access). The
+         * observation is filed under the day it was taken on —
+         * computed from its own clocks through the same believed-
+         * clock logic the ticks use — never under the day of the
+         * tick that happens to fold it later (v4.2.2, audit I-6).
+         * The lookup does not move the believed clock (v4.2.2
+         * audit, I1): believing a jump here made the next tick
+         * count the time up to the observation twice.
+         */
+        public synchronized void observePeers(int peers, long elapsedMs,
+                                              long wallMs, TimeZone tz) {
             if (peers < 0) {
                 return;
             }
-            undated.peerMax = Math.max(undated.peerMax, peers);
-            undated.peerSum = satAdd(undated.peerSum, peers);
-            undated.peerSamples = satAdd(undated.peerSamples, 1);
+            String date = localDate(
+                    believedWallForObservation(elapsedMs, wallMs), tz);
+            Increment day = pending.get(date);
+            if (day == null) {
+                day = new Increment();
+                pending.put(date, day);
+            }
+            day.peerMax = Math.max(day.peerMax, peers);
+            day.peerSum = satAdd(day.peerSum, peers);
+            day.peerSamples = satAdd(day.peerSamples, 1);
         }
 
         /**
-         * One poll cycle's readings.
+         * One poll cycle's readings. The mining gap is measured
+         * on {@code uptimeMs} (SystemClock.uptimeMillis): unlike
+         * {@code elapsedMs} it stops while the device sleeps, so
+         * a suspended stretch is never credited as mining time
+         * or hashed over (v4.2.2 audit, L4).
          *
          * @param elapsedMs     a monotonic clock that keeps counting
          *                      while the device sleeps
+         * @param uptimeMs      the same moment on the sleep-free
+         *                      clock (SystemClock.uptimeMillis)
          * @param wallMs        the wall clock, for the date only
          * @param cumUptimeMs   cumulative node uptime, -1 when unknown
          * @param cumBlocks     cumulative blocks observed, -1 when unknown
@@ -499,22 +567,75 @@ public final class DailyTrackStore {
          * @return true when a save is due — call {@link #save()}
          *         (outside any lock of the caller's)
          */
+        public synchronized boolean tick(long elapsedMs, long uptimeMs,
+                                         long wallMs,
+                                         TimeZone tz, long cumUptimeMs,
+                                         long cumBlocks, Object minerSource,
+                                         boolean minerRunning,
+                                         long jobsReceived,
+                                         double hashrateHps) {
+            return tickInternal(elapsedMs, uptimeMs, wallMs, tz,
+                    cumUptimeMs, cumBlocks, minerSource, minerRunning,
+                    jobsReceived, hashrateHps, false);
+        }
+
+        /**
+         * One poll cycle's readings, as {@link #tick(long, long,
+         * long, TimeZone, long, long, Object, boolean, long,
+         * double)} with the sleep-free clock taken as the
+         * monotonic one: for a caller that cannot tell them apart
+         * the device is taken to have stayed awake, which is the
+         * ordinary case on a JVM harness.
+         */
         public synchronized boolean tick(long elapsedMs, long wallMs,
                                          TimeZone tz, long cumUptimeMs,
                                          long cumBlocks, Object minerSource,
                                          boolean minerRunning,
                                          long jobsReceived,
                                          double hashrateHps) {
+            return tickInternal(elapsedMs, elapsedMs, wallMs, tz,
+                    cumUptimeMs, cumBlocks, minerSource, minerRunning,
+                    jobsReceived, hashrateHps, false);
+        }
+
+        /**
+         * The closing fold of a poller that is about to stop
+         * (v4.2.2, audit I-6): the totals the session accumulated
+         * since the last tick are recorded, and nothing else
+         * happens. A poller being replaced may be stale — the
+         * session it sampled has ended and a new one may already
+         * be live — so this fold must not clear the miner baseline
+         * ({@code lastMinerRunning}, the job baseline, the
+         * supervisor identity) or move the tick anchor the way a
+         * regular tick does: the old final tick did exactly that,
+         * and the live session's next interval then counted no
+         * mining time for want of a "previous tick". The caller
+         * saves unconditionally after this returns.
+         */
+        public synchronized void tickFinal(long elapsedMs, long wallMs,
+                                           TimeZone tz, long cumUptimeMs,
+                                           long cumBlocks) {
+            tickInternal(elapsedMs, elapsedMs, wallMs, tz, cumUptimeMs,
+                    cumBlocks, null, false, 0, -1, true);
+        }
+
+        private boolean tickInternal(long elapsedMs, long uptimeMs,
+                                     long wallMs,
+                                     TimeZone tz, long cumUptimeMs,
+                                     long cumBlocks, Object minerSource,
+                                     boolean minerRunning,
+                                     long jobsReceived, double hashrateHps,
+                                     boolean finalTick) {
             String date = localDate(believeWall(elapsedMs, wallMs), tz);
             boolean dateChanged = currentDate != null
                     && !currentDate.equals(date);
             if (currentDate == null) {
                 currentDate = date;
             }
-            // What was observed up to here belongs to the day that
-            // was current; only then does the new day begin.
-            Increment inc = undated;
-            undated = new Increment();
+            // What accrued over the interval belongs to the day
+            // that was current at its start; only then does the
+            // new day begin.
+            Increment inc = new Increment();
             if (cumUptimeMs >= 0) {
                 if (lastUptimeMs >= 0 && cumUptimeMs > lastUptimeMs) {
                     inc.uptimeDeltaMs = cumUptimeMs - lastUptimeMs;
@@ -527,7 +648,9 @@ public final class DailyTrackStore {
                 }
                 lastBlocks = Math.max(lastBlocks, cumBlocks);
             }
-            if (minerSource == null) {
+            if (finalTick) {
+                // No miner accounting at all: see tickFinal.
+            } else if (minerSource == null) {
                 lastMinerRunning = false;
             } else {
                 Object known = this.minerSource == null
@@ -543,14 +666,24 @@ public final class DailyTrackStore {
                     inc.jobsDelta = jobsReceived - lastJobs;
                     lastJobs = jobsReceived;
                 }
-                long gap = lastTickElapsedMs < 0
-                        ? 0 : elapsedMs - lastTickElapsedMs;
-                if (minerRunning && lastMinerRunning && gap > 0
-                        && gap <= MAX_TICK_GAP_MS) {
-                    inc.miningMs = gap;
+                // Mining time is the awake gap between the two
+                // ticks that saw the miner running at both ends,
+                // counted in full like the uptime deltas beside it:
+                // uptimeMillis stops while the CPU sleeps, so time
+                // the device spent suspended is not credited, and
+                // no hashes are estimated for it either (v4.2.2
+                // audit, L4 — during a suspend the miner freezes
+                // with the CPU; the old 60 s cap dropped such gaps
+                // outright, which undercounted, and the uncapped
+                // monotonic gap overcounted them). A delayed tick
+                // still counts the awake time between the readings.
+                long upGap = lastTickUptimeMs < 0 || uptimeMs < 0
+                        ? 0 : uptimeMs - lastTickUptimeMs;
+                if (minerRunning && lastMinerRunning && upGap > 0) {
+                    inc.miningMs = upGap;
                     if (hashrateHps > 0 && !Double.isInfinite(hashrateHps)
                             && !Double.isNaN(hashrateHps)) {
-                        hashCarry += hashrateHps * gap / 1000.0;
+                        hashCarry += hashrateHps * upGap / 1000.0;
                         double whole = Math.floor(hashCarry);
                         if (whole >= 1.0) {
                             inc.approxHashes = whole >= (double) Long.MAX_VALUE
@@ -561,7 +694,10 @@ public final class DailyTrackStore {
                 }
                 lastMinerRunning = minerRunning;
             }
-            lastTickElapsedMs = elapsedMs;
+            if (!finalTick) {
+                lastTickElapsedMs = elapsedMs;
+                lastTickUptimeMs = uptimeMs;
+            }
             if (!inc.isEmpty()) {
                 Increment day = pending.get(currentDate);
                 if (day == null) {
@@ -607,6 +743,35 @@ public final class DailyTrackStore {
                 believedWallMs = expected;
             }
             return believedWallMs;
+        }
+
+        /**
+         * The wall clock an observation between ticks goes by:
+         * the same branches as {@link #believeWall}, computed
+         * from the stored state without changing it. An
+         * observation is not a tick — believing a jump here
+         * would move {@code believedWallMs} forward and the next
+         * tick would count the time up to the observation a
+         * second time (v4.2.2 audit, I1).
+         */
+        private long believedWallForObservation(long elapsedMs,
+                                                long wallMs) {
+            if (lastTickElapsedMs < 0) {
+                return wallMs;
+            }
+            long expected = believedWallMs
+                    + Math.max(0L, elapsedMs - lastTickElapsedMs);
+            long off = wallMs - expected;
+            if (off >= -CLOCK_JUMP_MS && off <= CLOCK_JUMP_MS) {
+                return wallMs;
+            }
+            if (clockOffSinceElapsedMs < 0) {
+                return expected;
+            }
+            if (elapsedMs - clockOffSinceElapsedMs >= CLOCK_CONFIRM_MS) {
+                return wallMs;
+            }
+            return expected;
         }
 
         /**

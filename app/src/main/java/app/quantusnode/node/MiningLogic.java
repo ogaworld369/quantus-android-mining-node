@@ -1381,8 +1381,7 @@ public final class MiningLogic {
      * A status outside the platform's range is read by the same two
      * comparisons: below NONE is not heat, above SHUTDOWN is.
      *
-     * One of these exists per node process launched with mining. It
-     * is fed by the service's thermal listener and read by the miner
+     * It is fed by the service's thermal listener and read by the miner
      * supervisor's worker count; every method takes the lock for
      * what it reads or changes, and none calls out while holding it.
      */

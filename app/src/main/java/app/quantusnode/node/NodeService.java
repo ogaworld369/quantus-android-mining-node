@@ -123,12 +123,16 @@ public class NodeService extends Service {
     private static final long APP_DRIVERS_EVERY_MS = 30000;
     /**
      * How often the day's track record is saved while a session
-     * runs (v4.1.0, {@link DailyTrackStore}). An app process killed
-     * between two saves loses at most this much of the day's
-     * increments; the running totals in {@link TrackStore} keep
-     * their own, finer cadence and are not affected.
+     * runs (v4.1.0, {@link DailyTrackStore}). Every save rewrites
+     * and fsyncs the whole file; at a minute's cadence that was a
+     * steady drip of flash writes for counters nobody reads yet,
+     * so the cadence is fifteen minutes (v4.2.2, audit I-8). An
+     * app process killed between two saves loses at most this
+     * much of the day's increments; a clean stop always saves.
+     * The running totals in {@link TrackStore} keep their own,
+     * finer cadence and are not affected.
      */
-    private static final long DAILY_SAVE_EVERY_MS = 60000;
+    private static final long DAILY_SAVE_EVERY_MS = 900000;
 
     /** Log rotation: at ~512 KB the older half is dropped. Never unbounded. */
     private static final long LOG_MAX_BYTES = 512L * 1024L;
@@ -542,6 +546,9 @@ public class NodeService extends Service {
     public void onCreate() {
         super.onCreate();
         NodeState.get().serviceRunning = true;
+        // The price fetch identifies itself with this version
+        // (PriceStore, v4.2.2 B-9).
+        PriceStore.initUserAgent(this);
         createNotificationChannel();
         logSink = new LogSink(new File(getFilesDir(), "logs"));
         startNetworkWatch();
@@ -2242,9 +2249,10 @@ public class NodeService extends Service {
                 }
             }
             // A watch left over from a supervisor whose node exited
-            // on its own (that path stops the miner without taking
-            // it) is removed first, so listeners never accumulate
-            // across sessions.
+            // on its own is removed first, so listeners never
+            // accumulate across sessions. (The worker's exit path
+            // unregisters its own watch as well since the fix2
+            // follow-up; this covers any path that missed it.)
             MinerSupervisor old;
             synchronized (stateLock) {
                 old = thermalWatched;
@@ -4330,7 +4338,9 @@ public class NodeService extends Service {
                 // v4.1.0: the same observation, for the day's
                 // record (memory only; the file is written by the
                 // poller loop, outside this lock).
-                dailySampler().observePeers(peers);
+                dailySampler().observePeers(peers,
+                        SystemClock.elapsedRealtime(), rpcResponseWallMs,
+                        java.util.TimeZone.getDefault());
             }
             if (freshSyncing != null) {
                 lastKnownSyncing = freshSyncing;
@@ -4838,6 +4848,10 @@ public class NodeService extends Service {
     private void sampleDaily(int gen) {
         try {
             final long now = SystemClock.elapsedRealtime();
+            // The same moment on the sleep-free clock: the mining
+            // gap is measured on it, so a suspended stretch is
+            // never credited as mining time (v4.2.2 audit, L4).
+            final long nowUptime = SystemClock.uptimeMillis();
             final long cumUptimeMs;
             final long cumBlocks;
             final MiningLogic.MinerView view;
@@ -4860,7 +4874,7 @@ public class NodeService extends Service {
                 hashrate = snap.stats.hashrateHps;
             }
             DailyTrackStore.Sampler sampler = dailySampler();
-            if (sampler.tick(now, System.currentTimeMillis(),
+            if (sampler.tick(now, nowUptime, System.currentTimeMillis(),
                     java.util.TimeZone.getDefault(), cumUptimeMs, cumBlocks,
                     view, minerRunning, jobs, hashrate)) {
                 saveDaily(sampler);
@@ -4873,16 +4887,19 @@ public class NodeService extends Service {
     /**
      * The poller's last act: one more reading, from the stored
      * totals (the session's teardown has folded its uptime into
-     * them by now), and a save.
+     * them by now), and a save. The fold is the sampler's final
+     * one ({@code tickFinal}): a replaced poller can run this
+     * after its successor's session is already live, and it must
+     * not clear the miner baseline the live session is counting
+     * from (v4.2.2, audit I-6).
      */
     private void finishDailySampling() {
         try {
             DailyTrackStore.Sampler sampler = dailySampler();
-            sampler.tick(SystemClock.elapsedRealtime(),
+            sampler.tickFinal(SystemClock.elapsedRealtime(),
                     System.currentTimeMillis(),
                     java.util.TimeZone.getDefault(),
-                    TrackStore.uptimeMs(this), TrackStore.blockUpdates(this),
-                    null, false, 0, -1.0);
+                    TrackStore.uptimeMs(this), TrackStore.blockUpdates(this));
             saveDaily(sampler);
         } catch (Throwable ignored) {
             // As above.

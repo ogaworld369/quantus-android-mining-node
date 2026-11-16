@@ -2,6 +2,9 @@ package app.quantusnode.node;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
+import android.os.SystemClock;
+import android.provider.Settings;
 
 import app.quantusnode.node.depin.core.Json;
 
@@ -16,11 +19,18 @@ import java.util.Map;
  * The QTC price for the vision home (design section 2.4, spec
  * section 4.1): one HTTPS GET to CoinGecko's public API (asset
  * id "quantus", USD, with the 24 h change in the same response),
- * fetched at most every five minutes while the app runs — the
+ * fetched at most once an hour while the app runs — the
  * callers are the activity's UI tick and, since internal.23,
  * the node service's poller, so the price keeps refreshing
  * while the node runs even with no UI open — with a failure
- * backoff of 5, then 15 minutes (capped; see {@link PriceLogic}).
+ * backoff of 15, then 30, then 60 minutes (see
+ * {@link PriceLogic}). Scheduling and staleness run on the
+ * monotonic clock, persisted next to the wall time of each
+ * fetch, with the boot count beside it: a reboot is recognised
+ * by the count changing, and the wall clock takes over for the
+ * age (v4.2.2 audit, L2). A wall-clock jump can therefore
+ * neither trigger a fetch storm nor hide a stale value
+ * (v4.2.2, gap inventory B-4).
  * The last successful value and its fetch time persist
  * on-device, so a cold start shows the old value WITH its age,
  * never as if it were new (design section 2.5), and the last
@@ -37,6 +47,19 @@ public final class PriceStore {
     private static final String KEY_USD = "usd";
     private static final String KEY_CHANGE = "change24h";
     private static final String KEY_FETCHED_MS = "fetched_wall_ms";
+    /** The monotonic reading taken with the fetch above
+     *  (v4.2.2, gap inventory B-4): staleness is judged on this
+     *  clock, which no wall-clock setting can move. Absent in
+     *  saves written before v4.2.2 — those fall back to the
+     *  wall age, as they always did. */
+    private static final String KEY_FETCHED_ELAPSED_MS =
+            "fetched_elapsed_ms";
+    /** The boot the fetch above was taken in
+     *  (Settings.Global.BOOT_COUNT, v4.2.2 audit L2): the
+     *  monotonic reading is only comparable within one boot.
+     *  Absent in saves written before this — those fall back
+     *  to the wall age, as they always did. */
+    private static final String KEY_FETCHED_BOOT = "fetched_boot_count";
     private static final String KEY_HAS_CHANGE = "has_change";
     private static final String KEY_UPDATED_UNIX = "updated_unix";
     /** The most recent fetch failure, kept until the next
@@ -67,10 +90,46 @@ public final class PriceStore {
 
     private static final java.util.concurrent.atomic.AtomicBoolean
             IN_FLIGHT = new java.util.concurrent.atomic.AtomicBoolean();
-    private static volatile long nextAttemptWallMs;
+    /** When the next attempt is due, on the monotonic clock —
+     *  a wall-clock jump can neither rush nor delay it (B-4). */
+    private static volatile long nextAttemptElapsedMs;
     private static volatile int failures;
     /** Whether the most recent attempt of THIS process failed. */
     private static volatile boolean lastAttemptFailed;
+    /** The User-Agent sent with the fetch: "QuantusNode" until
+     *  a caller provides the app's version (v4.2.2, B-9) — it
+     *  said "QuantusNode/0.3" long after 0.3 was history. */
+    private static volatile String userAgent = "QuantusNode";
+
+    /** Provide the version the fetch identifies itself with,
+     *  read from the app's own package info. Called by the
+     *  service and the activity at creation; a failure leaves
+     *  the plain default in place. */
+    public static void initUserAgent(Context ctx) {
+        try {
+            String version = ctx.getPackageManager()
+                    .getPackageInfo(ctx.getPackageName(), 0).versionName;
+            if (version != null && !version.isEmpty()) {
+                userAgent = "QuantusNode/" + version;
+            }
+        } catch (PackageManager.NameNotFoundException | RuntimeException e) {
+            // The app's own package is always found in practice;
+            // a dying package manager must not take onCreate
+            // down with it (v4.2.2 audit, I6).
+        }
+    }
+
+    /** This boot's count (Settings.Global.BOOT_COUNT), or -1
+     *  when it cannot be read: the staleness judgement treats
+     *  -1 as "unknown boot" and falls back to the wall age. */
+    static int bootCount(Context ctx) {
+        try {
+            return Settings.Global.getInt(ctx.getContentResolver(),
+                    Settings.Global.BOOT_COUNT, -1);
+        } catch (RuntimeException e) {
+            return -1;
+        }
+    }
 
     private PriceStore() {
     }
@@ -139,8 +198,12 @@ public final class PriceStore {
         boolean hasChange = p.getBoolean(KEY_HAS_CHANGE, true);
         long updatedUnix = p.getLong(KEY_UPDATED_UNIX, -1);
         long fetched = p.getLong(KEY_FETCHED_MS, 0);
-        boolean stale = PriceLogic.isStale(fetched,
-                System.currentTimeMillis(), STALE_MS, lastAttemptFailed);
+        long fetchedElapsed = p.getLong(KEY_FETCHED_ELAPSED_MS, 0);
+        int fetchedBoot = p.getInt(KEY_FETCHED_BOOT, -1);
+        boolean stale = PriceLogic.isStale(fetched, fetchedElapsed,
+                fetchedBoot, System.currentTimeMillis(),
+                SystemClock.elapsedRealtime(), bootCount(ctx),
+                STALE_MS, lastAttemptFailed);
         return new Snapshot(true, usd, change, hasChange,
                 updatedUnix, fetched, stale);
     }
@@ -185,12 +248,12 @@ public final class PriceStore {
         if (!isEnabled(ctx)) {
             return;
         }
-        long now = System.currentTimeMillis();
+        long now = SystemClock.elapsedRealtime();
         // Residual F-25: the in-flight flag used to be a
         // volatile check-then-set, so two callers (the UI
         // tick and the service poller) could both pass and
         // fetch twice. The claim is atomic now.
-        if (now < nextAttemptWallMs
+        if (now < nextAttemptElapsedMs
                 || !IN_FLIGHT.compareAndSet(false, true)) {
             return;
         }
@@ -208,13 +271,16 @@ public final class PriceStore {
                         .putLong(KEY_UPDATED_UNIX, v.updatedUnix)
                         .putLong(KEY_FETCHED_MS,
                                 System.currentTimeMillis())
+                        .putLong(KEY_FETCHED_ELAPSED_MS,
+                                SystemClock.elapsedRealtime())
+                        .putInt(KEY_FETCHED_BOOT, bootCount(app))
                         .remove(KEY_LAST_ERROR)
                         .remove(KEY_LAST_ERROR_MS)
                         .apply();
                 failures = 0;
                 lastAttemptFailed = false;
-                nextAttemptWallMs =
-                        System.currentTimeMillis() + REFRESH_MS;
+                nextAttemptElapsedMs =
+                        SystemClock.elapsedRealtime() + REFRESH_MS;
             } catch (Exception e) {
                 failures++;
                 lastAttemptFailed = true;
@@ -238,7 +304,7 @@ public final class PriceStore {
                     // Recording the failure must never become
                     // a second failure.
                 }
-                nextAttemptWallMs = System.currentTimeMillis()
+                nextAttemptElapsedMs = SystemClock.elapsedRealtime()
                         + PriceLogic.backoffMs(failures);
             } finally {
                 IN_FLIGHT.set(false);
@@ -273,7 +339,7 @@ public final class PriceStore {
         try {
             c.setConnectTimeout(10_000);
             c.setReadTimeout(10_000);
-            c.setRequestProperty("User-Agent", "QuantusNode/0.3");
+            c.setRequestProperty("User-Agent", userAgent);
             c.setRequestProperty("Accept", "application/json");
             if (c.getResponseCode() != 200) {
                 throw new IllegalStateException(

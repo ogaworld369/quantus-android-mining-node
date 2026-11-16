@@ -428,28 +428,83 @@ public final class VisionLogicCheckMain {
     // ---------------- price logic (internal.23) ----------------
 
     private static void priceLogic() {
-        // Backoff: 5 min for the first failure, 15 min cap
-        // after that — the old 60-minute tier is gone.
-        checkEq("price backoff: 1st failure is 5 min",
-                300_000L, PriceLogic.backoffMs(1));
-        checkEq("price backoff: 2nd failure is 15 min",
-                900_000L, PriceLogic.backoffMs(2));
-        checkEq("price backoff: 3rd failure stays 15 min",
-                900_000L, PriceLogic.backoffMs(3));
-        checkEq("price backoff: 10th failure stays 15 min",
-                900_000L, PriceLogic.backoffMs(10));
+        // Backoff (v4.2.2, gap inventory B-4): 15 min for the
+        // first failure, 30 for the second, 60 — the ordinary
+        // fetch cadence — after that. A failing endpoint is
+        // retried no more often than a healthy one is refreshed;
+        // the failure itself is persisted, so the slower cadence
+        // hides nothing (the 2026-11-10 flattening to 5/15 was
+        // for the days when it was recorded nowhere).
+        checkEq("price backoff: 1st failure is 15 min",
+                900_000L, PriceLogic.backoffMs(1));
+        checkEq("price backoff: 2nd failure is 30 min",
+                1_800_000L, PriceLogic.backoffMs(2));
+        checkEq("price backoff: 3rd failure is 60 min",
+                3_600_000L, PriceLogic.backoffMs(3));
+        checkEq("price backoff: 10th failure stays 60 min",
+                3_600_000L, PriceLogic.backoffMs(10));
         // Staleness: age over the threshold, or a failed last
         // attempt; a never-fetched value is absent, not stale.
+        // The age runs on the monotonic clock when both elapsed
+        // readings exist AND both were taken in the same boot
+        // (v4.2.2 audit, L2); otherwise the wall clock decides.
         long staleMs = 600_000L;
         long t0 = 1_700_000_000_000L;
+        long e0 = 5_000_000L;
+        int b0 = 7;
         check("price stale: never fetched is not stale",
-                !PriceLogic.isStale(0, t0, staleMs, true));
+                !PriceLogic.isStale(0, 0, b0, t0, e0, b0, staleMs, true));
         check("price stale: fresh value, no failure",
-                !PriceLogic.isStale(t0, t0 + 300_000L, staleMs, false));
+                !PriceLogic.isStale(t0, e0, b0, t0 + 300_000L,
+                        e0 + 300_000L, b0, staleMs, false));
         check("price stale: age over the threshold",
-                PriceLogic.isStale(t0, t0 + 660_000L, staleMs, false));
+                PriceLogic.isStale(t0, e0, b0, t0 + 660_000L,
+                        e0 + 660_000L, b0, staleMs, false));
         check("price stale: last attempt failed",
-                PriceLogic.isStale(t0, t0 + 60_000L, staleMs, true));
+                PriceLogic.isStale(t0, e0, b0, t0 + 60_000L,
+                        e0 + 60_000L, b0, staleMs, true));
+        // The wall clock jumping an hour forwards must not age
+        // the value: the monotonic age (5 min) rules.
+        check("price stale: a wall jump forward does not age the value",
+                !PriceLogic.isStale(t0, e0, b0, t0 + 3_600_000L,
+                        e0 + 300_000L, b0, staleMs, false));
+        // Nor may a jump backwards freshen an old value: the
+        // stored fetch then reads as ahead of the wall clock,
+        // which is stale outright.
+        check("price stale: a wall jump back does not freshen the value",
+                PriceLogic.isStale(t0, e0, b0, t0 - 3_600_000L,
+                        e0 + 660_000L, b0, staleMs, false));
+        // A stored fetch time ahead of the wall clock is stale:
+        // a value from the future cannot be vouched for.
+        check("price stale: a fetch time in the future is stale",
+                PriceLogic.isStale(t0 + 3_600_000L, 0, b0, t0, e0,
+                        b0, staleMs, false));
+        // After a reboot the monotonic reading restarts, so it
+        // cannot be compared with the stored one: the wall age
+        // decides, as it always did. The two checks disagree the
+        // clocks on purpose, so the wall age is the only
+        // explanation: elapsed says old but the wall says fresh,
+        // and elapsed says fresh but the wall says old.
+        check("price stale: after a reboot the wall age decides (fresh)",
+                !PriceLogic.isStale(t0, e0, b0, t0 + 300_000L,
+                        e0 + 3_600_000L, b0 + 1, staleMs, false));
+        check("price stale: after a reboot the wall age decides (old)",
+                PriceLogic.isStale(t0, e0, b0, t0 + 660_000L,
+                        e0 + 60_000L, b0 + 1, staleMs, false));
+        // An unknown boot count (a save written before it was
+        // persisted, or a read that failed) falls back to the
+        // wall age too, whichever side is unknown.
+        check("price stale: unknown stored boot falls back to the wall age",
+                PriceLogic.isStale(t0, e0, -1, t0 + 660_000L,
+                        e0 + 60_000L, b0, staleMs, false));
+        check("price stale: unknown current boot falls back to the wall age",
+                !PriceLogic.isStale(t0, e0, b0, t0 + 300_000L,
+                        e0 + 3_600_000L, -1, staleMs, false));
+        // A save from before the elapsed reading existed (0)
+        // falls back to the wall age too.
+        check("price stale: no elapsed reading falls back to the wall age",
+                PriceLogic.isStale(t0, 0, b0, t0 + 660_000L, e0,
+                        b0, staleMs, false));
     }
 
     // ---------------- reconcile policy (internal.24) -----------

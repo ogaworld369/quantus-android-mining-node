@@ -10,12 +10,12 @@ The design concept is to make the node's pulse visible: live block/peer visualiz
 
 | | |
 |---|---|
-| Current release | **v4.2.1** (versionCode 67), published 2026-11-16 — [release page](https://github.com/ogaworld369/quantus-android-mining-node/releases/tag/v4.2.1) |
+| Current release | **v4.2.2** (versionCode 68), published 2026-11-16 — [release page](https://github.com/ogaworld369/quantus-android-mining-node/releases/tag/v4.2.2) |
 | First public release | v0.1.0, published 2026-11-04 |
 | Download | Signed APK from [GitHub Releases](https://github.com/ogaworld369/quantus-android-mining-node/releases) |
 | Requirements | Android 12 or later, arm64 device |
 | Verified device | Pixel 9a running GrapheneOS |
-| Languages | 9 (438 strings per language; see [docs/I18N.md](docs/I18N.md); native-speaker improvements are very welcome) |
+| Languages | 9 (447 strings per language; see [docs/I18N.md](docs/I18N.md); native-speaker improvements are very welcome) |
 | Telemetry listing | Opt-in only (off by default) |
 | Licence | Apache License 2.0 |
 
@@ -24,6 +24,10 @@ The design concept is to make the node's pulse visible: live block/peer visualiz
 - **It is** a full node for Quantus mainnet: it syncs, verifies every block itself, and relays data to peers. With mining switched on (v4.0.0, opt-in and off by default), the same node also validates and mines for the user's own rewards address.
 - **It is not** a wallet. It never handles wallet seed phrases and cannot spend funds. The one mining value it can hold is the rewards inner hash the user pastes in — a preimage that is published in block headers when mining and controls no assets by itself (see "Security first" below).
 - **New in v3.0 — activity recording (DePIN), built in.** Opt-in and off by default. With it on, the app keeps a signed record of the node's uptime and relay work, which you can export as a proof bundle file whenever you choose.
+
+## What's in v4.2.2
+
+- **A polish release: the remaining low findings of the v4.2.0 audit, its follow-up checks and the gap inventory, fixed — except the notification bidi item (phase-1 L-7) and FC-3, which remain as accepted items.** The member card's streak is labelled as what it is — the longest consecutive run; the Storage page also shows the device's free space; the donation sheet gains a copy button, the sheets' close buttons are named for screen readers, and the content behind an open sheet is hidden from accessibility services; the settings lock also covers the price switch in the price sheet, and the External information page says why it is disabled; value rows and the home today row share the stacking row layout, so long values in verbose languages no longer crush their labels; price freshness is judged on the monotonic clock and failed fetches retry after 15, then 30, then 60 minutes; the daily record is written at most every 15 minutes; mining time is counted across delayed polls but never across a suspend, a miner restart button is disabled while its thermal stop is latched, and a thermal stop is requested before its log line is written, so an Error escaping the log cannot leave the miner running. Details: [CHANGELOG.md](CHANGELOG.md).
 
 ## What's in v4.2.1
 
@@ -74,7 +78,7 @@ Details and the full version history: [CHANGELOG.md](CHANGELOG.md).
 
 ## Download
 
-Get the signed APK from [GitHub Releases](https://github.com/ogaworld369/quantus-android-mining-node/releases). The current release is [v4.2.1](https://github.com/ogaworld369/quantus-android-mining-node/releases/tag/v4.2.1); its APK size and SHA-256 are listed on the release page (and in the release records in [docs/RELEASE.md](docs/RELEASE.md)), so you can verify your download. v4.2.1 installs over v4.2.0 keeping settings and records.
+Get the signed APK from [GitHub Releases](https://github.com/ogaworld369/quantus-android-mining-node/releases). The current release is [v4.2.2](https://github.com/ogaworld369/quantus-android-mining-node/releases/tag/v4.2.2); its APK size and SHA-256 are listed on the release page (and in the release records in [docs/RELEASE.md](docs/RELEASE.md)), so you can verify your download. v4.2.2 installs over v4.2.1 keeping settings and records.
 
 ## Usage
 
@@ -82,7 +86,7 @@ New to the app? Start with the Usage Guide — available in all 9 languages the 
 
 ## Status
 
-- Publicly released since 2026-11-04; the current release is v4.2.1 (above). Per-version details live in the [CHANGELOG](CHANGELOG.md), not here.
+- Publicly released since 2026-11-04; the current release is v4.2.2 (above). Per-version details live in the [CHANGELOG](CHANGELOG.md), not here.
 - Still being watched on the reference device: the remaining on-device checks — where the pruned database size plateaus, and battery/heat over long uptimes.
 - Release gates: [docs/RELEASE.md](docs/RELEASE.md). Design: [docs/DESIGN.md](docs/DESIGN.md).
 

@@ -188,6 +188,7 @@ public class MainActivity extends Activity {
     // How-to-read sheet (stage 1 spec S1-02): an overlay panel
     // on the network root, built once, filled when opened.
     private FrameLayout readSheetOverlay;
+    private ScrollView networkScrollView;
     private TextView readSheetBestView;
     private TextView readSheetFactsView;
     // Ticker (stage 2 spec S2-03): in-memory only, newest
@@ -237,6 +238,11 @@ public class MainActivity extends Activity {
     private TextView priceRowValue;
     private FrameLayout priceSheetOverlay;
     private ToggleView priceFetchToggle;
+    /** The price sheet's switch row and its locked notice
+     *  (v4.2.2 audit, L6): the lock closes the row with the
+     *  toggle, and the sheet says why, as the settings pages do. */
+    private LinearLayout priceSheetSwitchRow;
+    private TextView priceSheetLockedView;
     private FrameLayout donateSheetOverlay;
     private LinearLayout priceSheetPanel;
     private LinearLayout donateSheetPanel;
@@ -251,6 +257,7 @@ public class MainActivity extends Activity {
     private TextView hubLanguageValue;
     private ToggleView priceSwitch;
     private LinearLayout priceSwitchRow;
+    private TextView priceLockedView;
 
     // Home (vision): age of the last block observation.
     private TextView vhBestAgoView;
@@ -460,6 +467,7 @@ public class MainActivity extends Activity {
     private TextView storageLogsValue;
     private TextView storageDepinValue;
     private TextView storageTotalValue;
+    private TextView storageFreeValue;
     private TextView storageRunningNote;
     private Button storageResyncButton;
     private TextView storageNeedsStopNote;
@@ -616,6 +624,9 @@ public class MainActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        // The price fetch identifies itself with this version
+        // (PriceStore, v4.2.2 B-9).
+        PriceStore.initUserAgent(this);
         // Transfer picker hand-offs survive recreation: the
         // document picker's result is delivered to the RECREATED
         // activity, and the pending kind / save source are plain
@@ -736,17 +747,23 @@ public class MainActivity extends Activity {
         // screen; back closes it before anything else moves.
         if (readSheetOverlay != null
                 && readSheetOverlay.getVisibility() == View.VISIBLE) {
-            readSheetOverlay.setVisibility(View.GONE);
+            closeSheet(readSheetOverlay);
             return;
         }
         if (priceSheetOverlay != null
                 && priceSheetOverlay.getVisibility() == View.VISIBLE) {
-            priceSheetOverlay.setVisibility(View.GONE);
+            closeSheet(priceSheetOverlay);
             return;
         }
         if (donateSheetOverlay != null
                 && donateSheetOverlay.getVisibility() == View.VISIBLE) {
-            donateSheetOverlay.setVisibility(View.GONE);
+            closeSheet(donateSheetOverlay);
+            return;
+        }
+        if (currentScreen == SCREEN_SET_LICENSES) {
+            // The licences page is a child of About, not of the
+            // hub: back returns to About (v4.2.2 audit, I10).
+            showScreen(SCREEN_SET_ABOUT);
             return;
         }
         if (isSettingsPage(currentScreen)) {
@@ -942,15 +959,9 @@ public class MainActivity extends Activity {
         // UI/UX phase 0: the how-to-read sheet never survives a
         // screen change. UI/UX phase 1: neither do the home
         // sheets.
-        if (readSheetOverlay != null) {
-            readSheetOverlay.setVisibility(View.GONE);
-        }
-        if (priceSheetOverlay != null) {
-            priceSheetOverlay.setVisibility(View.GONE);
-        }
-        if (donateSheetOverlay != null) {
-            donateSheetOverlay.setVisibility(View.GONE);
-        }
+        closeSheet(readSheetOverlay);
+        closeSheet(priceSheetOverlay);
+        closeSheet(donateSheetOverlay);
         if (isTabScreen(screen)) {
             tabScreen = screen;
         }
@@ -974,9 +985,12 @@ public class MainActivity extends Activity {
         View incoming = screens[screen];
         if (incoming != null && previous >= 0 && previous != screen) {
             if (motionEnabled()) {
-                boolean rtl = getResources().getConfiguration()
-                        .getLayoutDirection()
-                        == View.LAYOUT_DIRECTION_RTL;
+                // The slide follows the language the app is
+                // showing, not the device's: with the app in
+                // Arabic on an LTR system (or the reverse) the
+                // system direction slid pages the wrong way
+                // (v4.2.2, audit L-2).
+                boolean rtl = I18n.isRtl(this);
                 int dirSign = rtl ? -1 : 1;
                 if (isTabScreen(screen) && isTabScreen(previous)) {
                     incoming.setAlpha(0f);
@@ -987,7 +1001,18 @@ public class MainActivity extends Activity {
                                     new DecelerateInterpolator())
                             .start();
                 } else if (isTabScreen(screen)
-                        || screen == SCREEN_SETTINGS) {
+                        || (screen == SCREEN_SETTINGS
+                                && isSettingsPage(previous))
+                        || (screen == SCREEN_SET_ABOUT
+                                && previous == SCREEN_SET_LICENSES)) {
+                    // Back to a tab, or back from a settings page
+                    // to the hub — and back from the licences page
+                    // to its parent, About: the returning slide.
+                    // Arriving at the hub FROM a tab is a forward
+                    // move and takes the push slide below — it used
+                    // to be treated as a return unconditionally
+                    // (v4.2.2, audit L-1; the licences return is
+                    // v4.2.2 audit, I10).
                     incoming.setAlpha(0f);
                     incoming.setTranslationX(-dirSign * dp(24));
                     incoming.animate().alpha(1f).translationX(0f)
@@ -1352,6 +1377,13 @@ public class MainActivity extends Activity {
                 I18n.get(this, StringsTable.VISION_BEST));
         card.addView(vhBestLabel, matchLpTop(32));
         vhBestValue = text("", 56, Tokens.CONTENT, true);
+        // The refresh fits this number in pixels (fitSingleLinePx,
+        // starting at 56dp); build it at that same pixel size so
+        // the first frame does not jump when the system font
+        // scale is not 1.0 — as an sp size it started larger
+        // (v4.2.2, audit L-11).
+        vhBestValue.setTextSize(
+                android.util.TypedValue.COMPLEX_UNIT_PX, dp(56));
         vhBestValue.setTypeface(VisionFonts.displayBold(this));
         card.addView(vhBestValue, matchLpTop(8));
         // Age of the last block observation, under the number
@@ -1445,20 +1477,42 @@ public class MainActivity extends Activity {
         // bar for a record it never claimed to keep.
         homeTodayRow = new LinearLayout(this);
         homeTodayRow.setOrientation(LinearLayout.VERTICAL);
+        // A row like its siblings (design 7.1): an InfoRowView
+        // for the label and value — so a long value stacks
+        // instead of crushing the label — plus the chevron the
+        // design shows, and a tap that opens the record tab
+        // (v4.2.2, audit L-3). The 2 dp bar stays along the
+        // row's bottom edge.
         LinearLayout todayInner = new LinearLayout(this);
         todayInner.setOrientation(LinearLayout.HORIZONTAL);
         todayInner.setGravity(Gravity.CENTER_VERTICAL);
-        todayInner.setMinimumHeight(dp(56));
-        todayInner.setPadding(0, dp(12), 0, dp(12));
+        InfoRowView todayInfo = new InfoRowView(this);
         TextView todayLabel = text(
                 I18n.get(this, StringsTable.HOME_TODAY),
                 16, Tokens.CONTENT, false);
-        todayInner.addView(todayLabel, new LinearLayout.LayoutParams(
-                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
-        homeTodayText = text("", 14, Tokens.MUTED, false);
+        todayInfo.addView(todayLabel);
+        homeTodayText = text("", 16, Tokens.CONTENT, false);
+        homeTodayText.setTypeface(VisionFonts.mono(this));
         homeTodayText.setGravity(Gravity.END);
-        todayInner.addView(homeTodayText);
+        todayInfo.addView(homeTodayText);
+        todayInner.addView(todayInfo, new LinearLayout.LayoutParams(
+                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        TextView todayChev = text(I18n.isRtl(this) ? "‹" : "›",
+                22, Tokens.FAINT, false);
+        LinearLayout.LayoutParams tclp = new LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT);
+        tclp.setMarginStart(dp(12));
+        todayInner.addView(todayChev, tclp);
         homeTodayRow.addView(todayInner, matchLp());
+        homeTodayRow.setBackground(ripple(null));
+        homeTodayRow.setClickable(true);
+        homeTodayRow.setFocusable(true);
+        // The row shows today's record, so it opens the record
+        // (member) tab, where the checkpoints and the streak
+        // live — not the cumulative Track screen (v4.2.2 audit,
+        // L5).
+        homeTodayRow.setOnClickListener(v -> showScreen(SCREEN_MEMBER));
         homeTodayTrack = new FrameLayout(this);
         homeTodayTrack.setBackground(rounded(
                 Color.rgb(0x22, 0x22, 0x2A), 1,
@@ -1482,7 +1536,7 @@ public class MainActivity extends Activity {
         homeMiningText = valueRow(root,
                 I18n.get(this, StringsTable.MINING_SECTION), 0,
                 v -> openMiningSettings());
-        homeMiningRow = (LinearLayout) homeMiningText.getParent();
+        homeMiningRow = (LinearLayout) homeMiningText.getTag();
         homeMiningRow.setVisibility(View.GONE);
 
         // Price: a row (design 7.1; decided in 14-1). The big
@@ -1522,6 +1576,57 @@ public class MainActivity extends Activity {
         return (ScrollView) screens[SCREEN_HOME];
     }
 
+    /** Hide the content behind an opening sheet from
+     *  accessibility services (v4.2.2, audit L-10): a sheet that
+     *  TalkBack can see through is not modal, whatever it looks
+     *  like. The price and donation sheets sit at the activity
+     *  level, so every screen and the nav are hidden; the read
+     *  sheet lives inside the network screen, so only its
+     *  sibling scroll view and the nav are hidden — hiding the
+     *  screen itself would hide the sheet with it. */
+    private void hideBackgroundForSheet(boolean wholeActivity) {
+        int flag = View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS;
+        if (wholeActivity) {
+            for (View s : screens) {
+                if (s != null) {
+                    s.setImportantForAccessibility(flag);
+                }
+            }
+        } else if (networkScrollView != null) {
+            networkScrollView.setImportantForAccessibility(flag);
+        }
+        if (bottomNav != null) {
+            bottomNav.setImportantForAccessibility(flag);
+        }
+    }
+
+    /** Undo {@link #hideBackgroundForSheet}. Every sheet close
+     *  path funnels through {@link #closeSheet}, so the restore
+     *  cannot be forgotten on one of them. */
+    private void restoreBackgroundAfterSheet() {
+        int flag = View.IMPORTANT_FOR_ACCESSIBILITY_AUTO;
+        for (View s : screens) {
+            if (s != null) {
+                s.setImportantForAccessibility(flag);
+            }
+        }
+        if (networkScrollView != null) {
+            networkScrollView.setImportantForAccessibility(flag);
+        }
+        if (bottomNav != null) {
+            bottomNav.setImportantForAccessibility(flag);
+        }
+    }
+
+    /** Close a sheet overlay (null-safe) and restore the
+     *  background's accessibility reachability. */
+    private void closeSheet(FrameLayout overlay) {
+        if (overlay != null) {
+            overlay.setVisibility(View.GONE);
+        }
+        restoreBackgroundAfterSheet();
+    }
+
     /** One home sheet's shell, in the how-to-read sheet's shape:
      *  a scrim overlay (a tap outside closes it) with a bottom
      *  panel; the panel is handed back through panelOut for the
@@ -1530,14 +1635,18 @@ public class MainActivity extends Activity {
                                    LinearLayout[] panelOut) {
         FrameLayout overlay = new FrameLayout(this);
         overlay.setBackgroundColor(Color.argb(160, 0, 0, 0));
+        // The sheet names itself to accessibility services
+        // (v4.2.2 audit, I4): once the background is hidden,
+        // TalkBack's focus would otherwise drop with no word
+        // that a sheet appeared.
+        overlay.setAccessibilityPaneTitle(title);
         // Above the bottom nav (elevation 12): the scrim covers
         // the pill and the sheet is truly modal (audit H-2 - the
         // panel used to end under the pill, which hid the
         // donation address and stole its taps).
         overlay.setElevation(dp(16));
         overlay.setVisibility(View.GONE);
-        overlay.setOnClickListener(
-                v -> overlay.setVisibility(View.GONE));
+        overlay.setOnClickListener(v -> closeSheet(overlay));
         LinearLayout panel = new LinearLayout(this);
         panel.setOrientation(LinearLayout.VERTICAL);
         panel.setBackground(cardBg());
@@ -1553,8 +1662,11 @@ public class MainActivity extends Activity {
                 0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
         TextView close = text("✕", 16, Tokens.MUTED, false);
         close.setGravity(Gravity.CENTER);
-        close.setOnClickListener(
-                v -> overlay.setVisibility(View.GONE));
+        // The glyph alone says nothing to a screen reader
+        // (v4.2.2, audit L-10).
+        close.setContentDescription(
+                I18n.get(this, StringsTable.SHEET_CLOSE));
+        close.setOnClickListener(v -> closeSheet(overlay));
         head.addView(close, new LinearLayout.LayoutParams(dp(48), dp(48)));
         panel.addView(head, matchLp());
         FrameLayout.LayoutParams plp = new FrameLayout.LayoutParams(
@@ -1618,12 +1730,14 @@ public class MainActivity extends Activity {
         });
         swRow.addView(priceFetchToggle,
                 new LinearLayout.LayoutParams(dp(52), dp(48)));
-        swRow.setOnClickListener(v -> {
-            if (priceFetchToggle.isEnabled()) {
-                priceFetchToggle.toggle();
-            }
-        });
+        swRow.setOnClickListener(v -> priceFetchToggle.performClick());
+        priceSheetSwitchRow = swRow;
         panel.addView(swRow, matchLpTop(16));
+        priceSheetLockedView = text(I18n.get(
+                this, StringsTable.SETTINGS_LOCKED_NOTICE),
+                14, Tokens.FAINT, false);
+        priceSheetLockedView.setVisibility(View.GONE);
+        panel.addView(priceSheetLockedView, matchLpTop(4));
         TextView disc = text(
                 I18n.get(this, StringsTable.PRICE_DISCLOSURE),
                 13, Tokens.MUTED, false);
@@ -1638,12 +1752,32 @@ public class MainActivity extends Activity {
         priceFetchToggle.setChecked(PriceStore.isEnabled(this));
         refreshPriceViews();
         priceSheetOverlay.setVisibility(View.VISIBLE);
+        hideBackgroundForSheet(true);
         animateSheetIn(priceSheetOverlay, priceSheetPanel);
+    }
+
+    /** Copy the donation address, with a toast as the receipt:
+     *  the address tap and the sheet's copy button do exactly
+     *  this (the button makes the action visible instead of
+     *  leaving it to be discovered — v4.2.2, audit L-10). */
+    private void copyDonateAddress() {
+        android.content.ClipboardManager cm =
+                (android.content.ClipboardManager)
+                        getSystemService(Context.CLIPBOARD_SERVICE);
+        if (cm != null) {
+            cm.setPrimaryClip(android.content.ClipData.newPlainText(
+                    I18n.get(this, StringsTable.DONATE_TITLE),
+                    DONATE_ADDRESS));
+            android.widget.Toast.makeText(this,
+                    I18n.get(this, StringsTable.DONATE_COPIED),
+                    android.widget.Toast.LENGTH_SHORT).show();
+        }
     }
 
     /** The donation sheet (decided in 14-9): the voluntary note
      *  and the address; tapping the address copies it, with a
-     *  toast as the receipt. The app never sends anything to it
+     *  toast as the receipt, and an explicit copy button says so
+     *  (v4.2.2, audit L-10). The app never sends anything to it
      *  on its own. The QR joins in v4.4.0 (design 10.4). */
     private void buildDonateSheet(FrameLayout container) {
         LinearLayout[] panelBox = new LinearLayout[1];
@@ -1662,25 +1796,18 @@ public class MainActivity extends Activity {
         addr.setClickable(true);
         addr.setFocusable(true);
         addr.setPadding(0, dp(8), 0, dp(8));
-        addr.setOnClickListener(v -> {
-            android.content.ClipboardManager cm =
-                    (android.content.ClipboardManager)
-                            getSystemService(Context.CLIPBOARD_SERVICE);
-            if (cm != null) {
-                cm.setPrimaryClip(android.content.ClipData.newPlainText(
-                        I18n.get(this, StringsTable.DONATE_TITLE),
-                        DONATE_ADDRESS));
-                android.widget.Toast.makeText(this,
-                        I18n.get(this, StringsTable.DONATE_COPIED),
-                        android.widget.Toast.LENGTH_SHORT).show();
-            }
-        });
+        addr.setOnClickListener(v -> copyDonateAddress());
         panel.addView(addr, matchLpTop(8));
+        Button copyButton = linkButton(
+                I18n.get(this, StringsTable.DONATE_COPY),
+                v -> copyDonateAddress());
+        panel.addView(copyButton, matchLpTop(8));
     }
 
     private void openDonateSheet() {
         if (donateSheetOverlay != null) {
             donateSheetOverlay.setVisibility(View.VISIBLE);
+            hideBackgroundForSheet(true);
             animateSheetIn(donateSheetOverlay, donateSheetPanel);
         }
     }
@@ -1697,6 +1824,10 @@ public class MainActivity extends Activity {
         float density = getResources().getDisplayMetrics().density;
 
         ScrollView sv = new ScrollView(this);
+        // Kept in a field: while the read sheet is open, this
+        // scroll view is the background accessibility hides
+        // (the sheet is its sibling inside root).
+        networkScrollView = sv;
         sv.setBackgroundColor(Tokens.VOID);
         root.addView(sv, new FrameLayout.LayoutParams(
                 FrameLayout.LayoutParams.MATCH_PARENT,
@@ -1835,7 +1966,7 @@ public class MainActivity extends Activity {
         readSheetOverlay.setBackgroundColor(Color.argb(160, 0, 0, 0));
         readSheetOverlay.setVisibility(View.GONE);
         readSheetOverlay.setOnClickListener(
-                v -> readSheetOverlay.setVisibility(View.GONE));
+                v -> closeSheet(readSheetOverlay));
         LinearLayout panel = new LinearLayout(this);
         readSheetPanel = panel;
         panel.setOrientation(LinearLayout.VERTICAL);
@@ -1854,8 +1985,11 @@ public class MainActivity extends Activity {
                 0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
         TextView close = text("✕", 16, Tokens.MUTED, false);
         close.setGravity(Gravity.CENTER);
-        close.setOnClickListener(
-                v -> readSheetOverlay.setVisibility(View.GONE));
+        // The glyph alone says nothing to a screen reader
+        // (v4.2.2, audit L-10).
+        close.setContentDescription(
+                I18n.get(this, StringsTable.SHEET_CLOSE));
+        close.setOnClickListener(v -> closeSheet(readSheetOverlay));
         head.addView(close, new LinearLayout.LayoutParams(dp(48), dp(48)));
         panel.addView(head, matchLp());
         readSheetBestView = text("", 15, Tokens.CONTENT, false);
@@ -1916,6 +2050,7 @@ public class MainActivity extends Activity {
                 StringsTable.FIELD_FACTS_FMT,
                 peersText, obsText, upText));
         readSheetOverlay.setVisibility(View.VISIBLE);
+        hideBackgroundForSheet(false);
         animateSheetIn(readSheetOverlay, readSheetPanel);
     }
 
@@ -2501,9 +2636,8 @@ public class MainActivity extends Activity {
         // entirely separate from node operation (integration step 2).
         // The toggle talks only to the DepinModule facade; the rows
         // below it are a read-only view of its latest status.
-        TextView depinHeading = text(I18n.get(
-                this, StringsTable.SETTINGS_DEPIN_SECTION), 16, Tokens.MUTED, true);
-        root.addView(depinHeading, matchLpTop(8));
+        // (No section heading of its own: the page header above
+        // already carries this title — v4.2.2, audit L-9.)
         depinSwitch = settingsSwitch(root, 8, ID_ANCHOR_DEPIN,
                 I18n.get(this, StringsTable.SETTINGS_DEPIN_TOGGLE),
                 false,
@@ -2623,12 +2757,11 @@ public class MainActivity extends Activity {
         // re-presentation) live collapsed under "other actions".
         // Every value shown at the confirmation step is a full
         // value.
-        TextView transferHeading = text(I18n.get(
-                this, StringsTable.DEPIN_TRANSFER_SECTION), 16, Tokens.MUTED, true);
-        root.addView(transferHeading, matchLpTop(16));
+        // (No section heading of its own: the page header above
+        // already carries this title — v4.2.2, audit L-9.)
         TextView transferNote = text(I18n.get(
                 this, StringsTable.DEPIN_TRANSFER_NOTE), 14, Tokens.FAINT, false);
-        root.addView(transferNote, matchLpTop(4));
+        root.addView(transferNote, matchLpTop(8));
         depinTransferLockedView = text(I18n.get(
                 this, StringsTable.DEPIN_TRANSFER_LOCKED), 14, Tokens.FAINT, false);
         depinTransferLockedView.setVisibility(View.GONE);
@@ -2797,6 +2930,12 @@ public class MainActivity extends Activity {
         TextView priceNote = text(I18n.get(
                 this, StringsTable.PRICE_DISCLOSURE), 14, Tokens.FAINT, false);
         root.addView(priceNote, matchLpTop(4));
+        // The same "why it is disabled" notice the other locked
+        // sections show (v4.2.2, audit L-4).
+        priceLockedView = text(I18n.get(
+                this, StringsTable.SETTINGS_LOCKED_NOTICE), 14, Tokens.FAINT, false);
+        priceLockedView.setVisibility(View.GONE);
+        root.addView(priceLockedView, matchLpTop(4));
         return (ScrollView) screens[SCREEN_SET_EXTERNAL];
     }
 
@@ -2868,9 +3007,8 @@ public class MainActivity extends Activity {
      * stays, and shows the answer. It never starts the node.
      */
     private void buildStorageSection(LinearLayout root) {
-        TextView heading = text(I18n.get(
-                this, StringsTable.STORAGE_SECTION), 16, Tokens.MUTED, true);
-        root.addView(heading, matchLpTop(8));
+        // No section heading: the page header already carries
+        // this title (v4.2.2, audit L-9).
         storageChainDbValue = infoRow(root, I18n.get(
                 this, StringsTable.STORAGE_LABEL_CHAIN_DB), false);
         storageNodeValue = infoRow(root, I18n.get(
@@ -2881,6 +3019,12 @@ public class MainActivity extends Activity {
                 this, StringsTable.STORAGE_LABEL_DEPIN), true);
         storageTotalValue = infoRow(root, I18n.get(
                 this, StringsTable.STORAGE_LABEL_TOTAL), true);
+        // The device's free space under the total (gap
+        // inventory A-20): the reading the diagnostic summary
+        // already takes, so "how much room is left" is answered
+        // where the sizes are.
+        storageFreeValue = infoRow(root, I18n.get(
+                this, StringsTable.STORAGE_FREE), true);
         storageRunningNote = text(I18n.get(
                 this, StringsTable.STORAGE_RUNNING_NOTE), 14, Tokens.FAINT, false);
         storageRunningNote.setVisibility(View.GONE);
@@ -2956,6 +3100,18 @@ public class MainActivity extends Activity {
                 storageText(u, u == null ? 0 : u.depinBytes));
         setTextIfChanged(storageTotalValue,
                 storageText(u, u == null ? 0 : u.totalBytes));
+        // Free space is a live reading, not part of the measured
+        // walk: it is shown as itself even while the sizes above
+        // still say "measuring".
+        long freeBytes = -1;
+        try {
+            freeBytes = getFilesDir().getUsableSpace();
+        } catch (Throwable ignored) {
+            // The row shows "unavailable".
+        }
+        setTextIfChanged(storageFreeValue, freeBytes < 0
+                ? I18n.get(this, StringsTable.VALUE_UNAVAILABLE)
+                : DiagShare.formatBytesEn(freeBytes));
         // A running node's database is open and moving: say that
         // the figures are estimates then.
         storageRunningNote.setVisibility(
@@ -3136,9 +3292,8 @@ public class MainActivity extends Activity {
      * only fills them.
      */
     private void buildMiningSection(LinearLayout root) {
-        TextView heading = text(I18n.get(
-                this, StringsTable.MINING_SECTION), 16, Tokens.MUTED, true);
-        root.addView(heading, matchLpTop(8));
+        // No section heading: the page header already carries
+        // this title (v4.2.2, audit L-9).
         miningSwitch = settingsSwitch(root, 8, ID_ANCHOR_MINING,
                 I18n.get(this, StringsTable.MINING_TOGGLE),
                 NodeSettings.miningEnabled(this),
@@ -3169,7 +3324,7 @@ public class MainActivity extends Activity {
                         showRewardsDialog();
                     }
                 });
-        miningRewardsRow = (LinearLayout) miningRewardsValue.getParent();
+        miningRewardsRow = (LinearLayout) miningRewardsValue.getTag();
         miningRewardsPendingView = text("", 14, Tokens.FLARE, false);
         miningRewardsPendingView.setVisibility(View.GONE);
         root.addView(miningRewardsPendingView, matchLpTop(0));
@@ -3180,7 +3335,7 @@ public class MainActivity extends Activity {
                         showWorkersDialog();
                     }
                 });
-        miningWorkersRow = (LinearLayout) miningWorkersValue.getParent();
+        miningWorkersRow = (LinearLayout) miningWorkersValue.getTag();
         miningWorkersPendingView = text("", 14, Tokens.FLARE, false);
         miningWorkersPendingView.setVisibility(View.GONE);
         root.addView(miningWorkersPendingView, matchLpTop(0));
@@ -3265,34 +3420,39 @@ public class MainActivity extends Activity {
 
     /**
      * A tappable settings row with a value: label at the start, the
-     * current value and a chevron at the end — the display-name
-     * row's layout. Returns the value view; the row is its parent.
+     * current value and a chevron at the end. The label/value pair
+     * is an {@link InfoRowView} — the same base as the read-only
+     * {@link #infoRow} — so a long value in a verbose language
+     * stacks under the label instead of crushing it (design 7.1:
+     * value rows are InfoRowView + chevron; v4.2.2, audit L-3).
+     * The label reads as content, like {@link #navRow}'s: a row
+     * that can be tapped is navigation, not data. Returns the
+     * value view; the row itself is the value's tag.
      */
     private TextView valueRow(LinearLayout parent, String label, int topDp,
                               View.OnClickListener click) {
         LinearLayout r = new LinearLayout(this);
         r.setOrientation(LinearLayout.HORIZONTAL);
         r.setGravity(Gravity.CENTER_VERTICAL);
-        r.setMinimumHeight(dp(56));
-        r.setPadding(0, dp(12), 0, dp(12));
         r.setBackground(ripple(null));
         r.setClickable(true);
         r.setFocusable(true);
         r.setOnClickListener(click);
-        TextView l = text(label, 16, Tokens.MUTED, false);
-        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
-                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
-        lp.setMarginEnd(dp(24));
-        r.addView(l, lp);
+        InfoRowView info = new InfoRowView(this);
+        TextView l = text(label, 16, Tokens.CONTENT, false);
+        info.addView(l);
         TextView v = text("", 16, Tokens.CONTENT, false);
         v.setGravity(Gravity.END);
-        r.addView(v);
+        info.addView(v);
+        r.addView(info, new LinearLayout.LayoutParams(
+                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
         TextView chev = text(I18n.isRtl(this) ? "‹" : "›", 22, Tokens.FAINT, false);
         LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT);
         clp.setMarginStart(dp(12));
         r.addView(chev, clp);
+        v.setTag(r);
         parent.addView(r, matchLpTop(topDp));
         return v;
     }
@@ -3779,7 +3939,15 @@ public class MainActivity extends Activity {
             setTextIfChanged(miningAddressValue, stats.rewardsAddress != null
                     ? stats.rewardsAddress
                     : I18n.get(this, StringsTable.MINING_ADDRESS_PENDING));
-            miningRestartButton.setEnabled(view != null && !locked);
+            // While the session's thermal latch is held, a miner
+            // restart cannot start anything — the supervisor
+            // refuses until the user's next node start — so the
+            // button goes inert instead of sitting enabled and
+            // doing nothing (v4.2.2, final-check FC-8). The
+            // state text above the button already names the
+            // thermal stop as the cause.
+            miningRestartButton.setEnabled(view != null && !locked
+                    && !(snap != null && snap.thermalStopped));
             StringBuilder tail = new StringBuilder();
             if (snap != null) {
                 for (String line : snap.logTail) {
@@ -3931,11 +4099,7 @@ public class MainActivity extends Activity {
         toggle.setChecked(checked);
         toggle.setOnCheckedChangeListener(listener);
         row.addView(toggle, new LinearLayout.LayoutParams(dp(52), dp(48)));
-        row.setOnClickListener(v -> {
-            if (toggle.isEnabled()) {
-                toggle.toggle();
-            }
-        });
+        row.setOnClickListener(v -> toggle.performClick());
         root.addView(row, matchLpTop(topDp));
         return toggle;
     }
@@ -3960,6 +4124,26 @@ public class MainActivity extends Activity {
         }
         if (priceSwitchRow != null) {
             priceSwitchRow.setEnabled(!locked);
+        }
+        if (priceFetchToggle != null) {
+            // The same switch lives in the price sheet; the lock
+            // closes it there too (v4.2.2, audit L-4).
+            priceFetchToggle.setEnabled(!locked);
+        }
+        if (priceSheetSwitchRow != null) {
+            // The row is the tap target around the toggle; locking
+            // must close both, or the row would keep its click
+            // sound and TalkBack would still offer it while the
+            // toggle itself does nothing (v4.2.2 audit, L6).
+            priceSheetSwitchRow.setEnabled(!locked);
+        }
+        if (priceSheetLockedView != null) {
+            priceSheetLockedView.setVisibility(
+                    locked ? View.VISIBLE : View.GONE);
+        }
+        if (priceLockedView != null) {
+            priceLockedView.setVisibility(
+                    locked ? View.VISIBLE : View.GONE);
         }
         if (depinRow != null) {
             // Same as the telemetry row: the row is the tap target
@@ -5587,8 +5771,9 @@ public class MainActivity extends Activity {
                 : "\u2014");
         memCpsValue.setText(UiLogic.grouped(ds.checkpointCount));
         memDaysValue.setText(ds.longestStreakDays >= 0
-                ? I18n.format(this, StringsTable.VISION_DAYS_VAL,
-                        UiLogic.grouped(ds.longestStreakDays))
+                ? UiLogic.quantityText(I18n.effectiveTag(this),
+                        StringsTable.VISION_DAYS_VAL,
+                        ds.longestStreakDays)
                 : "\u2014");
         for (TextView lab : statLabelViews) {
             fitSingleLinePx(lab, 12f, 10f, 8f);
@@ -6230,7 +6415,7 @@ public class MainActivity extends Activity {
                 14, Tokens.FAINT, false);
         t.setClickable(true);
         t.setFocusable(true);
-        t.setMinHeight(dp(40));
+        t.setMinHeight(dp(48));
         t.setGravity(Gravity.CENTER_VERTICAL);
         t.setOnClickListener(v -> {
             boolean expanded = receiver

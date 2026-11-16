@@ -329,7 +329,10 @@ public final class StringsTable {
     public static final String VISION_SINCE = "since";
     public static final String VISION_CPS = "cps";
     public static final String VISION_DAYS = "days";
-    /** Format: %1$s = recorded-days count, already formatted. */
+    /** Quantity base key for the recorded-days count: the
+     *  stored keys are "days_val.<category>", resolved
+     *  through {@link #quantity} — never with get() directly.
+     *  Format: %1$s = the count, already formatted. */
     public static final String VISION_DAYS_VAL = "days_val";
     /** Format: %1$s = last successful fetch time (HH:mm). */
     public static final String VISION_PRICE_STALE = "price_stale";
@@ -530,6 +533,8 @@ public final class StringsTable {
     public static final String DONATE_NOTE = "donate_note";
     /** Toast shown when the donation address is copied. */
     public static final String DONATE_COPIED = "donate_copied";
+    /** Donation sheet: the copy button's label (v4.2.2, audit L-10). */
+    public static final String DONATE_COPY = "donate_copy";
     /** Settings: heading of the storage section (v4.1.0). */
     public static final String STORAGE_SECTION = "storage_section";
     /** Shown under the figures while the node runs: they are estimates. */
@@ -539,6 +544,8 @@ public final class StringsTable {
     public static final String STORAGE_LABEL_LOGS = "storage_label_logs";
     public static final String STORAGE_LABEL_DEPIN = "storage_label_depin";
     public static final String STORAGE_LABEL_TOTAL = "storage_label_total";
+    /** Storage page: space free on this device (v4.2.2, A-20). */
+    public static final String STORAGE_FREE = "storage_free";
     /** A figure's value until the first measurement has come back. */
     public static final String STORAGE_MEASURING = "storage_measuring";
     public static final String STORAGE_RESYNC_BUTTON = "storage_resync_button";
@@ -567,6 +574,9 @@ public final class StringsTable {
      *  which follows the device language, not the app's). */
     public static final String BUTTON_CANCEL = "button_cancel";
     public static final String BUTTON_OK = "button_ok";
+    /** Content description of a sheet's close button
+     *  (v4.2.2, audit L-10). */
+    public static final String SHEET_CLOSE = "sheet_close";
     /** Storage line: a chain database reset is pending; the rest is
      *  deleted when the node next starts. */
     public static final String STORAGE_RESYNC_PENDING = "storage_resync_pending";
@@ -1057,7 +1067,12 @@ public final class StringsTable {
                 VISION_SINCE, "参加開始",
                 VISION_CPS, "チェックポイント",
                 VISION_DAYS, "記録日数",
-                VISION_DAYS_VAL, "%1$s日",
+                VISION_DAYS_VAL + ".zero", "%1$s日",
+                VISION_DAYS_VAL + ".one", "%1$s日",
+                VISION_DAYS_VAL + ".two", "%1$s日",
+                VISION_DAYS_VAL + ".few", "%1$s日",
+                VISION_DAYS_VAL + ".many", "%1$s日",
+                VISION_DAYS_VAL + ".other", "%1$s日",
                 VISION_PRICE_STALE, "CoinGecko %1$s 時点・更新できていません",
                 VISION_MEMBER_EMPTY, "記録を始めると、ここにあなたのカードが表示されます",
                 NET_SEG_NOW, "現在",
@@ -1073,7 +1088,7 @@ public final class StringsTable {
                 HOME_TODAY, "今日の記録",
                 HOME_RECORDED_FMT, "記録済み %1$s / %2$s",
                 HOME_HELD_TODAY, "今日の記録は保留中です",
-                MEM_STREAK, "連続記録",
+                MEM_STREAK, "最長連続記録",
                 TICK_BLOCK, "%1$s ブロック #%2$s を観測",
                 TICK_PEERS, "%1$s 接続ピア %2$s",
                 TICK_CHECKPOINT, "%1$s チェックポイント #%2$s を記録（署名済み）",
@@ -1161,6 +1176,7 @@ public final class StringsTable {
                 DONATE_TITLE, "開発者を支援",
                 DONATE_NOTE, "このアプリは無料のオープンソースです。役に立ったら、開発者への QTC の寄付を歓迎します（任意です）。",
                 DONATE_COPIED, "寄付用アドレスをコピーしました",
+                DONATE_COPY, "アドレスをコピー",
                 // Storage management (v4.1.0).
                 STORAGE_SECTION, "ストレージ",
                 STORAGE_RUNNING_NOTE, "ノードの稼働中は値が変わり続けるため、目安です。",
@@ -1169,6 +1185,7 @@ public final class StringsTable {
                 STORAGE_LABEL_LOGS, "ログ",
                 STORAGE_LABEL_DEPIN, "DePINの記録",
                 STORAGE_LABEL_TOTAL, "合計（アプリのデータ）",
+                STORAGE_FREE, "空き容量（この端末）",
                 STORAGE_MEASURING, "計測中…",
                 STORAGE_RESYNC_BUTTON, "チェーンDBを消して再同期",
                 STORAGE_RESYNC_NEEDS_STOP, "ノードを停止しているときだけ使えます。",
@@ -1188,6 +1205,7 @@ public final class StringsTable {
                 // UI/UX phase 0: dialog buttons, pending reset, reset refusal.
                 BUTTON_CANCEL, "キャンセル",
                 BUTTON_OK, "OK",
+                SHEET_CLOSE, "閉じる",
                 STORAGE_RESYNC_PENDING, "再同期の準備ができています。次にノードを開始すると、残りのチェーンDBを削除してから同期を始めます。",
                 NOTE_RESET_INCOMPLETE, "チェーンDBの削除を完了できなかったため、ノードを開始しませんでした。",
                 // UI/UX phase 1: first-run paragraph.
@@ -1512,7 +1530,12 @@ public final class StringsTable {
                 VISION_SINCE, "Since",
                 VISION_CPS, "Checkpoints",
                 VISION_DAYS, "Days recorded",
-                VISION_DAYS_VAL, "%1$s day",
+                VISION_DAYS_VAL + ".zero", "%1$s days",
+                VISION_DAYS_VAL + ".one", "%1$s day",
+                VISION_DAYS_VAL + ".two", "%1$s days",
+                VISION_DAYS_VAL + ".few", "%1$s days",
+                VISION_DAYS_VAL + ".many", "%1$s days",
+                VISION_DAYS_VAL + ".other", "%1$s days",
                 VISION_PRICE_STALE, "CoinGecko, as of %1$s · couldn't refresh",
                 VISION_MEMBER_EMPTY, "Once you start recording, your card will appear here",
                 NET_SEG_NOW, "Now",
@@ -1528,7 +1551,7 @@ public final class StringsTable {
                 HOME_TODAY, "Today's record",
                 HOME_RECORDED_FMT, "Recorded %1$s / %2$s",
                 HOME_HELD_TODAY, "Today's record is on hold",
-                MEM_STREAK, "Day streak",
+                MEM_STREAK, "Longest streak",
                 TICK_BLOCK, "%1$s Observed block #%2$s",
                 TICK_PEERS, "%1$s Peers connected: %2$s",
                 TICK_CHECKPOINT, "%1$s Checkpoint #%2$s recorded (signed)",
@@ -1616,6 +1639,7 @@ public final class StringsTable {
                 DONATE_TITLE, "Support the developer",
                 DONATE_NOTE, "This app is free and open source. If it is useful to you, a QTC donation to the developer is welcome — entirely voluntary.",
                 DONATE_COPIED, "Donation address copied",
+                DONATE_COPY, "Copy address",
                 // Storage management (v4.1.0).
                 STORAGE_SECTION, "Storage",
                 STORAGE_RUNNING_NOTE, "While the node is running these figures keep changing, so they are estimates.",
@@ -1624,6 +1648,7 @@ public final class StringsTable {
                 STORAGE_LABEL_LOGS, "Logs",
                 STORAGE_LABEL_DEPIN, "DePIN records",
                 STORAGE_LABEL_TOTAL, "Total (app data)",
+                STORAGE_FREE, "Free space (this device)",
                 STORAGE_MEASURING, "Measuring…",
                 STORAGE_RESYNC_BUTTON, "Delete the chain database and resync",
                 STORAGE_RESYNC_NEEDS_STOP, "Available only while the node is stopped.",
@@ -1643,6 +1668,7 @@ public final class StringsTable {
                 // UI/UX phase 0: dialog buttons, pending reset, reset refusal.
                 BUTTON_CANCEL, "Cancel",
                 BUTTON_OK, "OK",
+                SHEET_CLOSE, "Close",
                 STORAGE_RESYNC_PENDING, "A resync is ready. The next time the node starts, the rest of the chain database will be deleted before syncing begins.",
                 NOTE_RESET_INCOMPLETE, "The node was not started, because the chain database deletion could not be completed.",
                 // UI/UX phase 1: first-run paragraph.
@@ -1967,7 +1993,12 @@ public final class StringsTable {
                 VISION_SINCE, "加入日期",
                 VISION_CPS, "检查点",
                 VISION_DAYS, "记录天数",
-                VISION_DAYS_VAL, "%1$s 天",
+                VISION_DAYS_VAL + ".zero", "%1$s 天",
+                VISION_DAYS_VAL + ".one", "%1$s 天",
+                VISION_DAYS_VAL + ".two", "%1$s 天",
+                VISION_DAYS_VAL + ".few", "%1$s 天",
+                VISION_DAYS_VAL + ".many", "%1$s 天",
+                VISION_DAYS_VAL + ".other", "%1$s 天",
                 VISION_PRICE_STALE, "CoinGecko %1$s 数据・更新失败",
                 VISION_MEMBER_EMPTY, "开始记录后，您的卡片将显示在这里",
                 NET_SEG_NOW, "现在",
@@ -1983,7 +2014,7 @@ public final class StringsTable {
                 HOME_TODAY, "今日记录",
                 HOME_RECORDED_FMT, "已记录 %1$s / %2$s",
                 HOME_HELD_TODAY, "今日的记录已暂停",
-                MEM_STREAK, "连续记录",
+                MEM_STREAK, "最长连续记录",
                 TICK_BLOCK, "%1$s 观测到区块 #%2$s",
                 TICK_PEERS, "%1$s 已连接对等节点 %2$s",
                 TICK_CHECKPOINT, "%1$s 已记录检查点 #%2$s（已签名）",
@@ -2071,6 +2102,7 @@ public final class StringsTable {
                 DONATE_TITLE, "支持开发者",
                 DONATE_NOTE, "本应用免费且开源。如果对您有帮助，欢迎向开发者捐赠 QTC（完全自愿）。",
                 DONATE_COPIED, "捐赠地址已复制",
+                DONATE_COPY, "复制地址",
                 // Storage management (v4.1.0).
                 STORAGE_SECTION, "存储",
                 STORAGE_RUNNING_NOTE, "节点运行期间数值会不断变化，仅供参考。",
@@ -2079,6 +2111,7 @@ public final class StringsTable {
                 STORAGE_LABEL_LOGS, "日志",
                 STORAGE_LABEL_DEPIN, "DePIN 记录",
                 STORAGE_LABEL_TOTAL, "合计（应用数据）",
+                STORAGE_FREE, "可用空间（本设备）",
                 STORAGE_MEASURING, "正在计算…",
                 STORAGE_RESYNC_BUTTON, "删除链数据库并重新同步",
                 STORAGE_RESYNC_NEEDS_STOP, "仅在节点停止时可用。",
@@ -2098,6 +2131,7 @@ public final class StringsTable {
                 // UI/UX phase 0: dialog buttons, pending reset, reset refusal.
                 BUTTON_CANCEL, "取消",
                 BUTTON_OK, "确定",
+                SHEET_CLOSE, "关闭",
                 STORAGE_RESYNC_PENDING, "重新同步已准备就绪。下次启动节点时，将先删除剩余的链数据库，然后开始同步。",
                 NOTE_RESET_INCOMPLETE, "由于链数据库删除未能完成，节点未启动。",
                 // UI/UX phase 1: first-run paragraph.
@@ -2422,7 +2456,12 @@ public final class StringsTable {
                 VISION_SINCE, "Miembro desde",
                 VISION_CPS, "Puntos de control",
                 VISION_DAYS, "Días registrados",
-                VISION_DAYS_VAL, "%1$s día",
+                VISION_DAYS_VAL + ".zero", "%1$s días",
+                VISION_DAYS_VAL + ".one", "%1$s día",
+                VISION_DAYS_VAL + ".two", "%1$s días",
+                VISION_DAYS_VAL + ".few", "%1$s días",
+                VISION_DAYS_VAL + ".many", "%1$s días",
+                VISION_DAYS_VAL + ".other", "%1$s días",
                 VISION_PRICE_STALE, "CoinGecko, a las %1$s · sin actualizar",
                 VISION_MEMBER_EMPTY, "Cuando empieces a registrar, tu tarjeta aparecerá aquí",
                 NET_SEG_NOW, "Ahora",
@@ -2438,7 +2477,7 @@ public final class StringsTable {
                 HOME_TODAY, "Registro de hoy",
                 HOME_RECORDED_FMT, "Registrado %1$s / %2$s",
                 HOME_HELD_TODAY, "El registro de hoy está en pausa",
-                MEM_STREAK, "Días seguidos",
+                MEM_STREAK, "Racha más larga",
                 TICK_BLOCK, "%1$s Bloque #%2$s observado",
                 TICK_PEERS, "%1$s Pares conectados: %2$s",
                 TICK_CHECKPOINT, "%1$s Punto de control #%2$s registrado (firmado)",
@@ -2526,6 +2565,7 @@ public final class StringsTable {
                 DONATE_TITLE, "Apoya al desarrollador",
                 DONATE_NOTE, "Esta aplicación es gratuita y de código abierto. Si te resulta útil, una donación en QTC al desarrollador es bienvenida, siempre voluntaria.",
                 DONATE_COPIED, "Dirección de donación copiada",
+                DONATE_COPY, "Copiar dirección",
                 // Storage management (v4.1.0).
                 STORAGE_SECTION, "Almacenamiento",
                 STORAGE_RUNNING_NOTE, "Mientras el nodo está en marcha, estas cifras cambian continuamente; son aproximadas.",
@@ -2534,6 +2574,7 @@ public final class StringsTable {
                 STORAGE_LABEL_LOGS, "Archivos de registro (logs)",
                 STORAGE_LABEL_DEPIN, "Registros de DePIN",
                 STORAGE_LABEL_TOTAL, "Total (datos de la app)",
+                STORAGE_FREE, "Espacio libre (este dispositivo)",
                 STORAGE_MEASURING, "Calculando…",
                 STORAGE_RESYNC_BUTTON, "Eliminar la base de datos de la cadena y resincronizar",
                 STORAGE_RESYNC_NEEDS_STOP, "Solo disponible con el nodo detenido.",
@@ -2553,6 +2594,7 @@ public final class StringsTable {
                 // UI/UX phase 0: dialog buttons, pending reset, reset refusal.
                 BUTTON_CANCEL, "Cancelar",
                 BUTTON_OK, "Aceptar",
+                SHEET_CLOSE, "Cerrar",
                 STORAGE_RESYNC_PENDING, "La resincronización está lista. La próxima vez que se inicie el nodo, se eliminará el resto de la base de datos de la cadena antes de comenzar la sincronización.",
                 NOTE_RESET_INCOMPLETE, "El nodo no se inició porque no se pudo completar la eliminación de la base de datos de la cadena.",
                 // UI/UX phase 1: first-run paragraph.
@@ -2877,7 +2919,12 @@ public final class StringsTable {
                 VISION_SINCE, "शामिल होने की तिथि",
                 VISION_CPS, "चेकपॉइंट",
                 VISION_DAYS, "दर्ज दिन",
-                VISION_DAYS_VAL, "%1$s दिन",
+                VISION_DAYS_VAL + ".zero", "%1$s दिन",
+                VISION_DAYS_VAL + ".one", "%1$s दिन",
+                VISION_DAYS_VAL + ".two", "%1$s दिन",
+                VISION_DAYS_VAL + ".few", "%1$s दिन",
+                VISION_DAYS_VAL + ".many", "%1$s दिन",
+                VISION_DAYS_VAL + ".other", "%1$s दिन",
                 VISION_PRICE_STALE, "CoinGecko, %1$s तक · अपडेट नहीं हो सका",
                 VISION_MEMBER_EMPTY, "रिकॉर्डिंग शुरू करने पर आपका कार्ड यहाँ दिखाई देगा",
                 NET_SEG_NOW, "अभी",
@@ -2893,7 +2940,7 @@ public final class StringsTable {
                 HOME_TODAY, "आज का रिकॉर्ड",
                 HOME_RECORDED_FMT, "दर्ज %1$s / %2$s",
                 HOME_HELD_TODAY, "आज का रिकॉर्ड रुका हुआ है",
-                MEM_STREAK, "लगातार दिन",
+                MEM_STREAK, "सबसे लंबा सिलसिला",
                 TICK_BLOCK, "%1$s ब्लॉक #%2$s देखा गया",
                 TICK_PEERS, "%1$s जुड़े पीयर: %2$s",
                 TICK_CHECKPOINT, "%1$s चेकपॉइंट #%2$s दर्ज (हस्ताक्षरित)",
@@ -2981,6 +3028,7 @@ public final class StringsTable {
                 DONATE_TITLE, "डेवलपर का समर्थन करें",
                 DONATE_NOTE, "यह ऐप मुफ़्त और ओपन सोर्स है। यदि यह आपके काम आए, तो डेवलपर को QTC दान का स्वागत है — पूरी तरह स्वैच्छिक।",
                 DONATE_COPIED, "दान पता कॉपी किया गया",
+                DONATE_COPY, "पता कॉपी करें",
                 // Storage management (v4.1.0).
                 STORAGE_SECTION, "स्टोरेज",
                 STORAGE_RUNNING_NOTE, "नोड चलते समय ये आँकड़े बदलते रहते हैं, इसलिए ये अनुमानित हैं।",
@@ -2989,6 +3037,7 @@ public final class StringsTable {
                 STORAGE_LABEL_LOGS, "लॉग",
                 STORAGE_LABEL_DEPIN, "DePIN रिकॉर्ड",
                 STORAGE_LABEL_TOTAL, "कुल (ऐप का डेटा)",
+                STORAGE_FREE, "खाली स्थान (इस डिवाइस पर)",
                 STORAGE_MEASURING, "गणना हो रही है…",
                 STORAGE_RESYNC_BUTTON, "चेन डेटाबेस हटाकर फिर से सिंक करें",
                 STORAGE_RESYNC_NEEDS_STOP, "केवल नोड बंद होने पर उपलब्ध।",
@@ -3008,6 +3057,7 @@ public final class StringsTable {
                 // UI/UX phase 0: dialog buttons, pending reset, reset refusal.
                 BUTTON_CANCEL, "रद्द करें",
                 BUTTON_OK, "ठीक है",
+                SHEET_CLOSE, "बंद करें",
                 STORAGE_RESYNC_PENDING, "रीसिंक तैयार है। अगली बार नोड शुरू होने पर, सिंक शुरू होने से पहले चेन डेटाबेस का शेष भाग हटा दिया जाएगा।",
                 NOTE_RESET_INCOMPLETE, "चेन डेटाबेस का विलोपन पूरा नहीं हो सका, इसलिए नोड शुरू नहीं किया गया।",
                 // UI/UX phase 1: first-run paragraph.
@@ -3332,7 +3382,12 @@ public final class StringsTable {
                 VISION_SINCE, "تاريخ الانضمام",
                 VISION_CPS, "نقاط التحقق",
                 VISION_DAYS, "أيام مسجلة",
-                VISION_DAYS_VAL, "%1$s يوم",
+                VISION_DAYS_VAL + ".zero", "%1$s أيام",
+                VISION_DAYS_VAL + ".one", "%1$s يوم",
+                VISION_DAYS_VAL + ".two", "%1$s يومان",
+                VISION_DAYS_VAL + ".few", "%1$s أيام",
+                VISION_DAYS_VAL + ".many", "%1$s يومًا",
+                VISION_DAYS_VAL + ".other", "%1$s يوم",
                 VISION_PRICE_STALE, "CoinGecko، حتى %1$s · تعذّر التحديث",
                 VISION_MEMBER_EMPTY, "عند بدء التسجيل، ستظهر بطاقتك هنا",
                 NET_SEG_NOW, "الآن",
@@ -3348,7 +3403,7 @@ public final class StringsTable {
                 HOME_TODAY, "سجل اليوم",
                 HOME_RECORDED_FMT, "تم تسجيل %1$s / %2$s",
                 HOME_HELD_TODAY, "سجل اليوم متوقف مؤقتًا",
-                MEM_STREAK, "أيام متتالية",
+                MEM_STREAK, "أطول سلسلة",
                 TICK_BLOCK, "%1$s تمت ملاحظة الكتلة #%2$s",
                 TICK_PEERS, "%1$s النظراء المتصلون: %2$s",
                 TICK_CHECKPOINT, "%1$s تم تسجيل نقطة التحقق #%2$s (موقّعة)",
@@ -3436,6 +3491,7 @@ public final class StringsTable {
                 DONATE_TITLE, "ادعم المطوّر",
                 DONATE_NOTE, "هذا التطبيق مجاني ومفتوح المصدر. إذا كان مفيدًا لك، فالتبرّع بـ QTC للمطوّر مرحّب به — وهو طوعي تمامًا.",
                 DONATE_COPIED, "تم نسخ عنوان التبرع",
+                DONATE_COPY, "نسخ العنوان",
                 // Storage management (v4.1.0).
                 STORAGE_SECTION, "التخزين",
                 STORAGE_RUNNING_NOTE, "أثناء تشغيل العقدة تتغيّر هذه الأرقام باستمرار، لذا فهي تقديرية.",
@@ -3444,6 +3500,7 @@ public final class StringsTable {
                 STORAGE_LABEL_LOGS, "ملفات السجل",
                 STORAGE_LABEL_DEPIN, "سجلات DePIN",
                 STORAGE_LABEL_TOTAL, "الإجمالي (بيانات التطبيق)",
+                STORAGE_FREE, "المساحة الخالية (هذا الجهاز)",
                 STORAGE_MEASURING, "جارٍ الحساب…",
                 STORAGE_RESYNC_BUTTON, "حذف قاعدة بيانات السلسلة وإعادة المزامنة",
                 STORAGE_RESYNC_NEEDS_STOP, "متاح فقط عندما تكون العقدة متوقفة.",
@@ -3463,6 +3520,7 @@ public final class StringsTable {
                 // UI/UX phase 0: dialog buttons, pending reset, reset refusal.
                 BUTTON_CANCEL, "إلغاء",
                 BUTTON_OK, "موافق",
+                SHEET_CLOSE, "إغلاق",
                 STORAGE_RESYNC_PENDING, "إعادة المزامنة جاهزة. في المرة التالية التي يبدأ فيها العقدة، سيتم حذف ما تبقى من قاعدة بيانات السلسلة قبل بدء المزامنة.",
                 NOTE_RESET_INCOMPLETE, "لم يتم بدء العقدة لأنه تعذر إكمال حذف قاعدة بيانات السلسلة.",
                 // UI/UX phase 1: first-run paragraph.
@@ -3787,7 +3845,12 @@ public final class StringsTable {
                 VISION_SINCE, "참여 시작",
                 VISION_CPS, "체크포인트",
                 VISION_DAYS, "기록 일수",
-                VISION_DAYS_VAL, "%1$s일",
+                VISION_DAYS_VAL + ".zero", "%1$s일",
+                VISION_DAYS_VAL + ".one", "%1$s일",
+                VISION_DAYS_VAL + ".two", "%1$s일",
+                VISION_DAYS_VAL + ".few", "%1$s일",
+                VISION_DAYS_VAL + ".many", "%1$s일",
+                VISION_DAYS_VAL + ".other", "%1$s일",
                 VISION_PRICE_STALE, "CoinGecko %1$s 기준・업데이트 실패",
                 VISION_MEMBER_EMPTY, "기록을 시작하면 여기에 카드가 표시됩니다",
                 NET_SEG_NOW, "현재",
@@ -3803,7 +3866,7 @@ public final class StringsTable {
                 HOME_TODAY, "오늘의 기록",
                 HOME_RECORDED_FMT, "기록됨 %1$s / %2$s",
                 HOME_HELD_TODAY, "오늘의 기록이 보류 중입니다",
-                MEM_STREAK, "연속 기록",
+                MEM_STREAK, "최장 연속 기록",
                 TICK_BLOCK, "%1$s 블록 #%2$s 관측",
                 TICK_PEERS, "%1$s 연결 중인 피어 %2$s",
                 TICK_CHECKPOINT, "%1$s 체크포인트 #%2$s 기록(서명됨)",
@@ -3891,6 +3954,7 @@ public final class StringsTable {
                 DONATE_TITLE, "개발자 후원하기",
                 DONATE_NOTE, "이 앱은 무료 오픈 소스입니다. 도움이 되셨다면 개발자에게 QTC 기부를 환영합니다(전적으로 자발적입니다).",
                 DONATE_COPIED, "기부 주소가 복사되었습니다",
+                DONATE_COPY, "주소 복사",
                 // Storage management (v4.1.0).
                 STORAGE_SECTION, "저장 공간",
                 STORAGE_RUNNING_NOTE, "노드가 가동 중일 때는 값이 계속 바뀌므로 참고용입니다.",
@@ -3899,6 +3963,7 @@ public final class StringsTable {
                 STORAGE_LABEL_LOGS, "로그",
                 STORAGE_LABEL_DEPIN, "DePIN 기록",
                 STORAGE_LABEL_TOTAL, "합계(앱 데이터)",
+                STORAGE_FREE, "여유 공간(이 기기)",
                 STORAGE_MEASURING, "계산 중…",
                 STORAGE_RESYNC_BUTTON, "체인 DB를 지우고 다시 동기화",
                 STORAGE_RESYNC_NEEDS_STOP, "노드가 정지된 동안에만 사용할 수 있습니다.",
@@ -3918,6 +3983,7 @@ public final class StringsTable {
                 // UI/UX phase 0: dialog buttons, pending reset, reset refusal.
                 BUTTON_CANCEL, "취소",
                 BUTTON_OK, "확인",
+                SHEET_CLOSE, "닫기",
                 STORAGE_RESYNC_PENDING, "재동기화 준비가 되었습니다. 다음에 노드를 시작하면 나머지 체인 데이터베이스를 삭제한 뒤 동기화를 시작합니다.",
                 NOTE_RESET_INCOMPLETE, "체인 데이터베이스 삭제를 완료할 수 없어 노드를 시작하지 않았습니다.",
                 // UI/UX phase 1: first-run paragraph.
@@ -4242,7 +4308,12 @@ public final class StringsTable {
                 VISION_SINCE, "Участник с",
                 VISION_CPS, "Контрольные точки",
                 VISION_DAYS, "Дней в записи",
-                VISION_DAYS_VAL, "%1$s день",
+                VISION_DAYS_VAL + ".zero", "%1$s дней",
+                VISION_DAYS_VAL + ".one", "%1$s день",
+                VISION_DAYS_VAL + ".two", "%1$s дня",
+                VISION_DAYS_VAL + ".few", "%1$s дня",
+                VISION_DAYS_VAL + ".many", "%1$s дней",
+                VISION_DAYS_VAL + ".other", "%1$s дней",
                 VISION_PRICE_STALE, "CoinGecko, на %1$s · не удалось обновить",
                 VISION_MEMBER_EMPTY, "Когда вы начнёте запись, здесь появится ваша карта",
                 NET_SEG_NOW, "Сейчас",
@@ -4258,7 +4329,7 @@ public final class StringsTable {
                 HOME_TODAY, "Запись за сегодня",
                 HOME_RECORDED_FMT, "Записано %1$s / %2$s",
                 HOME_HELD_TODAY, "Запись за сегодня приостановлена",
-                MEM_STREAK, "Дней подряд",
+                MEM_STREAK, "Самая длинная серия",
                 TICK_BLOCK, "%1$s Зафиксирован блок #%2$s",
                 TICK_PEERS, "%1$s Подключено пиров: %2$s",
                 TICK_CHECKPOINT, "%1$s Контрольная точка #%2$s записана (подписана)",
@@ -4346,6 +4417,7 @@ public final class StringsTable {
                 DONATE_TITLE, "Поддержать разработчика",
                 DONATE_NOTE, "Это приложение бесплатное и с открытым исходным кодом. Если оно вам полезно, пожертвование в QTC разработчику приветствуется — полностью добровольно.",
                 DONATE_COPIED, "Адрес для пожертвований скопирован",
+                DONATE_COPY, "Копировать адрес",
                 // Storage management (v4.1.0).
                 STORAGE_SECTION, "Хранилище",
                 STORAGE_RUNNING_NOTE, "Пока узел работает, эти значения постоянно меняются, поэтому они приблизительны.",
@@ -4354,6 +4426,7 @@ public final class StringsTable {
                 STORAGE_LABEL_LOGS, "Журналы",
                 STORAGE_LABEL_DEPIN, "Записи DePIN",
                 STORAGE_LABEL_TOTAL, "Всего (данные приложения)",
+                STORAGE_FREE, "Свободное место (это устройство)",
                 STORAGE_MEASURING, "Подсчёт…",
                 STORAGE_RESYNC_BUTTON, "Удалить базу данных цепочки и синхронизировать заново",
                 STORAGE_RESYNC_NEEDS_STOP, "Доступно только при остановленном узле.",
@@ -4373,6 +4446,7 @@ public final class StringsTable {
                 // UI/UX phase 0: dialog buttons, pending reset, reset refusal.
                 BUTTON_CANCEL, "Отмена",
                 BUTTON_OK, "ОК",
+                SHEET_CLOSE, "Закрыть",
                 STORAGE_RESYNC_PENDING, "Ресинхронизация готова. При следующем запуске узла остаток базы данных цепочки будет удалён перед началом синхронизации.",
                 NOTE_RESET_INCOMPLETE, "Узел не был запущен, так как не удалось завершить удаление базы данных цепочки.",
                 // UI/UX phase 1: first-run paragraph.
@@ -4697,7 +4771,12 @@ public final class StringsTable {
                 VISION_SINCE, "Membre depuis",
                 VISION_CPS, "Points de contrôle",
                 VISION_DAYS, "Jours enregistrés",
-                VISION_DAYS_VAL, "%1$s jour",
+                VISION_DAYS_VAL + ".zero", "%1$s jour",
+                VISION_DAYS_VAL + ".one", "%1$s jour",
+                VISION_DAYS_VAL + ".two", "%1$s jours",
+                VISION_DAYS_VAL + ".few", "%1$s jours",
+                VISION_DAYS_VAL + ".many", "%1$s jours",
+                VISION_DAYS_VAL + ".other", "%1$s jours",
                 VISION_PRICE_STALE, "CoinGecko, à %1$s · actualisation impossible",
                 VISION_MEMBER_EMPTY, "Une fois l'enregistrement commencé, votre carte apparaîtra ici",
                 NET_SEG_NOW, "Maintenant",
@@ -4713,7 +4792,7 @@ public final class StringsTable {
                 HOME_TODAY, "Enregistrement du jour",
                 HOME_RECORDED_FMT, "Enregistré %1$s / %2$s",
                 HOME_HELD_TODAY, "L'enregistrement du jour est en attente",
-                MEM_STREAK, "Jours consécutifs",
+                MEM_STREAK, "Plus longue série",
                 TICK_BLOCK, "%1$s Bloc #%2$s observé",
                 TICK_PEERS, "%1$s Pairs connectés : %2$s",
                 TICK_CHECKPOINT, "%1$s Point de contrôle #%2$s enregistré (signé)",
@@ -4801,6 +4880,7 @@ public final class StringsTable {
                 DONATE_TITLE, "Soutenir le développeur",
                 DONATE_NOTE, "Cette application est gratuite et open source. Si elle vous est utile, un don en QTC au développeur est le bienvenu — toujours volontaire.",
                 DONATE_COPIED, "Adresse de don copiée",
+                DONATE_COPY, "Copier l'adresse",
                 // Storage management (v4.1.0).
                 STORAGE_SECTION, "Stockage",
                 STORAGE_RUNNING_NOTE, "Tant que le nœud fonctionne, ces chiffres changent en permanence : ce sont des estimations.",
@@ -4809,6 +4889,7 @@ public final class StringsTable {
                 STORAGE_LABEL_LOGS, "Journaux",
                 STORAGE_LABEL_DEPIN, "Enregistrements DePIN",
                 STORAGE_LABEL_TOTAL, "Total (données de l'application)",
+                STORAGE_FREE, "Espace libre (cet appareil)",
                 STORAGE_MEASURING, "Calcul…",
                 STORAGE_RESYNC_BUTTON, "Supprimer la base de données de la chaîne et resynchroniser",
                 STORAGE_RESYNC_NEEDS_STOP, "Disponible uniquement lorsque le nœud est arrêté.",
@@ -4828,6 +4909,7 @@ public final class StringsTable {
                 // UI/UX phase 0: dialog buttons, pending reset, reset refusal.
                 BUTTON_CANCEL, "Annuler",
                 BUTTON_OK, "OK",
+                SHEET_CLOSE, "Fermer",
                 STORAGE_RESYNC_PENDING, "La resynchronisation est prête. Au prochain démarrage du nœud, le reste de la base de données de la chaîne sera supprimé avant le début de la synchronisation.",
                 NOTE_RESET_INCOMPLETE, "Le nœud n'a pas été démarré car la suppression de la base de données de la chaîne n'a pas pu être terminée.",
                 // UI/UX phase 1: first-run paragraph.
