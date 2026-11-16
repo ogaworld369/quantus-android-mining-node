@@ -4,7 +4,7 @@
 
 This app runs a **non-validator full node** for Quantus Network (QTC mainnet) on an Android phone. It syncs the chain, verifies every block itself, and relays data to peers. It does **not** mine, and it has **no wallet** — it never touches seed phrases or reward keys.
 
-> Status: v4.0.0 released (2026-11-16), the current release — on-device mining as an opt-in (off by default), with thermal protection (v3.0.2, released 2026-11-14, was a hotfix for a sync stall that could stop nodes on some devices). The signed APK is published on [GitHub Releases](https://github.com/ogaworld369/quantus-android-node/releases) with a SHA-256 checksum. Earlier test builds were shared directly by the maintainer.
+> Status: v4.1.0 released (2026-11-16), the current release — storage management in Settings, including a “delete the chain database and resync” action; a daily activity record kept on the device (the foundation for a later activity-track view; nothing is displayed yet); and a set of readability fixes (v4.0.0, also released 2026-11-16, added on-device mining as an opt-in, off by default, with thermal protection). The signed APK is published on [GitHub Releases](https://github.com/ogaworld369/quantus-android-node/releases) with a SHA-256 checksum. Earlier test builds were shared directly by the maintainer.
 
 ## Requirements
 
@@ -33,10 +33,10 @@ You do not need to keep the app open. The node runs as a foreground service: it 
 
 The app has three main tabs along the bottom — Home, Connection, and Membership card. Node details and Settings are reached from Home.
 
-- **Home** — the pulse, the node's state (Stopped / Starting / Syncing / Synced / Failed) and the one main button. While the node runs, it also shows the connected peer count, this session's uptime, and the current QTC price. The pulse draws one quiet ripple only while the node is synced, at the moment a new best block is first observed. If a start fails, Home shows it as a failure with a retry button instead of a plain stop; if a setting you changed has not taken effect yet, Home shows a link to review it
+- **Home** — the node's best block and state (Stopped / Starting / Syncing / Synced / Failed) and the one main button. While the node runs, it also shows the connected peer count, this session's uptime, and the current QTC price. If a start fails, Home shows it as a failure with a retry button instead of a plain stop; if a setting you changed has not taken effect yet, Home shows a link to review it
 - **Connection** — a living picture of your node's network field: the peers it is connected to and the echoes of its own recorded checkpoints. It shows relationships, not numbers to compete with — there is no ranking
 - **Node details** — best block / highest block (where your node is, versus the network tip it knows), the sync gap, peers and uptime, and the **Diagnostics** section: exit code, service notes, the record of each start attempt, and **Share log** (see below). While the node is stopped, this screen shows your cumulative track record instead of the previous session's values
-- **Membership card** — your member card: your member number (your device ID) and the headline figures of your local record — total uptime, new blocks observed, and the most peers observed. The record is stored only on this device; it is never uploaded, and it is worth no money — it is simply your own trail of contribution, yours to show
+- **Membership card** — your member card: your member number (your device ID) and three figures from your local record — your first checkpoint's date, your checkpoint count, and your longest day streak. The record is stored only on this device; it is never uploaded, and it is worth no money — it is simply your own trail of contribution, yours to show
 - **Settings** — the settings below; the app version is shown at the bottom
 
 ## Settings

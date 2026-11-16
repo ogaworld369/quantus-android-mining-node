@@ -95,9 +95,12 @@ public class MainActivity extends Activity {
 
     // ---- Palette (Quantus brand tokens from quantus.com, dark only) --
     // void #0E0E0E / surface #181818 / flare #FF6B35 / content #E8E6E0
-    // / green #4ADE80. LABEL2, LABEL3, HAIRLINE and FIELD_BORDER are
+    // / green #4ADE80. LABEL2, HAIRLINE and FIELD_BORDER are
     // content composited over the background at the site's own alpha
-    // steps (60% / 40% / 12% / 30%), as solid colours.
+    // steps (60% / 12% / 30%), as solid colours. The old 40% step
+    // (FAINT) is split since UI/UX phase 0: FAINT for anything read
+    // (text and cues — #656462 on the surface was ~2.9:1), DECOR for
+    // what is only seen (dots, hairline borders).
     /** How long the attempt-log reset note stays on the
      *  DePIN status after the reset ran (H-06): seven days —
      *  long enough to be seen at the next several opens,
@@ -118,12 +121,13 @@ public class MainActivity extends Activity {
     private static final int SURFACE = Color.rgb(0x18, 0x18, 0x18);
     private static final int LABEL1 = Color.rgb(0xE8, 0xE6, 0xE0);
     private static final int LABEL2 = Color.rgb(0x91, 0x90, 0x8C);
-    private static final int LABEL3 = Color.rgb(0x65, 0x64, 0x62);
+    private static final int FAINT = Color.rgb(0x8A, 0x89, 0x86);
+    private static final int DECOR = Color.rgb(0x65, 0x64, 0x62);
     private static final int ACCENT = Color.rgb(0xFF, 0x6B, 0x35);
     private static final int ON_ACCENT = BG;
     private static final int HAIRLINE = Color.rgb(0x28, 0x28, 0x27);
     private static final int FIELD_BORDER = Color.rgb(0x4F, 0x4F, 0x4D);
-    private static final int STATE_STOPPED = LABEL3;
+    private static final int STATE_STOPPED = DECOR;
     private static final int STATE_STARTING = Color.rgb(0x93, 0xB4, 0xEC);
     private static final int STATE_SYNCING = Color.rgb(0xF2, 0xA9, 0x3B);
     private static final int STATE_SYNCED = Color.rgb(0x4A, 0xDE, 0x80);
@@ -426,6 +430,34 @@ public class MainActivity extends Activity {
                     });
     private boolean transferBusy;
     private boolean exportBusy;
+    // Storage section (v4.1.0). The figures come from a walk of the
+    // app's directories and the resync deletes a directory tree, so
+    // both run off the UI thread, one at a time, on the process's
+    // one storage worker. Whether a resync is running and how the
+    // last one ended is the process's to know, not this instance's
+    // (StorageResetState): an activity recreated mid-deletion still
+    // shows it busy and then its result.
+    /** While the settings screen is open the figures are measured
+     *  again this often. */
+    private static final long STORAGE_REMEASURE_MS = 15000;
+    private TextView storageChainDbValue;
+    private TextView storageNodeValue;
+    private TextView storageLogsValue;
+    private TextView storageDepinValue;
+    private TextView storageTotalValue;
+    private TextView storageRunningNote;
+    private Button storageResyncButton;
+    private TextView storageNeedsStopNote;
+    private TextView storageResultView;
+    private StorageLogic.Usage storageUsage;
+    private boolean storageMeasuring;
+    private long storageMeasuredElapsedMs = -1;
+    /** The finished resync run whose result this instance has
+     *  taken in (and measured again after). */
+    private long storageResetSeen;
+    /** A line of this screen's own — the resync was not even
+     *  attempted — shown until the next run starts. */
+    private String storageNote;
     private static final int REQ_TRANSFER_OPEN = 2101;
     private static final int REQ_TRANSFER_SAVE = 2102;
     private static final int T_OPEN_PACKAGE = 1;
@@ -666,6 +698,15 @@ public class MainActivity extends Activity {
     protected void onPause() {
         super.onPause();
         handler.removeCallbacks(refresher);
+        // UI/UX phase 0: the frame loops belong to the visible tab
+        // only; leaving the activity stops them too (showScreen is
+        // the only other place that drives these).
+        if (networkField != null) {
+            networkField.setFieldActive(false);
+        }
+        if (memberGlow != null) {
+            memberGlow.setCardActive(false);
+        }
     }
 
     @Override
@@ -675,6 +716,13 @@ public class MainActivity extends Activity {
         // back goes to the tab it was opened from; a non-home tab
         // goes home; home back is the platform default and never
         // sends a stop request (spec G).
+        // UI/UX phase 0: the how-to-read sheet is an overlay, not a
+        // screen; back closes it before anything else moves.
+        if (readSheetOverlay != null
+                && readSheetOverlay.getVisibility() == View.VISIBLE) {
+            readSheetOverlay.setVisibility(View.GONE);
+            return;
+        }
         if (!isTabScreen(currentScreen)) {
             showScreen(tabScreen);
             return;
@@ -768,6 +816,11 @@ public class MainActivity extends Activity {
 
     private void showScreen(int screen) {
         currentScreen = screen;
+        // UI/UX phase 0: the how-to-read sheet never survives a
+        // screen change.
+        if (readSheetOverlay != null) {
+            readSheetOverlay.setVisibility(View.GONE);
+        }
         if (isTabScreen(screen)) {
             tabScreen = screen;
         }
@@ -815,8 +868,8 @@ public class MainActivity extends Activity {
                     ? rounded(Color.argb(20, 0xE8, 0xE6, 0xE0),
                             999, density, 0, 0)
                     : null);
-            navIcons[i].setIconColor(on ? LABEL1 : LABEL3);
-            navLabels[i].setTextColor(on ? LABEL1 : LABEL3);
+            navIcons[i].setIconColor(on ? LABEL1 : FAINT);
+            navLabels[i].setTextColor(on ? LABEL1 : FAINT);
         }
     }
 
@@ -953,7 +1006,7 @@ public class MainActivity extends Activity {
         TextView l = text(label, 16, LABEL1, false);
         r.addView(l, new LinearLayout.LayoutParams(
                 0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
-        TextView chev = text(I18n.isRtl(this) ? "‹" : "›", 22, LABEL3, false);
+        TextView chev = text(I18n.isRtl(this) ? "‹" : "›", 22, FAINT, false);
         r.addView(chev);
         parent.addView(r, matchLpTop(topDp));
         return r;
@@ -1096,7 +1149,7 @@ public class MainActivity extends Activity {
         // (stage 1 spec S1-10): a relative age while an
         // observation exists, a dash while none does — the
         // same 0-vs-dash discipline as everywhere else.
-        vhBestAgoView = text("", 11, LABEL3, false);
+        vhBestAgoView = text("", 11, FAINT, false);
         vhBestAgoView.setTypeface(VisionFonts.mono(this));
         card.addView(vhBestAgoView, matchLpTop(6));
         LinearLayout stats = new LinearLayout(this);
@@ -1120,7 +1173,7 @@ public class MainActivity extends Activity {
         stats.addView(upCol, new LinearLayout.LayoutParams(
                 0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
         card.addView(stats, matchLpTop(36));
-        supplementView = text("", 13, LABEL3, false);
+        supplementView = text("", 13, FAINT, false);
         supplementView.setVisibility(View.GONE);
         card.addView(supplementView, matchLpTop(20));
         root.addView(card, matchLpTop(8));
@@ -1145,7 +1198,7 @@ public class MainActivity extends Activity {
         priceValueView = text("", 44, LABEL1, true);
         priceValueView.setTypeface(VisionFonts.displayBold(this));
         priceCard.addView(priceValueView, matchLpTop(14));
-        priceSrcView = text("", 11, LABEL3, false);
+        priceSrcView = text("", 11, FAINT, false);
         priceSrcView.setTypeface(VisionFonts.mono(this));
         priceCard.addView(priceSrcView, matchLpTop(14));
         root.addView(priceCard, matchLpTop(16));
@@ -1259,7 +1312,7 @@ public class MainActivity extends Activity {
         donateBox.addView(cardLabel(
                 I18n.get(this, StringsTable.DONATE_TITLE)), matchLp());
         TextView donateNote = text(
-                I18n.get(this, StringsTable.DONATE_NOTE), 12, LABEL3, false);
+                I18n.get(this, StringsTable.DONATE_NOTE), 12, FAINT, false);
         donateBox.addView(donateNote, matchLpTop(6));
         TextView donateAddr = text(DONATE_ADDRESS, 12, LABEL2, false);
         donateAddr.setTypeface(VisionFonts.mono(this));
@@ -1331,7 +1384,7 @@ public class MainActivity extends Activity {
         header.addView(seg);
         TextView info = text("i", 13, LABEL1, true);
         info.setGravity(Gravity.CENTER);
-        info.setBackground(rounded(0, 999, density, LABEL3, 1));
+        info.setBackground(rounded(0, 999, density, DECOR, 1));
         info.setClickable(true);
         info.setOnClickListener(v -> openReadSheet());
         LinearLayout.LayoutParams ilp = new LinearLayout.LayoutParams(
@@ -1353,7 +1406,7 @@ public class MainActivity extends Activity {
         heroLeft.addView(netNumView, matchLp());
         netSubView = text("", 15, LABEL2, false);
         heroLeft.addView(netSubView, matchLpTop(10));
-        netTagView = text("", 11, LABEL3, false);
+        netTagView = text("", 11, FAINT, false);
         netTagView.setTypeface(VisionFonts.mono(this));
         heroLeft.addView(netTagView, matchLpTop(6));
         hero.addView(heroLeft, new LinearLayout.LayoutParams(
@@ -1380,7 +1433,7 @@ public class MainActivity extends Activity {
 
         netGhostNoteView = text(
                 I18n.get(this, StringsTable.SEG_24H_NOTE),
-                12, LABEL3, false);
+                12, FAINT, false);
         netGhostNoteView.setVisibility(View.GONE);
         col.addView(netGhostNoteView, matchLpTop(10));
 
@@ -1400,7 +1453,7 @@ public class MainActivity extends Activity {
 
     /** One segment pill of the network header. */
     private TextView segmentButton(String label, boolean is24h) {
-        TextView b = text(label, 12, LABEL3, true);
+        TextView b = text(label, 12, FAINT, true);
         b.setGravity(Gravity.CENTER);
         b.setPadding(dp(12), dp(6), dp(12), dp(6));
         b.setClickable(true);
@@ -1419,9 +1472,9 @@ public class MainActivity extends Activity {
         android.graphics.drawable.Drawable sel = rounded(
                 Color.argb(38, 0xE8, 0xE6, 0xE0), 999, density, 0, 0);
         netSegNowBtn.setBackground(netShow24h ? null : sel);
-        netSegNowBtn.setTextColor(netShow24h ? LABEL3 : LABEL1);
+        netSegNowBtn.setTextColor(netShow24h ? FAINT : LABEL1);
         netSeg24hBtn.setBackground(netShow24h ? sel : null);
-        netSeg24hBtn.setTextColor(netShow24h ? LABEL1 : LABEL3);
+        netSeg24hBtn.setTextColor(netShow24h ? LABEL1 : FAINT);
         if (netGhostNoteView != null) {
             netGhostNoteView.setVisibility(
                     netShow24h ? View.VISIBLE : View.GONE);
@@ -1443,10 +1496,20 @@ public class MainActivity extends Activity {
         panel.setOnClickListener(v -> {
             // Swallow taps so the panel itself does not close.
         });
+        LinearLayout head = new LinearLayout(this);
+        head.setOrientation(LinearLayout.HORIZONTAL);
+        head.setGravity(Gravity.CENTER_VERTICAL);
         TextView title = text(
                 I18n.get(this, StringsTable.FIELD_HOWTO),
                 17, LABEL1, true);
-        panel.addView(title, matchLp());
+        head.addView(title, new LinearLayout.LayoutParams(
+                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        TextView close = text("✕", 16, LABEL2, false);
+        close.setGravity(Gravity.CENTER);
+        close.setOnClickListener(
+                v -> readSheetOverlay.setVisibility(View.GONE));
+        head.addView(close, new LinearLayout.LayoutParams(dp(48), dp(48)));
+        panel.addView(head, matchLp());
         readSheetBestView = text("", 15, LABEL1, false);
         readSheetBestView.setTypeface(VisionFonts.mono(this));
         panel.addView(readSheetBestView, matchLpTop(16));
@@ -1699,10 +1762,10 @@ public class MainActivity extends Activity {
             btn.setClickable(true);
             btn.setFocusable(true);
             btn.setContentDescription(labels[i]);
-            navIcons[i] = new NavIconView(this, icons[i], LABEL3);
+            navIcons[i] = new NavIconView(this, icons[i], FAINT);
             btn.addView(navIcons[i], new LinearLayout.LayoutParams(
                     dp(20), dp(20)));
-            navLabels[i] = text(labels[i], 11, LABEL3, true);
+            navLabels[i] = text(labels[i], 11, FAINT, true);
             LinearLayout.LayoutParams nlp = new LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.WRAP_CONTENT,
                     LinearLayout.LayoutParams.WRAP_CONTENT);
@@ -1737,7 +1800,7 @@ public class MainActivity extends Activity {
         subHeader(root, I18n.get(this, StringsTable.SCREEN_NODE_DETAILS));
 
         TextView identity = text(
-                I18n.get(this, StringsTable.APP_SUBTITLE), 14, LABEL3, false);
+                I18n.get(this, StringsTable.APP_SUBTITLE), 14, FAINT, false);
         root.addView(identity, matchLpTop(8));
 
         // Running presentation: the exact current values.
@@ -1754,7 +1817,7 @@ public class MainActivity extends Activity {
         detSessionValue = infoRow(detailsRunningBox,
                 I18n.get(this, StringsTable.LABEL_UPTIME_SESSION), true);
         TextView gapNote = text(
-                I18n.get(this, StringsTable.SYNC_GAP_NOTE), 14, LABEL3, false);
+                I18n.get(this, StringsTable.SYNC_GAP_NOTE), 14, FAINT, false);
         detailsRunningBox.addView(gapNote, matchLpTop(8));
         root.addView(detailsRunningBox, matchLpTop(16));
 
@@ -1762,7 +1825,7 @@ public class MainActivity extends Activity {
         detailsStoppedBox = new LinearLayout(this);
         detailsStoppedBox.setOrientation(LinearLayout.VERTICAL);
         TextView cumNote = text(I18n.get(
-                this, StringsTable.STOPPED_CUMULATIVE_NOTE), 14, LABEL3, false);
+                this, StringsTable.STOPPED_CUMULATIVE_NOTE), 14, FAINT, false);
         detailsStoppedBox.addView(cumNote, matchLp());
         cumUptimeValue = infoRow(detailsStoppedBox,
                 I18n.get(this, StringsTable.LABEL_UPTIME_TOTAL), false);
@@ -1774,7 +1837,7 @@ public class MainActivity extends Activity {
 
         // Network / RPC line (raw endpoint — not translated, by design).
         TextView rpc = text(I18n.get(this, StringsTable.RPC_LOCAL_NOTE)
-                + " · 127.0.0.1:9944", 14, LABEL3, false);
+                + " · 127.0.0.1:9944", 14, FAINT, false);
         root.addView(rpc, matchLpTop(24));
 
         // Diagnostics (expandable).
@@ -1794,7 +1857,7 @@ public class MainActivity extends Activity {
         diagText.setTextIsSelectable(true);
         diagContent.addView(diagText, matchLp());
         TextView logLocLabel = text(
-                I18n.get(this, StringsTable.LABEL_LOG_LOCATION), 14, LABEL3, false);
+                I18n.get(this, StringsTable.LABEL_LOG_LOCATION), 14, FAINT, false);
         diagContent.addView(logLocLabel, matchLpTop(16));
         TextView logLoc = text("files/logs/node.log", 14, LABEL2, false);
         diagContent.addView(logLoc, matchLpTop(4));
@@ -1836,14 +1899,14 @@ public class MainActivity extends Activity {
                 0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
         h.addView(l, llp);
         if (trailing != null) {
-            TextView t = text(trailing, 14, LABEL3, false);
+            TextView t = text(trailing, 14, FAINT, false);
             LinearLayout.LayoutParams tlp = new LinearLayout.LayoutParams(
                     LinearLayout.LayoutParams.WRAP_CONTENT,
                     LinearLayout.LayoutParams.WRAP_CONTENT);
             tlp.setMarginEnd(dp(12));
             h.addView(t, tlp);
         }
-        TextView chev = text("›", 22, LABEL3, false);
+        TextView chev = text("›", 22, FAINT, false);
         h.addView(chev);
         h.setTag(label);
         return h;
@@ -1877,7 +1940,7 @@ public class MainActivity extends Activity {
         trackPeersValue = bigMetric(root,
                 I18n.get(this, StringsTable.LABEL_MAX_PEERS), 32);
         TextView note = text(
-                I18n.get(this, StringsTable.TRACK_LOCAL_NOTE), 14, LABEL3, false);
+                I18n.get(this, StringsTable.TRACK_LOCAL_NOTE), 14, FAINT, false);
         root.addView(note, matchLpTop(32));
         return (ScrollView) screens[SCREEN_TRACK];
     }
@@ -1900,7 +1963,7 @@ public class MainActivity extends Activity {
         subHeader(root, I18n.get(this, StringsTable.SECTION_SETTINGS));
 
         TextView restartNote = text(I18n.get(
-                this, StringsTable.SETTINGS_NODE_RESTART_NOTE), 14, LABEL3, false);
+                this, StringsTable.SETTINGS_NODE_RESTART_NOTE), 14, FAINT, false);
         root.addView(restartNote, matchLpTop(8));
 
         // Telemetry: switch + always-visible public-scope note.
@@ -1917,13 +1980,13 @@ public class MainActivity extends Activity {
         telemetryRow = (LinearLayout) telemetrySwitch.getParent();
         telemetryPendingView = text("", 14, ACCENT, false);
         root.addView(telemetryPendingView, matchLpTop(4));
-        telemetryAppliedView = text("", 14, LABEL3, false);
+        telemetryAppliedView = text("", 14, FAINT, false);
         root.addView(telemetryAppliedView, matchLpTop(4));
         TextView telemetryNote = text(I18n.get(
-                this, StringsTable.SETTINGS_TELEMETRY_NOTE), 14, LABEL3, false);
+                this, StringsTable.SETTINGS_TELEMETRY_NOTE), 14, FAINT, false);
         root.addView(telemetryNote, matchLpTop(4));
         telemetryLockedView = text(I18n.get(
-                this, StringsTable.SETTINGS_LOCKED_NOTICE), 14, LABEL3, false);
+                this, StringsTable.SETTINGS_LOCKED_NOTICE), 14, FAINT, false);
         telemetryLockedView.setVisibility(View.GONE);
         root.addView(telemetryLockedView, matchLpTop(4));
 
@@ -1978,10 +2041,10 @@ public class MainActivity extends Activity {
                 });
         depinRow = (LinearLayout) depinSwitch.getParent();
         TextView depinNote = text(I18n.get(
-                this, StringsTable.SETTINGS_DEPIN_NOTE), 14, LABEL3, false);
+                this, StringsTable.SETTINGS_DEPIN_NOTE), 14, FAINT, false);
         root.addView(depinNote, matchLpTop(4));
         depinLockedView = text(I18n.get(
-                this, StringsTable.SETTINGS_LOCKED_NOTICE), 14, LABEL3, false);
+                this, StringsTable.SETTINGS_LOCKED_NOTICE), 14, FAINT, false);
         depinLockedView.setVisibility(View.GONE);
         root.addView(depinLockedView, matchLpTop(4));
         depinDeviceIdValue = infoRow(root,
@@ -1992,7 +2055,7 @@ public class MainActivity extends Activity {
                 I18n.get(this, StringsTable.DEPIN_LABEL_CHECKPOINTS), true);
         depinLastCheckpointValue = infoRow(root,
                 I18n.get(this, StringsTable.DEPIN_LABEL_LAST_CHECKPOINT), true);
-        depinNoteView = text("", 14, LABEL3, false);
+        depinNoteView = text("", 14, FAINT, false);
         depinNoteView.setVisibility(View.GONE);
         root.addView(depinNoteView, matchLpTop(4));
 
@@ -2036,7 +2099,7 @@ public class MainActivity extends Activity {
         depinExportButton.setMinHeight(dp(44));
         depinExportButton.setOnClickListener(v -> onExportBundleClicked());
         root.addView(depinExportButton, matchLpTop(2));
-        depinExportNoteView = text("", 14, LABEL3, false);
+        depinExportNoteView = text("", 14, FAINT, false);
         depinExportNoteView.setVisibility(View.GONE);
         root.addView(depinExportNoteView, matchLpTop(4));
 
@@ -2055,13 +2118,13 @@ public class MainActivity extends Activity {
                 this, StringsTable.DEPIN_TRANSFER_SECTION), 16, LABEL2, true);
         root.addView(transferHeading, matchLpTop(16));
         TextView transferNote = text(I18n.get(
-                this, StringsTable.DEPIN_TRANSFER_NOTE), 14, LABEL3, false);
+                this, StringsTable.DEPIN_TRANSFER_NOTE), 14, FAINT, false);
         root.addView(transferNote, matchLpTop(4));
         depinTransferLockedView = text(I18n.get(
-                this, StringsTable.DEPIN_TRANSFER_LOCKED), 14, LABEL3, false);
+                this, StringsTable.DEPIN_TRANSFER_LOCKED), 14, FAINT, false);
         depinTransferLockedView.setVisibility(View.GONE);
         root.addView(depinTransferLockedView, matchLpTop(4));
-        depinTransferResultView = text("", 14, LABEL3, false);
+        depinTransferResultView = text("", 14, FAINT, false);
         depinTransferResultView.setVisibility(View.GONE);
         root.addView(depinTransferResultView, matchLpTop(4));
         // The error-file export sits directly under the failure
@@ -2090,7 +2153,7 @@ public class MainActivity extends Activity {
                 this, StringsTable.DEPIN_TRANSFER_RECEIVER_HEADING),
                 15, LABEL2, true);
         root.addView(receiverHeading, matchLpTop(12));
-        depinTransferReceiverStateView = text("", 14, LABEL3, false);
+        depinTransferReceiverStateView = text("", 14, FAINT, false);
         root.addView(depinTransferReceiverStateView, matchLpTop(4));
         depinTransferReceiverMainButton = mainTransferButton(
                 v -> runTransferAction(receiverMainAction));
@@ -2121,7 +2184,7 @@ public class MainActivity extends Activity {
                 this, StringsTable.DEPIN_TRANSFER_SENDER_HEADING),
                 15, LABEL2, true);
         root.addView(senderHeading, matchLpTop(12));
-        depinTransferSenderStateView = text("", 14, LABEL3, false);
+        depinTransferSenderStateView = text("", 14, FAINT, false);
         root.addView(depinTransferSenderStateView, matchLpTop(4));
         depinTransferSenderMainButton = mainTransferButton(
                 v -> runTransferAction(senderMainAction));
@@ -2177,7 +2240,7 @@ public class MainActivity extends Activity {
         nameValue = text("", 16, LABEL1, false);
         nameValue.setGravity(Gravity.END);
         nameRow.addView(nameValue);
-        nameChevron = text(I18n.isRtl(this) ? "‹" : "›", 22, LABEL3, false);
+        nameChevron = text(I18n.isRtl(this) ? "‹" : "›", 22, FAINT, false);
         LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT);
@@ -2186,10 +2249,10 @@ public class MainActivity extends Activity {
         root.addView(nameRow, matchLpTop(8));
         namePendingView = text("", 14, ACCENT, false);
         root.addView(namePendingView, matchLpTop(4));
-        nameAppliedView = text("", 14, LABEL3, false);
+        nameAppliedView = text("", 14, FAINT, false);
         root.addView(nameAppliedView, matchLpTop(4));
         nameLockedView = text(I18n.get(
-                this, StringsTable.SETTINGS_NAME_LOCKED), 14, LABEL3, false);
+                this, StringsTable.SETTINGS_NAME_LOCKED), 14, FAINT, false);
         root.addView(nameLockedView, matchLpTop(4));
 
         root.addView(hairline(24));
@@ -2215,13 +2278,18 @@ public class MainActivity extends Activity {
         languageValue = text("", 16, LABEL1, false);
         languageValue.setGravity(Gravity.END);
         languageRow.addView(languageValue);
-        TextView langChevron = text(I18n.isRtl(this) ? "‹" : "›", 22, LABEL3, false);
+        TextView langChevron = text(I18n.isRtl(this) ? "‹" : "›", 22, FAINT, false);
         LinearLayout.LayoutParams clp2 = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT);
         clp2.setMarginStart(dp(12));
         languageRow.addView(langChevron, clp2);
         root.addView(languageRow, matchLpTop(8));
+
+        root.addView(hairline(24));
+
+        // Storage (v4.1.0): what the app uses, and the resync.
+        buildStorageSection(root);
 
         root.addView(hairline(24));
 
@@ -2240,14 +2308,264 @@ public class MainActivity extends Activity {
                     }
                 });
         TextView lockNote = text(I18n.get(
-                this, StringsTable.SETTINGS_LOCK_NOTE), 14, LABEL3, false);
+                this, StringsTable.SETTINGS_LOCK_NOTE), 14, FAINT, false);
         root.addView(lockNote, matchLpTop(4));
 
         // Version, at the very bottom.
-        TextView version = text(versionText(), 14, LABEL3, false);
+        TextView version = text(versionText(), 14, FAINT, false);
         version.setGravity(Gravity.CENTER);
         root.addView(version, matchLpTop(32));
         return (ScrollView) screens[SCREEN_SETTINGS];
+    }
+
+    // ------------------------------------------------------------------
+    // Storage (v4.1.0)
+    // ------------------------------------------------------------------
+
+    /**
+     * The storage section of the settings screen: five usage
+     * figures and one action, the resync — delete the chain
+     * database so the node syncs from the start again.
+     *
+     * What the resync may delete is {@link StorageLogic}'s rule and
+     * whether it may run at all is {@link
+     * NodeService#resetChainDatabase}'s decision; this code builds
+     * views, asks for a confirmation that names what goes and what
+     * stays, and shows the answer. It never starts the node.
+     */
+    private void buildStorageSection(LinearLayout root) {
+        TextView heading = text(I18n.get(
+                this, StringsTable.STORAGE_SECTION), 16, LABEL2, true);
+        root.addView(heading, matchLpTop(8));
+        storageChainDbValue = infoRow(root, I18n.get(
+                this, StringsTable.STORAGE_LABEL_CHAIN_DB), false);
+        storageNodeValue = infoRow(root, I18n.get(
+                this, StringsTable.STORAGE_LABEL_NODE), true);
+        storageLogsValue = infoRow(root, I18n.get(
+                this, StringsTable.STORAGE_LABEL_LOGS), true);
+        storageDepinValue = infoRow(root, I18n.get(
+                this, StringsTable.STORAGE_LABEL_DEPIN), true);
+        storageTotalValue = infoRow(root, I18n.get(
+                this, StringsTable.STORAGE_LABEL_TOTAL), true);
+        storageRunningNote = text(I18n.get(
+                this, StringsTable.STORAGE_RUNNING_NOTE), 14, FAINT, false);
+        storageRunningNote.setVisibility(View.GONE);
+        root.addView(storageRunningNote, matchLpTop(4));
+
+        storageResyncButton = linkButton(I18n.get(
+                this, StringsTable.STORAGE_RESYNC_BUTTON),
+                v -> confirmChainResync());
+        root.addView(storageResyncButton, matchLpTop(8));
+        storageNeedsStopNote = text(I18n.get(
+                this, StringsTable.STORAGE_RESYNC_NEEDS_STOP),
+                14, FAINT, false);
+        storageNeedsStopNote.setVisibility(View.GONE);
+        root.addView(storageNeedsStopNote, matchLpTop(4));
+        storageResultView = text("", 14, FAINT, false);
+        storageResultView.setVisibility(View.GONE);
+        root.addView(storageResultView, matchLpTop(4));
+    }
+
+    /** One figure: its size, "not available" when it could not be
+     *  measured, "measuring" before the first answer. */
+    private String storageText(StorageLogic.Usage u, long bytes) {
+        if (u == null) {
+            return I18n.get(this, StringsTable.STORAGE_MEASURING);
+        }
+        return bytes < 0
+                ? I18n.get(this, StringsTable.VALUE_UNAVAILABLE)
+                : DiagShare.formatBytesEn(bytes);
+    }
+
+    /**
+     * The resync is offered only while the node is stopped — no
+     * session live or being established, and no stop in flight.
+     * This is the screen's own gate; the deletion re-checks, under
+     * the launch lock, that no node process is alive.
+     */
+    private boolean chainResyncAllowed(NodeState st) {
+        return st.status == NodeState.Status.STOPPED && !stopping;
+    }
+
+    private void refreshStorage(NodeState st, long now) {
+        if (storageResyncButton == null) {
+            return;
+        }
+        boolean busy = StorageResetState.PROCESS.busy();
+        StorageResetState.Finished finished =
+                StorageResetState.PROCESS.last();
+        if (finished != null && finished.seq != storageResetSeen) {
+            // The figures changed: measure again.
+            storageResetSeen = finished.seq;
+            storageMeasuredElapsedMs = -1;
+        }
+        if (currentScreen == SCREEN_SETTINGS && !storageMeasuring
+                && (storageMeasuredElapsedMs < 0
+                || now - storageMeasuredElapsedMs >= STORAGE_REMEASURE_MS)) {
+            measureStorage();
+        }
+        StorageLogic.Usage u = storageUsage;
+        setTextIfChanged(storageChainDbValue,
+                storageText(u, u == null ? 0 : u.chainDbBytes));
+        setTextIfChanged(storageNodeValue,
+                storageText(u, u == null ? 0 : u.nodeBytes));
+        setTextIfChanged(storageLogsValue,
+                storageText(u, u == null ? 0 : u.logsBytes));
+        setTextIfChanged(storageDepinValue,
+                storageText(u, u == null ? 0 : u.depinBytes));
+        setTextIfChanged(storageTotalValue,
+                storageText(u, u == null ? 0 : u.totalBytes));
+        // A running node's database is open and moving: say that
+        // the figures are estimates then.
+        storageRunningNote.setVisibility(
+                nodeLive(st) ? View.VISIBLE : View.GONE);
+
+        boolean allowed = chainResyncAllowed(st);
+        boolean locked = NodeSettings.settingsLocked(this);
+        storageResyncButton.setEnabled(allowed && !locked && !busy);
+        storageResyncButton.setAlpha(
+                allowed && !locked && !busy ? 1f : 0.55f);
+        setTextIfChanged(storageResyncButton, I18n.get(this,
+                busy ? StringsTable.STORAGE_RESYNC_WORKING
+                        : StringsTable.STORAGE_RESYNC_BUTTON));
+        storageNeedsStopNote.setVisibility(
+                allowed || busy ? View.GONE : View.VISIBLE);
+        String result = busy ? null
+                : storageNote != null ? storageNote
+                : finished != null ? chainResyncMessage(finished)
+                : StorageLogic.resetPending(getFilesDir())
+                        ? I18n.get(this,
+                                StringsTable.STORAGE_RESYNC_PENDING)
+                        : null;
+        if (result == null) {
+            storageResultView.setVisibility(View.GONE);
+        } else {
+            setTextIfChanged(storageResultView, result);
+            storageResultView.setVisibility(View.VISIBLE);
+        }
+    }
+
+    /** Measure off the UI thread; the next refresh shows the result. */
+    private void measureStorage() {
+        storageMeasuring = true;
+        final File filesDir = getFilesDir();
+        final File dataDir = getDataDir();
+        try {
+            StorageResetState.PROCESS.executor().execute(() -> {
+                StorageLogic.Usage measured = null;
+                try {
+                    measured = StorageLogic.measure(
+                            filesDir, dataDir, NodeService.CHAIN_NAME);
+                } catch (Throwable ignored) {
+                    // The previous figures stand.
+                }
+                final StorageLogic.Usage result = measured;
+                runOnUiThread(() -> {
+                    storageMeasuring = false;
+                    storageMeasuredElapsedMs = SystemClock.elapsedRealtime();
+                    if (result != null) {
+                        storageUsage = result;
+                    }
+                });
+            });
+        } catch (RuntimeException e) {
+            storageMeasuring = false;
+            storageMeasuredElapsedMs = SystemClock.elapsedRealtime();
+        }
+    }
+
+    /**
+     * The confirmation before the resync: what is deleted, what is
+     * kept, and that it cannot be undone and starts nothing. Only
+     * the dialog's own button goes on to delete.
+     */
+    private void confirmChainResync() {
+        if (NodeSettings.settingsLocked(this)) {
+            applySettingsLock();
+            return;
+        }
+        if (StorageResetState.PROCESS.busy()
+                || !chainResyncAllowed(NodeState.get())) {
+            return;
+        }
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setPadding(dp(24), dp(8), dp(24), dp(8));
+        box.addView(text(I18n.get(this,
+                StringsTable.STORAGE_RESYNC_CONFIRM_DELETES),
+                14, LABEL1, false), matchLp());
+        box.addView(text(I18n.get(this,
+                StringsTable.STORAGE_RESYNC_CONFIRM_KEEPS),
+                14, LABEL1, false), matchLpTop(12));
+        box.addView(text(I18n.get(this,
+                StringsTable.STORAGE_RESYNC_CONFIRM_NOTE),
+                14, LABEL2, false), matchLpTop(12));
+        ScrollView scroll = new ScrollView(this);
+        scroll.addView(box);
+        AlertDialog dialog = new AlertDialog.Builder(this)
+                .setTitle(I18n.get(this,
+                        StringsTable.STORAGE_RESYNC_CONFIRM_TITLE))
+                .setView(scroll)
+                .setNegativeButton(I18n.get(this, StringsTable.BUTTON_CANCEL), null)
+                .setPositiveButton(I18n.get(this,
+                        StringsTable.STORAGE_RESYNC_CONFIRM_BUTTON),
+                        (d, which) -> runChainResync())
+                .create();
+        dialog.show();
+        styleDialog(dialog);
+    }
+
+    /**
+     * The confirmed resync. The state is looked at again — the
+     * dialog may have been open for a while — and the deletion runs
+     * off the UI thread; {@link NodeService#resetChainDatabase}
+     * refuses on its own if a node turns out to be alive.
+     */
+    private void runChainResync() {
+        if (NodeSettings.settingsLocked(this)
+                || StorageResetState.PROCESS.busy()) {
+            return;
+        }
+        if (!chainResyncAllowed(NodeState.get())) {
+            storageNote = I18n.get(
+                    this, StringsTable.STORAGE_RESYNC_REFUSED);
+            refresh();
+            return;
+        }
+        storageNote = null;
+        final Context app = getApplicationContext();
+        // The result is published process-wide; this instance, if
+        // it is still the one on screen, shows it at once, and any
+        // other reads it at its next refresh.
+        StorageResetState.PROCESS.start(
+                () -> NodeService.resetChainDatabase(app),
+                () -> runOnUiThread(() -> {
+                    if (!isDestroyed()) {
+                        refresh();
+                    }
+                }));
+        refresh();
+    }
+
+    /** The result line of a finished resync run. */
+    private String chainResyncMessage(StorageResetState.Finished finished) {
+        StorageLogic.ResetOutcome outcome = finished.outcome;
+        if (finished.threw) {
+            return I18n.format(this, StringsTable.STORAGE_RESYNC_FAILED,
+                    I18n.get(this, StorageResetState.failureKey(null)));
+        }
+        if (outcome == null) {
+            return I18n.get(this, StringsTable.STORAGE_RESYNC_REFUSED);
+        }
+        if (outcome.result == StorageLogic.ResetResult.DELETED) {
+            return I18n.get(this, StringsTable.STORAGE_RESYNC_DONE);
+        }
+        if (outcome.result == StorageLogic.ResetResult.NOTHING_TO_DELETE) {
+            return I18n.get(this, StringsTable.STORAGE_RESYNC_NOTHING);
+        }
+        return I18n.format(this, StringsTable.STORAGE_RESYNC_FAILED,
+                I18n.get(this,
+                        StorageResetState.failureKey(outcome.failureKind)));
     }
 
     // ------------------------------------------------------------------
@@ -2286,13 +2604,13 @@ public class MainActivity extends Activity {
         miningPendingView = text("", 14, ACCENT, false);
         miningPendingView.setVisibility(View.GONE);
         root.addView(miningPendingView, matchLpTop(4));
-        miningAppliedView = text("", 14, LABEL3, false);
+        miningAppliedView = text("", 14, FAINT, false);
         miningAppliedView.setVisibility(View.GONE);
         root.addView(miningAppliedView, matchLpTop(4));
         root.addView(text(I18n.get(this, StringsTable.MINING_NOTE),
-                14, LABEL3, false), matchLpTop(4));
+                14, FAINT, false), matchLpTop(4));
         miningLockedView = text(I18n.get(
-                this, StringsTable.SETTINGS_LOCKED_NOTICE), 14, LABEL3, false);
+                this, StringsTable.SETTINGS_LOCKED_NOTICE), 14, FAINT, false);
         miningLockedView.setVisibility(View.GONE);
         root.addView(miningLockedView, matchLpTop(4));
 
@@ -2340,7 +2658,7 @@ public class MainActivity extends Activity {
         // Waiting is the normal picture while the node catches up;
         // the sentence that says so is always there with the state.
         miningStatusBox.addView(text(I18n.get(
-                this, StringsTable.MINING_WAITING_NOTE), 14, LABEL3, false),
+                this, StringsTable.MINING_WAITING_NOTE), 14, FAINT, false),
                 matchLpTop(8));
 
         // What a node launched with mining reports.
@@ -2357,7 +2675,7 @@ public class MainActivity extends Activity {
         miningAcceptedValue = infoRow(miningStatsBox,
                 I18n.get(this, StringsTable.MINING_LABEL_ACCEPTED), true);
         miningStatsBox.addView(text(I18n.get(
-                this, StringsTable.MINING_STATS_NOTE), 14, LABEL3, false),
+                this, StringsTable.MINING_STATS_NOTE), 14, FAINT, false),
                 matchLpTop(4));
         // The address is the node's own report for the inner hash it
         // was launched with — public information, shown in full so it
@@ -2367,7 +2685,7 @@ public class MainActivity extends Activity {
                 I18n.get(this, StringsTable.MINING_LABEL_ADDRESS), true);
         miningAddressValue.setTextIsSelectable(true);
         miningStatsBox.addView(text(I18n.get(
-                this, StringsTable.MINING_ADDRESS_NOTE), 14, LABEL3, false),
+                this, StringsTable.MINING_ADDRESS_NOTE), 14, FAINT, false),
                 matchLpTop(4));
 
         miningRestartButton = linkButton(
@@ -2386,7 +2704,7 @@ public class MainActivity extends Activity {
         miningStatsBox.addView(miningRestartButton, matchLpTop(8));
         miningStatsBox.addView(text(I18n.get(
                 this, StringsTable.MINING_RESTART_MINER_NOTE),
-                14, LABEL3, false), matchLpTop(2));
+                14, FAINT, false), matchLpTop(2));
 
         miningStatsBox.addView(text(I18n.get(
                 this, StringsTable.MINING_LOG_LABEL), 14, LABEL2, true),
@@ -2421,7 +2739,7 @@ public class MainActivity extends Activity {
         TextView v = text("", 16, LABEL1, false);
         v.setGravity(Gravity.END);
         r.addView(v);
-        TextView chev = text(I18n.isRtl(this) ? "‹" : "›", 22, LABEL3, false);
+        TextView chev = text(I18n.isRtl(this) ? "‹" : "›", 22, FAINT, false);
         LinearLayout.LayoutParams clp = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.WRAP_CONTENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT);
@@ -2492,7 +2810,7 @@ public class MainActivity extends Activity {
         miningDialog = new AlertDialog.Builder(this)
                 .setTitle(I18n.get(this, StringsTable.MINING_CONFIRM_TITLE))
                 .setView(scroll)
-                .setNegativeButton(android.R.string.cancel, null)
+                .setNegativeButton(I18n.get(this, StringsTable.BUTTON_CANCEL), null)
                 .setPositiveButton(
                         I18n.get(this, StringsTable.MINING_CONFIRM_BUTTON),
                         (d, which) -> {
@@ -2545,7 +2863,7 @@ public class MainActivity extends Activity {
         box.addView(text(I18n.get(this, StringsTable.MINING_REWARDS_INFO_ONLY),
                 14, STATE_FAILED, false), matchLpTop(10));
         box.addView(text(I18n.get(this, StringsTable.MINING_REWARDS_INFO_PRIVATE),
-                14, LABEL3, false), matchLpTop(10));
+                14, FAINT, false), matchLpTop(10));
         final boolean hadValue = NodeSettings.hasRewardsInnerHash(this);
         if (hadValue) {
             box.addView(text(I18n.get(
@@ -2567,7 +2885,7 @@ public class MainActivity extends Activity {
         input.setTypeface(Typeface.MONOSPACE);
         input.setTextSize(14);
         input.setTextColor(LABEL1);
-        input.setHintTextColor(LABEL3);
+        input.setHintTextColor(FAINT);
         input.setBackground(rounded(SURFACE, 12, density, FIELD_BORDER, 1));
         input.setPadding(dp(16), dp(12), dp(16), dp(12));
         input.setMinHeight(dp(56));
@@ -2581,7 +2899,7 @@ public class MainActivity extends Activity {
         final AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle(I18n.get(this, StringsTable.MINING_REWARDS_LABEL))
                 .setView(scroll)
-                .setNegativeButton(android.R.string.cancel, null)
+                .setNegativeButton(I18n.get(this, StringsTable.BUTTON_CANCEL), null)
                 .setPositiveButton(
                         I18n.get(this, StringsTable.BUTTON_SAVE), null)
                 .create();
@@ -2597,7 +2915,7 @@ public class MainActivity extends Activity {
                     v -> confirmRewardsDelete(dialog)), matchLpTop(8));
             box.addView(text(I18n.get(
                     this, StringsTable.MINING_REWARDS_DELETE_NOTE),
-                    14, LABEL3, false), matchLpTop(2));
+                    14, FAINT, false), matchLpTop(2));
         }
 
         dialog.setOnShowListener(dlg -> {
@@ -2683,8 +3001,8 @@ public class MainActivity extends Activity {
                 .setTitle(I18n.get(this, StringsTable.MINING_REWARDS_DELETE))
                 .setMessage(I18n.get(
                         this, StringsTable.MINING_REWARDS_DELETE_NOTE))
-                .setNegativeButton(android.R.string.cancel, null)
-                .setPositiveButton(android.R.string.ok, (d, which) -> {
+                .setNegativeButton(I18n.get(this, StringsTable.BUTTON_CANCEL), null)
+                .setPositiveButton(I18n.get(this, StringsTable.BUTTON_OK), (d, which) -> {
                     if (NodeSettings.settingsLocked(this)) {
                         return;
                     }
@@ -2731,7 +3049,7 @@ public class MainActivity extends Activity {
         box.setOrientation(LinearLayout.VERTICAL);
         box.setPadding(dp(24), dp(8), dp(24), dp(8));
         box.addView(text(I18n.get(this, StringsTable.MINING_WORKERS_NOTE),
-                14, LABEL3, false), matchLp());
+                14, FAINT, false), matchLp());
         ListView list = new ListView(this);
         list.setChoiceMode(ListView.CHOICE_MODE_SINGLE);
         list.setAdapter(new ArrayAdapter<>(this,
@@ -2745,7 +3063,7 @@ public class MainActivity extends Activity {
         final AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle(I18n.get(this, StringsTable.MINING_WORKERS_LABEL))
                 .setView(box)
-                .setNegativeButton(android.R.string.cancel, null)
+                .setNegativeButton(I18n.get(this, StringsTable.BUTTON_CANCEL), null)
                 .create();
         miningDialog = dialog;
         list.setOnItemClickListener((parent, view, which, id) -> {
@@ -3315,13 +3633,13 @@ public class MainActivity extends Activity {
         box.addView(row, matchLp());
 
         TextView maskNote = text(I18n.get(this, StringsTable.SHARE_MASK_NOTE),
-                14, LABEL3, false);
+                14, FAINT, false);
         box.addView(maskNote, matchLpTop(4));
 
         AlertDialog dialog = new AlertDialog.Builder(this)
                 .setTitle(I18n.get(this, StringsTable.BUTTON_SHARE_LOG))
                 .setView(box)
-                .setNegativeButton(android.R.string.cancel, null)
+                .setNegativeButton(I18n.get(this, StringsTable.BUTTON_CANCEL), null)
                 .setPositiveButton(
                         I18n.get(this, StringsTable.BUTTON_SHARE_LOG),
                         (d, which) -> doShareLog(excerpt, truncated, facts,
@@ -3527,6 +3845,10 @@ public class MainActivity extends Activity {
         f.trackUptimeMs = TrackStore.uptimeMs(this);
         f.trackBlocks = TrackStore.blockUpdates(this);
         f.trackMaxPeers = TrackStore.maxPeers(this);
+        // v4.1.0: how many days the daily record holds — the count
+        // only; the summary carries none of its values.
+        f.dailyRecordDays = DailyTrackStore.dayCount(
+                DailyTrackStore.file(getFilesDir()));
         f.telemetryChangedMs = NodeSettings.telemetryChangedMs(this);
         f.nameChangedMs = NodeSettings.nodeNameChangedMs(this);
         f.languageChangedMs = NodeSettings.languageChangedMs(this);
@@ -3636,7 +3958,7 @@ public class MainActivity extends Activity {
         box.setPadding(dp(24), dp(8), dp(24), dp(8));
 
         TextView hint = text(I18n.get(
-                this, StringsTable.SETTINGS_NAME_EMPTY_HINT), 14, LABEL3, false);
+                this, StringsTable.SETTINGS_NAME_EMPTY_HINT), 14, FAINT, false);
         box.addView(hint, matchLp());
 
         final EditText input = new EditText(this);
@@ -3647,7 +3969,7 @@ public class MainActivity extends Activity {
         input.setHint(NodeSettings.DEFAULT_NODE_NAME);
         input.setTextSize(16);
         input.setTextColor(LABEL1);
-        input.setHintTextColor(LABEL3);
+        input.setHintTextColor(FAINT);
         input.setBackground(rounded(SURFACE, 12, density, FIELD_BORDER, 1));
         input.setPadding(dp(16), dp(12), dp(16), dp(12));
         input.setMinHeight(dp(56));
@@ -3656,7 +3978,7 @@ public class MainActivity extends Activity {
         input.setSelection(input.getText().length());
         box.addView(input, matchLpTop(12));
 
-        final TextView counter = text("", 14, LABEL3, false);
+        final TextView counter = text("", 14, FAINT, false);
         box.addView(counter, matchLpTop(8));
         // display_name_limit is a quantity string: resolve its
         // wording for the limit value itself.
@@ -3666,14 +3988,14 @@ public class MainActivity extends Activity {
                 14, STATE_FAILED, false);
         error.setVisibility(View.GONE);
         box.addView(error, matchLpTop(4));
-        final TextView preview = text("", 14, LABEL3, false);
+        final TextView preview = text("", 14, FAINT, false);
         preview.setVisibility(View.GONE);
         box.addView(preview, matchLpTop(4));
 
         AlertDialog.Builder b = new AlertDialog.Builder(this)
                 .setTitle(I18n.get(this, StringsTable.SETTINGS_DISPLAY_NAME))
                 .setView(box)
-                .setNegativeButton(android.R.string.cancel, null)
+                .setNegativeButton(I18n.get(this, StringsTable.BUTTON_CANCEL), null)
                 .setPositiveButton(
                         I18n.get(this, StringsTable.BUTTON_SAVE), null);
         nameDialog = b.create();
@@ -3805,7 +4127,7 @@ public class MainActivity extends Activity {
         box.setPadding(dp(24), dp(8), dp(24), dp(8));
         TextView note = text(I18n.get(
                 this, StringsTable.SETTINGS_LANGUAGE_IMMEDIATE),
-                14, LABEL3, false);
+                14, FAINT, false);
         box.addView(note, matchLp());
         ListView list = new ListView(this);
         list.setChoiceMode(ListView.CHOICE_MODE_SINGLE);
@@ -3863,7 +4185,7 @@ public class MainActivity extends Activity {
         languageDialog = new AlertDialog.Builder(this)
                 .setTitle(I18n.get(this, StringsTable.SETTINGS_LANGUAGE))
                 .setView(box)
-                .setNegativeButton(android.R.string.cancel, null)
+                .setNegativeButton(I18n.get(this, StringsTable.BUTTON_CANCEL), null)
                 .show();
         styleDialog(languageDialog);
     }
@@ -3915,6 +4237,8 @@ public class MainActivity extends Activity {
         // (no DePIN status yet), and the mining views must not
         // depend on that.
         refreshMining(st, now);
+        // v4.1.0: its own step for the same reason.
+        refreshStorage(st, now);
         refreshTransferState();
         firstRefresh = false;
     }
@@ -3993,7 +4317,7 @@ public class MainActivity extends Activity {
                     new android.text.SpannableString(bestText);
             if (bestText.startsWith("#")) {
                 span.setSpan(new android.text.style.ForegroundColorSpan(
-                                LABEL3), 0, 1,
+                                FAINT), 0, 1,
                         android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
             }
             vhBestValue.setText(span);
@@ -4076,7 +4400,7 @@ public class MainActivity extends Activity {
             mainButton.setText(I18n.get(this, StringsTable.BUTTON_STOPPING));
             mainButton.setEnabled(false);
             mainButton.setBackground(stoppingButtonBg());
-            mainButton.setTextColor(LABEL3);
+            mainButton.setTextColor(FAINT);
             mainButton.setTypeface(VisionFonts.displayMedium(this));
         } else {
             mainButton.setEnabled(true);
@@ -4376,13 +4700,13 @@ public class MainActivity extends Activity {
         switch (ns) {
             case OFFLINE:
                 setTextIfChanged(netNumView, "\u2014");
-                netNumView.setTextColor(LABEL3);
+                netNumView.setTextColor(FAINT);
                 sub = I18n.get(this, StringsTable.STATE_OFFLINE);
                 tagVisible = false;
                 break;
             case STOPPED:
                 setTextIfChanged(netNumView, "\u2014");
-                netNumView.setTextColor(LABEL3);
+                netNumView.setTextColor(FAINT);
                 sub = I18n.get(this, StringsTable.VISION_NET_OFF);
                 tagVisible = false;
                 break;
@@ -4391,7 +4715,7 @@ public class MainActivity extends Activity {
                 // it is shown AS a stale value, never as a live
                 // one. The state line carries the last success.
                 setTextIfChanged(netNumView, peersText);
-                netNumView.setTextColor(LABEL3);
+                netNumView.setTextColor(FAINT);
                 sub = I18n.format(this, StringsTable.STATE_RPC_FAIL,
                         timeHhMmSs(st.lastRpcOkWallMs));
                 tagVisible = false;
@@ -5091,7 +5415,7 @@ public class MainActivity extends Activity {
                         StringsTable.DEPIN_ATTEMPT_RESET_CONFIRM_TITLE))
                 .setMessage(I18n.get(this,
                         StringsTable.DEPIN_ATTEMPT_RESET_CONFIRM_BODY))
-                .setNegativeButton(android.R.string.cancel, null)
+                .setNegativeButton(I18n.get(this, StringsTable.BUTTON_CANCEL), null)
                 .setPositiveButton(I18n.get(this,
                         StringsTable.DEPIN_ATTEMPT_RESET_BUTTON),
                         (dialog, which) -> {
@@ -5296,7 +5620,7 @@ public class MainActivity extends Activity {
                                   final boolean receiver) {
         final TextView t = text(I18n.get(
                 this, StringsTable.DEPIN_TRANSFER_OTHER_OPS) + " ▸",
-                14, LABEL3, false);
+                14, FAINT, false);
         t.setClickable(true);
         t.setFocusable(true);
         t.setMinHeight(dp(40));
@@ -5723,7 +6047,7 @@ public class MainActivity extends Activity {
                             StringsTable
                                     .DEPIN_TRANSFER_COMMIT_CODE_BODY,
                             code))
-                    .setPositiveButton(android.R.string.ok, null)
+                    .setPositiveButton(I18n.get(this, StringsTable.BUTTON_OK), null)
                     .show();
         }
         attemptDeletePickedPackage();
@@ -5738,7 +6062,7 @@ public class MainActivity extends Activity {
                 .setMessage(code + "\n\n" + I18n.get(this,
                         StringsTable
                                 .DEPIN_TRANSFER_EXPORTED_AGAIN_NOTE))
-                .setPositiveButton(android.R.string.ok, null)
+                .setPositiveButton(I18n.get(this, StringsTable.BUTTON_OK), null)
                 .show();
         saveStagedOutput(data);
     }
@@ -5764,7 +6088,7 @@ public class MainActivity extends Activity {
                         .setMessage(I18n.get(this,
                                 StringsTable
                                         .DEPIN_TRANSFER_DELETE_SOURCE_PROMPT))
-                        .setPositiveButton(android.R.string.ok, null)
+                        .setPositiveButton(I18n.get(this, StringsTable.BUTTON_OK), null)
                         .show());
             }
         }).start();
@@ -5775,7 +6099,7 @@ public class MainActivity extends Activity {
                 DepinIpc.KEY_T_CODE_DISPLAY);
         new AlertDialog.Builder(this)
                 .setMessage(code)
-                .setPositiveButton(android.R.string.ok, null)
+                .setPositiveButton(I18n.get(this, StringsTable.BUTTON_OK), null)
                 .show();
         saveStagedOutput(data);
     }
@@ -6239,7 +6563,7 @@ public class MainActivity extends Activity {
                                 (d, w) -> transferOp(
                                         DepinIpc.T_OP_CONFIRM_ONESHOT,
                                         null, this::onConfirmOneshotReply))
-                        .setNegativeButton(android.R.string.cancel, null)
+                        .setNegativeButton(I18n.get(this, StringsTable.BUTTON_CANCEL), null)
                         .show();
                 break;
             case ACT_CLOSE_ONESHOT: {
@@ -6278,12 +6602,12 @@ public class MainActivity extends Activity {
                                                                 StringsTable
                                                                         .DEPIN_TRANSFER_ONESHOT_CLOSED_MSG))
                                                         .setPositiveButton(
-                                                                android.R.string.ok,
+                                                                I18n.get(this, StringsTable.BUTTON_OK),
                                                                 null)
                                                         .show();
                                             });
                                 })
-                        .setNegativeButton(android.R.string.cancel, null)
+                        .setNegativeButton(I18n.get(this, StringsTable.BUTTON_CANCEL), null)
                         .show();
                 break;
             }
@@ -6306,7 +6630,7 @@ public class MainActivity extends Activity {
                                 (d, w) -> transferOp(
                                         DepinIpc.T_OP_CANCEL_ONESHOT_SENDER,
                                         null, null))
-                        .setNegativeButton(android.R.string.cancel, null)
+                        .setNegativeButton(I18n.get(this, StringsTable.BUTTON_CANCEL), null)
                         .show();
                 break;
             case ACT_ISSUE_PERMIT:
@@ -6517,7 +6841,7 @@ public class MainActivity extends Activity {
                 .setTitle(I18n.get(this,
                         StringsTable.DEPIN_TRANSFER_CODE_PROMPT))
                 .setView(input)
-                .setPositiveButton(android.R.string.ok,
+                .setPositiveButton(I18n.get(this, StringsTable.BUTTON_OK),
                         (d, w) -> {
                             Bundle params = new Bundle();
                             params.putString(DepinIpc.KEY_T_CODE,
@@ -6525,7 +6849,7 @@ public class MainActivity extends Activity {
                             transferOp(DepinIpc.T_OP_STAGE_PACKAGE,
                                     params, this::onStageReply);
                         })
-                .setNegativeButton(android.R.string.cancel, null)
+                .setNegativeButton(I18n.get(this, StringsTable.BUTTON_CANCEL), null)
                 .show();
     }
 

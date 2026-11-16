@@ -27,6 +27,11 @@ import java.util.List;
  *    real child processes (shell scripts standing in for the miner
  *    binary), so spawn, drain, exit handling, restart limits and
  *    the bounded stop run exactly as they do on a device;
+ *  - StorageLogic (v4.1.0): which paths the resync may delete and
+ *    which it may never, the deletion itself on real directory
+ *    trees, and the usage figures;
+ *  - DailyTrackStore (v4.1.0): the daily record's line format,
+ *    retention, atomic save and the sampler that feeds it;
  *  - StringsTable: every key in every language, placeholders equal
  *    to the Japanese source.
  *
@@ -81,6 +86,13 @@ public final class MiningHarnessMain {
         testDrainLines();
         testStrayScan();
         testSupervisor();
+        testStorageRule();
+        testStorageReset();
+        testStorageUsage();
+        testDailyRecords();
+        testDailySampler();
+        testDailySamplerClock();
+        testStorageResetState();
         testInnerHashEntry();
         testShareAssembly();
         testStrings();
@@ -2203,6 +2215,10 @@ public final class MiningHarnessMain {
         testSupervisorExporterWarning();
         testSupervisorReplacesLeftover();
         testSupervisorThermalCarryOver();
+        testSupervisorCapCarryOver();
+        testSupervisorCapDuringStart();
+        testSupervisorCapReadWindow();
+        testSupervisorThreadCannotStart();
     }
 
     private static void testSupervisorThermalCarryOver() throws Exception {
@@ -2233,6 +2249,359 @@ public final class MiningHarnessMain {
         check("thermal carry-over: the supervisor ended by itself",
                 s.awaitTermination(5000));
         s.requestStop("test done");
+    }
+
+    // ---------------- v4.1.0: thermal cap at a start (FC-1, FC-7) ----------------
+
+    /** The "ARGS:" lines of the miner log, one per miner process. */
+    private static List<String> argLines(Rig rig) throws IOException {
+        List<String> out = new ArrayList<>();
+        for (String l : readAll(rig.log).split("\n")) {
+            if (l.startsWith("ARGS: ")) {
+                out.add(l);
+            }
+        }
+        return out;
+    }
+
+    private static void testSupervisorCapCarryOver() throws Exception {
+        // Final check FC-7: nothing showed that a cap a governor
+        // already holds decides the worker count of the next start.
+        // The same rig is run twice — with an untouched governor and
+        // with one whose cap came down on an earlier node process —
+        // so the difference between the two runs is the cap alone.
+        final Rig free = new Rig("cap-free", S_HAPPY);
+        free.workers.set(4);
+        final MinerSupervisor a = free.supervisor(
+                MiningLogic.SecretScrubber.of(VALID, null));
+        a.setThermalGovernor(new MiningLogic.ThermalGovernor());
+        a.start();
+        check("cap carry-over: (control) an untouched governor leaves the"
+                        + " setting's 4 workers",
+                eventually(new Cond() {
+                    @Override
+                    public boolean ok() throws Exception {
+                        List<String> args = argLines(free);
+                        return args.size() == 1 && args.get(0).contains(
+                                " --cpu-workers 4 ");
+                    }
+                }, 8000)
+                        && a.snapshot(free.now()).cpuWorkers == 4
+                        && a.runningWorkers() == 4);
+        a.requestStop("test over");
+        check("cap carry-over: (cleanup) stops", a.awaitTermination(8000));
+
+        final Rig rig = new Rig("cap-held", S_HAPPY);
+        rig.workers.set(4);
+        final MiningLogic.ThermalGovernor gov =
+                new MiningLogic.ThermalGovernor();
+        gov.onStatus(MiningLogic.THERMAL_MODERATE, 4, 0);
+        check("cap carry-over: (premise) the governor holds a cap of 2",
+                gov.cap() == 2 && !gov.stopped());
+        final MinerSupervisor s = rig.supervisor(
+                MiningLogic.SecretScrubber.of(VALID, null));
+        s.setThermalGovernor(gov);
+        s.start();
+        check("cap carry-over: the miner is started with the cap's 2 workers,"
+                        + " not the setting's 4",
+                eventually(new Cond() {
+                    @Override
+                    public boolean ok() throws Exception {
+                        List<String> args = argLines(rig);
+                        return args.size() == 1 && args.get(0).contains(
+                                " --cpu-workers 2 ");
+                    }
+                }, 8000));
+        MiningLogic.MinerSnapshot snap = s.snapshot(rig.now());
+        check("cap carry-over: the snapshot and the running count say 2",
+                snap.cpuWorkers == 2 && snap.thermalCap == 2
+                        && !snap.thermalStopped && s.runningWorkers() == 2);
+        check("cap carry-over: the app log names the capped count",
+                rig.appLogContains("cpu-workers 2")
+                        && !rig.appLogContains("cpu-workers 4"));
+        check("cap carry-over: a miner within the cap is left alone",
+                gov.apply(MiningLogic.THERMAL_MODERATE, 4, s).action
+                        == MiningLogic.ThermalAction.NONE && rig.runs() == 1);
+        // The setting changes; the cap still decides.
+        rig.workers.set(8);
+        s.requestRestart();
+        check("cap carry-over: a restart with a larger setting stays at the"
+                        + " cap",
+                eventually(new Cond() {
+                    @Override
+                    public boolean ok() throws Exception {
+                        List<String> args = argLines(rig);
+                        return args.size() == 2 && args.get(1).contains(
+                                " --cpu-workers 2 ");
+                    }
+                }, 8000));
+        rig.workers.set(1);
+        s.requestRestart();
+        check("cap carry-over: a setting below the cap is used as it is",
+                eventually(new Cond() {
+                    @Override
+                    public boolean ok() throws Exception {
+                        List<String> args = argLines(rig);
+                        return args.size() == 3 && args.get(2).contains(
+                                " --cpu-workers 1 ");
+                    }
+                }, 8000));
+        s.requestStop("test over");
+        check("cap carry-over: (cleanup) stops", s.awaitTermination(8000));
+    }
+
+    private static void testSupervisorCapDuringStart() throws Exception {
+        // Final check FC-1 / audit L-1: a status that arrives while a
+        // start is in flight. The launcher is held inside its spawn,
+        // so the supervisor sits exactly between "published STARTING
+        // with its worker count" and "process exists".
+        final Rig rig = new Rig("cap-inflight", S_HAPPY);
+        rig.workers.set(4);
+        final java.util.concurrent.CountDownLatch entered =
+                new java.util.concurrent.CountDownLatch(1);
+        final java.util.concurrent.CountDownLatch release =
+                new java.util.concurrent.CountDownLatch(1);
+        final MinerSupervisor.Launcher inner = rig.cfg.launcher;
+        final java.util.concurrent.atomic.AtomicInteger starts =
+                new java.util.concurrent.atomic.AtomicInteger();
+        rig.cfg.launcher = new MinerSupervisor.Launcher() {
+            @Override
+            public Process start(List<String> command) throws IOException {
+                if (starts.incrementAndGet() == 1) {
+                    entered.countDown();
+                    try {
+                        release.await();
+                    } catch (InterruptedException e) {
+                        throw new IOException("interrupted");
+                    }
+                }
+                return inner.start(command);
+            }
+        };
+        final MiningLogic.ThermalGovernor gov =
+                new MiningLogic.ThermalGovernor();
+        final MinerSupervisor s = rig.supervisor(
+                MiningLogic.SecretScrubber.of(VALID, null));
+        s.setThermalGovernor(gov);
+        s.start();
+        check("cap during start: (setup) the first start is in flight",
+                entered.await(8, java.util.concurrent.TimeUnit.SECONDS));
+        check("cap during start: a start in flight is counted with its"
+                        + " worker count",
+                phase(rig, s) == MiningLogic.Phase.STARTING
+                        && s.runningWorkers() == 4);
+        MiningLogic.ThermalDecision d =
+                gov.apply(MiningLogic.THERMAL_MODERATE, 4, s);
+        check("cap during start: the status reduces the start in flight",
+                d.action == MiningLogic.ThermalAction.REDUCE && d.cap == 2);
+        release.countDown();
+        check("cap during start: the miner comes back with the cap's 2"
+                        + " workers",
+                eventually(new Cond() {
+                    @Override
+                    public boolean ok() throws Exception {
+                        List<String> args = argLines(rig);
+                        return !args.isEmpty()
+                                && args.get(args.size() - 1).contains(
+                                " --cpu-workers 2 ")
+                                && phase(rig, s) == MiningLogic.Phase.RUNNING
+                                && s.runningWorkers() == 2;
+                    }
+                }, 10000));
+        check("cap during start: exactly one restart did it",
+                starts.get() == 2);
+        s.requestStop("test over");
+        check("cap during start: (cleanup) stops", s.awaitTermination(8000));
+    }
+
+    private static void testSupervisorCapReadWindow() throws Exception {
+        // Audit L-1: the window FC-1 closes - a status that lands
+        // between a start's cap read and the publication of its
+        // worker count. The governor's test seam runs right after
+        // the cap was read; from there another thread delivers
+        // MODERATE and is given time to finish. With the cap read
+        // and the publication under one supervisor lock that thread
+        // cannot finish in the window: it lowers the cap and then
+        // waits for the lock to ask what is running, sees this
+        // start's 4 and reduces it. With the cap read outside the
+        // lock (v4.0.0) it does finish there - it finds nothing
+        // running and asks for nothing - and the start then goes
+        // out with the 4 it read before the cap came down.
+        final Rig rig = new Rig("cap-window", S_HAPPY);
+        rig.workers.set(4);
+        final MiningLogic.ThermalGovernor gov =
+                new MiningLogic.ThermalGovernor();
+        final MinerSupervisor s = rig.supervisor(
+                MiningLogic.SecretScrubber.of(VALID, null));
+        s.setThermalGovernor(gov);
+        final java.util.concurrent.atomic.AtomicInteger capReads =
+                new java.util.concurrent.atomic.AtomicInteger();
+        final java.util.concurrent.atomic.AtomicBoolean finishedInWindow =
+                new java.util.concurrent.atomic.AtomicBoolean();
+        final java.util.concurrent.atomic.AtomicReference<
+                MiningLogic.ThermalDecision> decision =
+                new java.util.concurrent.atomic.AtomicReference<>();
+        final java.util.concurrent.CountDownLatch windowClosed =
+                new java.util.concurrent.CountDownLatch(1);
+        gov.afterCapReadForTest = new Runnable() {
+            @Override
+            public void run() {
+                if (capReads.incrementAndGet() != 1) {
+                    return;
+                }
+                Thread status = new Thread(new Runnable() {
+                    @Override
+                    public void run() {
+                        decision.set(gov.apply(
+                                MiningLogic.THERMAL_MODERATE, 4, s));
+                    }
+                }, "test-thermal-status");
+                status.setDaemon(true);
+                status.start();
+                try {
+                    status.join(1500);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+                finishedInWindow.set(!status.isAlive());
+                windowClosed.countDown();
+            }
+        };
+        s.start();
+        check("cap read window: (setup) a status was delivered right after"
+                        + " the first start read the cap",
+                windowClosed.await(10, java.util.concurrent.TimeUnit.SECONDS)
+                        && gov.cap() == 2);
+        check("cap read window: the status could not be dealt with inside"
+                        + " the window - the start holds the supervisor's"
+                        + " lock from the cap read to the publication",
+                !finishedInWindow.get());
+        check("cap read window: the miner ends up with the cap's 2 workers",
+                eventually(new Cond() {
+                    @Override
+                    public boolean ok() throws Exception {
+                        List<String> args = argLines(rig);
+                        return !args.isEmpty()
+                                && args.get(args.size() - 1).contains(
+                                " --cpu-workers 2 ")
+                                && phase(rig, s) == MiningLogic.Phase.RUNNING
+                                && s.runningWorkers() == 2;
+                    }
+                }, 10000));
+        MiningLogic.ThermalDecision d = decision.get();
+        check("cap read window: because the status saw the start's 4 and"
+                        + " reduced it (" + (d == null ? "no decision"
+                        : d.action + ", cap " + d.cap) + ")",
+                d != null && d.action == MiningLogic.ThermalAction.REDUCE
+                        && d.cap == 2);
+        check("cap read window: no miner is left running above the cap",
+                s.snapshot(rig.now()).cpuWorkers == 2
+                        && s.snapshot(rig.now()).thermalCap == 2);
+        gov.afterCapReadForTest = null;
+        s.requestStop("test over");
+        check("cap read window: (cleanup) stops", s.awaitTermination(8000));
+    }
+
+    // ---------------- v4.1.0: a supervisor thread that cannot start (FC-2) ----------------
+
+    private static void testSupervisorThreadCannotStart() throws Exception {
+        final Rig rig = new Rig("nothread", S_HAPPY);
+        rig.cfg.threads = new java.util.concurrent.ThreadFactory() {
+            @Override
+            public Thread newThread(Runnable r) {
+                return new Thread(r, "miner-supervisor") {
+                    @Override
+                    public synchronized void start() {
+                        // What Thread.start() throws when the system
+                        // has no thread left to give.
+                        throw new OutOfMemoryError(
+                                "unable to create native thread (test)");
+                    }
+                };
+            }
+        };
+        final MinerSupervisor s = rig.supervisor(
+                MiningLogic.SecretScrubber.of(VALID, null));
+        Throwable thrown = null;
+        try {
+            s.start();
+        } catch (Throwable t) {
+            thrown = t;
+        }
+        check("thread failure: start() does not throw into its caller"
+                + " (thrown: " + thrown + ")", thrown == null);
+        MiningLogic.MinerSnapshot snap = s.snapshot(rig.now());
+        check("thread failure: the status says the miner could not start",
+                snap.phase == MiningLogic.Phase.START_FAILED);
+        check("thread failure: the app log names the error class and that"
+                        + " the node is not affected",
+                rig.appLogContains("supervisor thread could not be started"
+                        + " (java.lang.OutOfMemoryError)")
+                        && rig.appLogContains("The node is not affected"));
+        check("thread failure: the supervisor is finished, nothing to wait"
+                        + " for",
+                s.awaitTermination(50) && s.runningWorkers() == 0);
+        Throwable later = null;
+        try {
+            s.requestRestart();
+            s.requestThermalStop();
+            s.requestStop("node process exited");
+            s.start();
+        } catch (Throwable t) {
+            later = t;
+        }
+        Thread.sleep(150);
+        check("thread failure: later calls are harmless and start nothing"
+                        + " (thrown: " + later + ")",
+                later == null && rig.runs() == 0
+                        && rig.directStarts.get() == 0
+                        && s.snapshot(rig.now()).phase
+                        == MiningLogic.Phase.START_FAILED);
+
+        final Rig rig2 = new Rig("nofactory", S_HAPPY);
+        rig2.cfg.threads = new java.util.concurrent.ThreadFactory() {
+            @Override
+            public Thread newThread(Runnable r) {
+                throw new IllegalStateException("no threads here (test)");
+            }
+        };
+        final MinerSupervisor s2 = rig2.supervisor(
+                MiningLogic.SecretScrubber.of(VALID, null));
+        Throwable thrown2 = null;
+        try {
+            s2.start();
+        } catch (Throwable t) {
+            thrown2 = t;
+        }
+        check("thread failure: a failing thread factory is contained the"
+                        + " same way",
+                thrown2 == null && s2.snapshot(rig2.now()).phase
+                        == MiningLogic.Phase.START_FAILED
+                        && s2.awaitTermination(50)
+                        && rig2.appLogContains(
+                        "java.lang.IllegalStateException"));
+
+        // The seam itself changes nothing when the thread starts.
+        final Rig rig3 = new Rig("factory-ok", S_HAPPY);
+        rig3.cfg.threads = new java.util.concurrent.ThreadFactory() {
+            @Override
+            public Thread newThread(Runnable r) {
+                return new Thread(r, "miner-supervisor");
+            }
+        };
+        final MinerSupervisor s3 = rig3.supervisor(
+                MiningLogic.SecretScrubber.of(VALID, null));
+        s3.start();
+        check("thread failure: (control) with a thread the miner runs",
+                eventually(new Cond() {
+                    @Override
+                    public boolean ok() throws Exception {
+                        return phase(rig3, s3) == MiningLogic.Phase.RUNNING
+                                && rig3.runs() == 1;
+                    }
+                }, 8000));
+        s3.requestStop("test over");
+        check("thread failure: (cleanup) stops", s3.awaitTermination(8000));
     }
 
     private static void testSupervisorWaitsThenRuns() throws Exception {
@@ -2785,6 +3154,1270 @@ public final class MiningHarnessMain {
         check("supervisor: (cleanup) stops", second.awaitTermination(8000));
     }
 
+    // ---------------- v4.1.0: storage — what the resync may delete ----------------
+
+    private static void testStorageRule() {
+        final File files = new File("/data/user/0/app.quantusnode.node/files");
+        final File chainDir = new File(files, "node/chains/mainnet");
+        // Audit H-1: the node's database mode is Auto - ParityDB in
+        // paritydb/ on a fresh install, an existing RocksDB in db/.
+        check("storage rule: the chain database directories are"
+                        + " <files>/node/chains/mainnet/db and .../paritydb,"
+                        + " and only those",
+                StorageLogic.chainDbDirs(files, "mainnet").equals(
+                        Arrays.asList(new File(chainDir, "db"),
+                                new File(chainDir, "paritydb")))
+                        && "/data/user/0/app.quantusnode.node/files/node/chains/mainnet/db"
+                        .equals(new File(chainDir, "db").getPath())
+                        && "/data/user/0/app.quantusnode.node/files/node/chains/mainnet/paritydb"
+                        .equals(new File(chainDir, "paritydb").getPath()));
+
+        String[] yes = {
+                "node/chains/mainnet/db",
+                "node/chains/mainnet/db/full",
+                "node/chains/mainnet/db/full/000123.sst",
+                "node/chains/mainnet/db/full/CURRENT",
+                "node/chains/mainnet/db/a/b/c/d",
+                "node/chains/mainnet/db/network",
+                "node/chains/mainnet/paritydb",
+                "node/chains/mainnet/paritydb/full",
+                "node/chains/mainnet/paritydb/full/metadata",
+                "node/chains/mainnet/paritydb/full/index_00_16",
+                "node/chains/mainnet/paritydb/a/b/c/d",
+        };
+        List<String> wrongNo = new ArrayList<>();
+        for (String rel : yes) {
+            if (!StorageLogic.isResyncDeletable(files, "mainnet",
+                    new File(files, rel))) {
+                wrongNo.add(rel);
+            }
+        }
+        check("storage rule: the database directories (db and paritydb) and"
+                + " everything inside them may be deleted " + wrongNo,
+                wrongNo.isEmpty());
+
+        List<File> no = new ArrayList<>();
+        // The node's network key.
+        no.add(new File(chainDir, "network"));
+        no.add(new File(chainDir, "network/secret_dilithium"));
+        // The miner's token and certificate pin, by the names the
+        // app itself launches the miner with.
+        no.add(MiningLogic.minerTokenFile(new File(files, "node"), "mainnet"));
+        no.add(MiningLogic.minerFingerprintFile(
+                new File(files, "node"), "mainnet"));
+        // Every parent of the database directory.
+        no.add(chainDir);
+        no.add(new File(files, "node/chains"));
+        no.add(new File(files, "node"));
+        no.add(files);
+        no.add(files.getParentFile());
+        no.add(new File("/"));
+        // DePIN identity and records.
+        no.add(new File(files, "depin"));
+        no.add(new File(files, "depin/identity.json"));
+        no.add(new File(files, "depin/journal/segment-000001.jsonl"));
+        no.add(new File(files, "depin-supervisor"));
+        no.add(new File(files, "depin-supervisor/state"));
+        // Logs, the daily track file, markers, the pid record.
+        no.add(new File(files, "logs/node.log"));
+        no.add(new File(files, "logs/miner.log"));
+        no.add(DailyTrackStore.file(files));
+        no.add(new File(files, "track"));
+        no.add(new File(files, "miner-used.marker"));
+        no.add(StorageLogic.resetMarkerFile(files));
+        no.add(new File(files, "node-process.pid"));
+        // Preferences: settings, TrackStore, miner settings, inner hash.
+        no.add(new File(files.getParentFile(), "shared_prefs"));
+        no.add(new File(files.getParentFile(), "shared_prefs/track.xml"));
+        no.add(new File(files.getParentFile(), "shared_prefs/node_settings.xml"));
+        // Names that merely resemble the database directory.
+        no.add(new File(chainDir, "db2"));
+        no.add(new File(chainDir, "db.bak"));
+        no.add(new File(chainDir, "dbx/full"));
+        no.add(new File(chainDir, "DB"));
+        no.add(new File(chainDir, "paritydb2"));
+        no.add(new File(chainDir, "paritydb.bak/full"));
+        no.add(new File(chainDir, "ParityDb"));
+        no.add(new File(chainDir, "parity"));
+        no.add(new File(files, "node/paritydb"));
+        no.add(new File(files, "node/chains/paritydb"));
+        no.add(new File(files, "node/chains/dev/paritydb"));
+        no.add(new File(chainDir, "paritydb/../network"));
+        no.add(new File(files, "node/db"));
+        no.add(new File(files, "node/chains/db"));
+        no.add(new File(files, "db"));
+        // Another chain, another app, another root.
+        no.add(new File(files, "node/chains/dev/db"));
+        no.add(new File(files, "node/chains/mainnet2/db"));
+        no.add(new File("/data/user/0/app.quantusnode.node/files2/node/chains"
+                + "/mainnet/db"));
+        no.add(new File("/data/user/0/other.app/files/node/chains/mainnet/db"));
+        no.add(new File("/node/chains/mainnet/db"));
+        no.add(new File("node/chains/mainnet/db"));
+        // Paths that need interpreting are refused, not resolved.
+        no.add(new File(chainDir, "db/../network"));
+        no.add(new File(chainDir, "db/../network/secret_dilithium"));
+        no.add(new File(chainDir, "db/full/../../miner-auth-token"));
+        no.add(new File(chainDir, "db/../../../../depin"));
+        no.add(new File(chainDir, "db/./full"));
+        no.add(new File(chainDir, "./db"));
+        no.add(new File(files, "depin/../node/chains/mainnet/db"));
+        List<String> wrongYes = new ArrayList<>();
+        for (File f : no) {
+            if (StorageLogic.isResyncDeletable(files, "mainnet", f)) {
+                wrongYes.add(f.getPath());
+            }
+        }
+        check("storage rule: nothing else may be deleted - network key, miner"
+                + " files, DePIN, logs, track, preferences, look-alikes,"
+                + " other chains, paths with '..' " + wrongYes,
+                wrongYes.isEmpty());
+        check("storage rule: " + no.size() + " protected paths were asked"
+                + " about", no.size() == 53);
+
+        File db = new File(chainDir, "db");
+        check("storage rule: missing or odd arguments are refused",
+                !StorageLogic.isResyncDeletable(null, "mainnet", db)
+                        && !StorageLogic.isResyncDeletable(files, null, db)
+                        && !StorageLogic.isResyncDeletable(files, "", db)
+                        && !StorageLogic.isResyncDeletable(files, "mainnet", null)
+                        && !StorageLogic.isResyncDeletable(files, "..",
+                        new File(files, "node/chains/../db"))
+                        && !StorageLogic.isResyncDeletable(files, "main/net",
+                        new File(files, "node/chains/main/net/db"))
+                        && !StorageLogic.isResyncDeletable(
+                        new File(files, "node/.."), "mainnet", db)
+                        && !StorageLogic.isResyncDeletable(new File("/"),
+                        "mainnet", new File("/node/chains/mainnet/db")));
+        check("storage rule: the reset marker lives outside the node"
+                        + " directory",
+                new File(files, "chain-reset.pending").equals(
+                        StorageLogic.resetMarkerFile(files)));
+    }
+
+    /** Every regular file under root: relative path -> content. */
+    private static java.util.Map<String, String> snapshotTree(File root)
+            throws IOException {
+        java.util.Map<String, String> out = new java.util.TreeMap<>();
+        java.util.ArrayDeque<File> stack = new java.util.ArrayDeque<>();
+        stack.push(root);
+        while (!stack.isEmpty()) {
+            File cur = stack.pop();
+            File[] kids = cur.listFiles();
+            if (kids == null) {
+                continue;
+            }
+            for (File k : kids) {
+                String rel = k.getPath().substring(root.getPath().length() + 1);
+                if (java.nio.file.Files.isSymbolicLink(k.toPath())) {
+                    out.put(rel, "-> " + java.nio.file.Files
+                            .readSymbolicLink(k.toPath()));
+                } else if (k.isDirectory()) {
+                    out.put(rel + "/", "");
+                    stack.push(k);
+                } else {
+                    out.put(rel, readAll(k));
+                }
+            }
+        }
+        return out;
+    }
+
+    private static void put(File root, String rel, String content)
+            throws IOException {
+        File f = new File(root, rel);
+        f.getParentFile().mkdirs();
+        write(f, content);
+    }
+
+    /** A data area shaped like the app's, with a RocksDB-style db. */
+    private static File storageWorld(String name) throws IOException {
+        File data = tempDir("storage-" + name);
+        File files = new File(data, "files");
+        put(files, "node/chains/mainnet/db/full/CURRENT", "MANIFEST-000004\n");
+        put(files, "node/chains/mainnet/db/full/000007.sst", repeat("s", 4000));
+        put(files, "node/chains/mainnet/db/full/000008.log", repeat("l", 1000));
+        put(files, "node/chains/mainnet/db/full/deep/er/x", "x");
+        put(files, "node/chains/mainnet/db/db_version", "4");
+        new File(files, "node/chains/mainnet/db/full/empty-dir").mkdirs();
+        put(files, "node/chains/mainnet/network/secret_dilithium",
+                repeat("k", 300));
+        put(files, "node/chains/mainnet/miner-auth-token", TOKEN + "\n");
+        put(files, "node/chains/mainnet/miner-tls-cert-sha256",
+                repeat("ab", 32) + "\n");
+        put(files, "node/chains/mainnet/paritydb/full/metadata", "pdb");
+        put(files, "node/chains/dev/db/full/CURRENT", "other chain");
+        put(files, "node/unrelated", "u");
+        put(files, "depin/identity.json", "{\"id\":1}");
+        put(files, "depin/journal/segment-000001.jsonl", repeat("j", 700));
+        put(files, "depin-supervisor/state", "st");
+        put(files, "logs/node.log", repeat("n", 2000));
+        put(files, "logs/miner.log", repeat("m", 500));
+        put(files, "track/daily.jsonl", "{}\n");
+        put(files, "miner-used.marker", "m\n");
+        put(data, "shared_prefs/track.xml", "<map/>");
+        put(data, "shared_prefs/node_settings.xml", "<map>hash</map>");
+        return data;
+    }
+
+    private static java.util.Map<String, String> withoutPrefix(
+            java.util.Map<String, String> m, String prefix) {
+        java.util.Map<String, String> out = new java.util.TreeMap<>();
+        for (java.util.Map.Entry<String, String> e : m.entrySet()) {
+            if (!e.getKey().startsWith(prefix)) {
+                out.put(e.getKey(), e.getValue());
+            }
+        }
+        return out;
+    }
+
+    /** The map without what a reset deletes: db/ and paritydb/. */
+    private static java.util.Map<String, String> withoutDb(
+            java.util.Map<String, String> m) {
+        return withoutPrefix(withoutPrefix(m,
+                "files/node/chains/mainnet/db/"),
+                "files/node/chains/mainnet/paritydb/");
+    }
+
+    private static void testStorageReset() throws Exception {
+        final String dbRel = "files/node/chains/mainnet/db/";
+        final String pdbRel = "files/node/chains/mainnet/paritydb/";
+        File data = storageWorld("reset");
+        File files = new File(data, "files");
+        java.util.Map<String, String> before = snapshotTree(data);
+        check("storage reset: (setup) the world has a database and the things"
+                        + " to keep",
+                before.containsKey(dbRel + "full/000007.sst")
+                        && before.containsKey(pdbRel + "full/metadata")
+                        && before.containsKey(
+                        "files/node/chains/mainnet/network/secret_dilithium")
+                        && before.size() > 30);
+        StorageLogic.ResetOutcome out =
+                StorageLogic.resetChainDb(files, "mainnet");
+        java.util.Map<String, String> after = snapshotTree(data);
+        check("storage reset: says DELETED and counts what it removed"
+                        + " (db: 5 files + 5 directories; paritydb: 1 file"
+                        + " + 2 directories; found "
+                        + out.entriesDeleted + ")",
+                out.result == StorageLogic.ResetResult.DELETED
+                        && out.entriesDeleted == 13 && out.failure == null
+                        && out.failureKind == null);
+        check("storage reset: both chain database directories are gone",
+                !new File(files, "node/chains/mainnet/db").exists()
+                        && !new File(files, "node/chains/mainnet/paritydb")
+                        .exists());
+        check("storage reset: everything else is exactly as it was - network"
+                        + " key, miner files, DePIN, logs, track, markers,"
+                        + " preferences, the other chain",
+                after.equals(withoutDb(before))
+                        && after.size() == before.size() - 13);
+        check("storage reset: no marker is left after a finished reset",
+                !StorageLogic.resetPending(files));
+        StorageLogic.ResetOutcome again =
+                StorageLogic.resetChainDb(files, "mainnet");
+        check("storage reset: with no database there is nothing to delete, and"
+                        + " it says so",
+                again.result == StorageLogic.ResetResult.NOTHING_TO_DELETE
+                        && again.entriesDeleted == 0
+                        && snapshotTree(data).equals(after));
+
+        // Audit H-1: what a device this app set up really holds - a
+        // ParityDB in paritydb/ and no db/ at all.
+        File dataP = storageWorld("paritydb-only");
+        File filesP = new File(dataP, "files");
+        StorageLogic.resetChainDb(filesP, "mainnet");
+        put(filesP, "node/chains/mainnet/paritydb/full/metadata", "pdb");
+        put(filesP, "node/chains/mainnet/paritydb/full/index_00_16",
+                repeat("i", 2000));
+        put(filesP, "node/chains/mainnet/paritydb/full/table_00_1",
+                repeat("t", 3000));
+        put(filesP, "node/chains/mainnet/paritydb/full/log0", "l");
+        java.util.Map<String, String> bP = snapshotTree(dataP);
+        check("storage reset (ParityDB only): (setup) there is no db"
+                        + " directory, and the figure is the paritydb"
+                        + " directory's 5004 bytes",
+                !new File(filesP, "node/chains/mainnet/db").exists()
+                        && bP.containsKey(pdbRel + "full/table_00_1")
+                        && StorageLogic.measure(filesP, dataP, "mainnet")
+                        .chainDbBytes == 5004);
+        StorageLogic.ResetOutcome oP =
+                StorageLogic.resetChainDb(filesP, "mainnet");
+        check("storage reset (ParityDB only): the database is found and"
+                        + " deleted - 4 files + 2 directories (found "
+                        + oP.result + ", " + oP.entriesDeleted + ")",
+                oP.result == StorageLogic.ResetResult.DELETED
+                        && oP.entriesDeleted == 6
+                        && !new File(filesP, "node/chains/mainnet/paritydb")
+                        .exists());
+        check("storage reset (ParityDB only): everything else is exactly as"
+                        + " it was, and no marker is left",
+                snapshotTree(dataP).equals(withoutPrefix(bP, pdbRel))
+                        && !StorageLogic.resetPending(filesP)
+                        && StorageLogic.measure(filesP, dataP, "mainnet")
+                        .chainDbBytes == 0);
+
+        // Symbolic links inside the database are removed as links;
+        // what they point at is never entered.
+        File data2 = storageWorld("links");
+        File files2 = new File(data2, "files");
+        File db2 = new File(files2, "node/chains/mainnet/db");
+        boolean links = true;
+        try {
+            java.nio.file.Files.createSymbolicLink(
+                    new File(db2, "full/to-network").toPath(),
+                    new File(files2, "node/chains/mainnet/network").toPath());
+            java.nio.file.Files.createSymbolicLink(
+                    new File(db2, "to-token").toPath(),
+                    new File(files2, "node/chains/mainnet/miner-auth-token")
+                            .toPath());
+            java.nio.file.Files.createSymbolicLink(
+                    new File(db2, "to-depin").toPath(),
+                    new File(files2, "depin").toPath());
+            java.nio.file.Files.createSymbolicLink(
+                    new File(db2, "dangling").toPath(),
+                    new File(files2, "no-such-thing").toPath());
+        } catch (IOException | UnsupportedOperationException e) {
+            links = false;
+        }
+        if (links) {
+            java.util.Map<String, String> b2 = snapshotTree(data2);
+            StorageLogic.ResetOutcome o2 =
+                    StorageLogic.resetChainDb(files2, "mainnet");
+            check("storage reset: links inside the database go, their"
+                            + " targets stay untouched",
+                    o2.result == StorageLogic.ResetResult.DELETED
+                            && o2.entriesDeleted == 17
+                            && snapshotTree(data2).equals(withoutDb(b2)));
+
+            // The database directory itself is a link: the link is
+            // the entry under the chain directory, and only it goes.
+            File data3 = storageWorld("dblink");
+            File files3 = new File(data3, "files");
+            File db3 = new File(files3, "node/chains/mainnet/db");
+            StorageLogic.resetChainDb(files3, "mainnet");
+            java.nio.file.Files.createSymbolicLink(db3.toPath(),
+                    new File(files3, "depin").toPath());
+            java.util.Map<String, String> b3 = snapshotTree(data3);
+            StorageLogic.ResetOutcome o3 =
+                    StorageLogic.resetChainDb(files3, "mainnet");
+            java.util.Map<String, String> want3 =
+                    new java.util.TreeMap<>(b3);
+            want3.remove("files/node/chains/mainnet/db");
+            check("storage reset: a database directory that is a link loses"
+                            + " the link only",
+                    o3.result == StorageLogic.ResetResult.DELETED
+                            && o3.entriesDeleted == 1
+                            && snapshotTree(data3).equals(want3)
+                            && new File(files3, "depin/identity.json").isFile());
+
+            // A link in a PARENT would send the walk elsewhere: the
+            // names are right, the place is not, and nothing is
+            // deleted.
+            File data4 = storageWorld("parentlink");
+            File files4 = new File(data4, "files");
+            File elsewhere = new File(data4, "elsewhere");
+            put(elsewhere, "db/full/precious", "do not delete");
+            File chains4 = new File(files4, "node/chains");
+            File real = new File(chains4, "mainnet");
+            File moved = new File(chains4, "mainnet-real");
+            real.renameTo(moved);
+            java.nio.file.Files.createSymbolicLink(real.toPath(),
+                    elsewhere.toPath());
+            java.util.Map<String, String> b4 = snapshotTree(data4);
+            StorageLogic.ResetOutcome o4 =
+                    StorageLogic.resetChainDb(files4, "mainnet");
+            check("storage reset: a chain directory that resolves elsewhere"
+                            + " is refused and nothing is deleted",
+                    o4.result == StorageLogic.ResetResult.FAILED
+                            && o4.entriesDeleted == 0
+                            && o4.failure != null
+                            && o4.failure.startsWith("refused")
+                            && o4.failureKind
+                            == StorageLogic.FailureKind.LOCATION
+                            && snapshotTree(data4).equals(b4)
+                            && new File(elsewhere, "db/full/precious").isFile());
+            // Audit L-2: the refusal comes before the marker is
+            // written. A marker left by a reset that deleted nothing
+            // would keep every later node start from happening.
+            check("storage reset: a refused reset leaves no marker behind"
+                            + " (the data area is byte for byte as before),"
+                            + " and the failure text carries no path",
+                    !StorageLogic.resetPending(files4)
+                            && !StorageLogic.resetMarkerFile(files4).exists()
+                            && !o4.failure.contains("/"));
+            check("storage reset: so the next node start has no pending"
+                            + " reset to complete and is not blocked",
+                    StorageLogic.completePendingReset(files4, "mainnet")
+                            .result
+                            == StorageLogic.ResetResult.NOTHING_TO_DELETE
+                            && snapshotTree(data4).equals(b4));
+            // A marker that was there already is another matter: an
+            // earlier reset may be half done, and it stays.
+            write(StorageLogic.resetMarkerFile(files4), "started\n");
+            StorageLogic.ResetOutcome o4b =
+                    StorageLogic.resetChainDb(files4, "mainnet");
+            java.util.Map<String, String> a4b = snapshotTree(data4);
+            a4b.remove("files/chain-reset.pending");
+            check("storage reset: a marker from an earlier, unfinished reset"
+                            + " is kept by a refusal - and still nothing is"
+                            + " deleted",
+                    o4b.result == StorageLogic.ResetResult.FAILED
+                            && o4b.entriesDeleted == 0
+                            && StorageLogic.resetPending(files4)
+                            && a4b.equals(b4));
+        } else {
+            skip("storage reset: symbolic links (this file system has none)");
+        }
+
+        // An interrupted reset: the marker is there, part of the
+        // database is gone. Completing it removes the rest.
+        File data5 = storageWorld("pending");
+        File files5 = new File(data5, "files");
+        check("storage reset: without a marker, completing does nothing",
+                StorageLogic.completePendingReset(files5, "mainnet").result
+                        == StorageLogic.ResetResult.NOTHING_TO_DELETE
+                        && new File(files5,
+                        "node/chains/mainnet/db/full/CURRENT").isFile());
+        java.util.Map<String, String> b5 = snapshotTree(data5);
+        write(StorageLogic.resetMarkerFile(files5), "started\n");
+        new File(files5, "node/chains/mainnet/db/full/CURRENT").delete();
+        StorageLogic.ResetOutcome o5 =
+                StorageLogic.completePendingReset(files5, "mainnet");
+        check("storage reset: a reset left unfinished is completed - the rest"
+                        + " of the database goes, the marker goes, the rest"
+                        + " stays",
+                o5.result == StorageLogic.ResetResult.DELETED
+                        && o5.entriesDeleted == 12
+                        && !StorageLogic.resetPending(files5)
+                        && snapshotTree(data5).equals(withoutDb(b5)));
+        write(StorageLogic.resetMarkerFile(files5), "started\n");
+        StorageLogic.ResetOutcome o5b =
+                StorageLogic.completePendingReset(files5, "mainnet");
+        check("storage reset: a marker with nothing left behind it is simply"
+                        + " cleared",
+                o5b.result == StorageLogic.ResetResult.DELETED
+                        && o5b.entriesDeleted == 0
+                        && !StorageLogic.resetPending(files5));
+
+        // An entry that cannot be deleted.
+        File data6 = storageWorld("stuck");
+        File files6 = new File(data6, "files");
+        File locked = new File(files6, "node/chains/mainnet/db/full/deep/er");
+        if (locked.setWritable(false, false) && !locked.canWrite()) {
+            java.util.Map<String, String> b6 = snapshotTree(data6);
+            StorageLogic.ResetOutcome o6 =
+                    StorageLogic.resetChainDb(files6, "mainnet");
+            java.util.Map<String, String> a6 = snapshotTree(data6);
+            locked.setWritable(true, true);
+            check("storage reset: an entry that cannot be deleted is a FAILED"
+                            + " reset with the marker kept",
+                    o6.result == StorageLogic.ResetResult.FAILED
+                            && o6.failureKind
+                            == StorageLogic.FailureKind.ENTRIES
+                            && a6.containsKey("files/chain-reset.pending")
+                            && a6.containsKey(dbRel + "full/deep/er/x"));
+            check("storage reset: even a failed reset touches nothing outside"
+                            + " the database",
+                    withoutPrefix(withoutDb(a6),
+                            "files/chain-reset.pending").equals(
+                            withoutDb(b6)));
+            check("storage reset: and is finished by the next attempt",
+                    StorageLogic.completePendingReset(files6, "mainnet").result
+                            == StorageLogic.ResetResult.DELETED
+                            && !new File(files6, "node/chains/mainnet/db")
+                            .exists()
+                            && !new File(files6,
+                            "node/chains/mainnet/paritydb").exists());
+        } else {
+            locked.setWritable(true, true);
+            skip("storage reset: undeletable entry (this user can write"
+                    + " anywhere)");
+        }
+    }
+
+    private static void testStorageUsage() throws Exception {
+        File data = storageWorld("usage");
+        File files = new File(data, "files");
+        StorageLogic.Usage u = StorageLogic.measure(files, data, "mainnet");
+        // db: 16 + 4000 + 1000 + 1 + 1 = 5018; paritydb: 3
+        check("storage usage: the chain database is the files of the db and"
+                + " paritydb directories - what the resync deletes (found "
+                + u.chainDbBytes + ")", u.chainDbBytes == 5021);
+        // node: db 5018 + paritydb 3 + key 300 + token 65 + pin 65
+        //       + dev 11 + unrelated 1 = 5463
+        check("storage usage: the node figure is everything under node/"
+                + " (found " + u.nodeBytes + ")", u.nodeBytes == 5463);
+        check("storage usage: logs (found " + u.logsBytes + ")",
+                u.logsBytes == 2500);
+        // depin: 8 + 700, depin-supervisor: 2
+        check("storage usage: DePIN is depin plus depin-supervisor (found "
+                + u.depinBytes + ")", u.depinBytes == 710);
+        // total: node 5463 + logs 2500 + depin 710 + track 3 + marker 2
+        //        + prefs 6 + 15 = 8699
+        check("storage usage: the total is the whole data area (found "
+                + u.totalBytes + ")", u.totalBytes == 8699);
+        check("storage usage: without a data area the total is unknown, not"
+                        + " zero",
+                StorageLogic.measure(files, null, "mainnet").totalBytes == -1);
+        // Audit I-5: the figures are composed from walks that visit
+        // each file once; they must equal what a walk of each whole
+        // tree finds.
+        check("storage usage: the composed node and total figures equal a"
+                        + " plain walk of each tree",
+                u.nodeBytes == StorageLogic.treeBytes(
+                        new File(files, "node"), null)
+                        && u.totalBytes == StorageLogic.treeBytes(data, null)
+                        && StorageLogic.treeBytes(new File(files, "node"),
+                        StorageLogic.chainDbDirs(files, "mainnet"))
+                        == 5463 - 5021);
+        StorageLogic.Usage roundabout = StorageLogic.measure(files,
+                new File(data, "shared_prefs/.."), "mainnet");
+        check("storage usage: a data area not named as the files directory's"
+                        + " parent is walked whole, and nothing is counted"
+                        + " twice (found " + roundabout.totalBytes + ")",
+                roundabout.totalBytes == 8699
+                        && roundabout.nodeBytes == 5463);
+
+        File empty = new File(tempDir("storage-empty"), "files");
+        empty.mkdirs();
+        StorageLogic.Usage z = StorageLogic.measure(empty,
+                empty.getParentFile(), "mainnet");
+        check("storage usage: parts that do not exist use 0 bytes",
+                z.chainDbBytes == 0 && z.nodeBytes == 0 && z.logsBytes == 0
+                        && z.depinBytes == 0 && z.totalBytes == 0);
+        try {
+            java.nio.file.Files.createSymbolicLink(
+                    new File(files, "logs/link-to-node").toPath(),
+                    new File(files, "node").toPath());
+            check("storage usage: a symbolic link is neither followed nor"
+                            + " counted",
+                    StorageLogic.measure(files, data, "mainnet").logsBytes
+                            == 2500);
+        } catch (IOException | UnsupportedOperationException e) {
+            skip("storage usage: symbolic links (this file system has none)");
+        }
+        StorageLogic.resetChainDb(files, "mainnet");
+        StorageLogic.Usage after = StorageLogic.measure(files, data, "mainnet");
+        check("storage usage: after a reset the database is 0 and the node"
+                        + " figure fell by exactly its size",
+                after.chainDbBytes == 0 && after.nodeBytes == 5463 - 5021
+                        && after.totalBytes == 8699 - 5021);
+    }
+
+    // ---------------- v4.1.0: the reset's process-wide state (audit L-3) ----------------
+
+    private static void testStorageResetState() throws Exception {
+        final StorageResetState st = new StorageResetState();
+        check("reset state: idle at first - not busy, no result",
+                !st.busy() && st.last() == null);
+        File data = storageWorld("reset-state");
+        final File files = new File(data, "files");
+        final java.util.concurrent.CountDownLatch entered =
+                new java.util.concurrent.CountDownLatch(1);
+        final java.util.concurrent.CountDownLatch release =
+                new java.util.concurrent.CountDownLatch(1);
+        final java.util.concurrent.CountDownLatch told =
+                new java.util.concurrent.CountDownLatch(1);
+        final java.util.concurrent.atomic.AtomicInteger secondRan =
+                new java.util.concurrent.atomic.AtomicInteger();
+        final List<String> threads =
+                Collections.synchronizedList(new ArrayList<String>());
+        boolean started = st.start(
+                new java.util.concurrent.Callable<StorageLogic.ResetOutcome>() {
+                    @Override
+                    public StorageLogic.ResetOutcome call() throws Exception {
+                        threads.add(Thread.currentThread().getName() + ":"
+                                + Thread.currentThread().isDaemon());
+                        entered.countDown();
+                        release.await();
+                        return StorageLogic.resetChainDb(files, "mainnet");
+                    }
+                }, new Runnable() {
+                    @Override
+                    public void run() {
+                        told.countDown();
+                    }
+                });
+        check("reset state: (setup) the reset is running", started
+                && entered.await(8, java.util.concurrent.TimeUnit.SECONDS));
+        // What an activity created now - after a rotation - reads.
+        check("reset state: while the deletion runs, whoever asks finds it"
+                        + " busy and without a result yet",
+                st.busy() && st.last() == null);
+        boolean again = st.start(
+                new java.util.concurrent.Callable<StorageLogic.ResetOutcome>() {
+                    @Override
+                    public StorageLogic.ResetOutcome call() {
+                        secondRan.incrementAndGet();
+                        return null;
+                    }
+                }, null);
+        check("reset state: a second reset is not started while one runs",
+                !again && st.busy());
+        release.countDown();
+        check("reset state: the caller is told when it is over",
+                told.await(8, java.util.concurrent.TimeUnit.SECONDS));
+        StorageResetState.Finished fin = st.last();
+        check("reset state: afterwards the result is there for whoever asks -"
+                        + " it does not go to the instance that started it",
+                !st.busy() && fin != null && fin.seq == 1 && !fin.threw
+                        && fin.outcome != null && fin.outcome.result
+                        == StorageLogic.ResetResult.DELETED
+                        && fin.outcome.entriesDeleted == 13
+                        && st.last() == fin && secondRan.get() == 0);
+
+        // A reset that throws, one that is refused (null), and a
+        // listener that throws: the state is published all the same.
+        final java.util.concurrent.CountDownLatch told2 =
+                new java.util.concurrent.CountDownLatch(1);
+        st.start(new java.util.concurrent.Callable<StorageLogic.ResetOutcome>() {
+            @Override
+            public StorageLogic.ResetOutcome call() {
+                threads.add(Thread.currentThread().getName() + ":"
+                        + Thread.currentThread().isDaemon());
+                throw new IllegalStateException("test");
+            }
+        }, new Runnable() {
+            @Override
+            public void run() {
+                told2.countDown();
+                throw new IllegalStateException("listener (test)");
+            }
+        });
+        check("reset state: a reset that throws ends as a failure without an"
+                        + " outcome, and the state is idle again",
+                told2.await(8, java.util.concurrent.TimeUnit.SECONDS)
+                        && eventually(new Cond() {
+                    @Override
+                    public boolean ok() {
+                        return !st.busy();
+                    }
+                }, 5000)
+                        && st.last() != null && st.last().seq == 2
+                        && st.last().threw && st.last().outcome == null);
+        st.start(new java.util.concurrent.Callable<StorageLogic.ResetOutcome>() {
+            @Override
+            public StorageLogic.ResetOutcome call() {
+                return null;
+            }
+        }, null);
+        check("reset state: a refused reset (no outcome, nothing thrown) is"
+                        + " told apart from a failed one",
+                eventually(new Cond() {
+                    @Override
+                    public boolean ok() {
+                        StorageResetState.Finished f = st.last();
+                        return !st.busy() && f != null && f.seq == 3;
+                    }
+                }, 5000) && !st.last().threw && st.last().outcome == null);
+
+        // One worker for the section: measuring and resets share it.
+        final java.util.concurrent.CountDownLatch measured =
+                new java.util.concurrent.CountDownLatch(1);
+        st.executor().execute(new Runnable() {
+            @Override
+            public void run() {
+                threads.add(Thread.currentThread().getName() + ":"
+                        + Thread.currentThread().isDaemon());
+                measured.countDown();
+            }
+        });
+        check("reset state: resets and measuring run on the one daemon"
+                        + " thread named storage-work " + threads,
+                measured.await(8, java.util.concurrent.TimeUnit.SECONDS)
+                        && threads.equals(Arrays.asList("storage-work:true",
+                        "storage-work:true", "storage-work:true")));
+        check("reset state: the app has one instance for the process",
+                StorageResetState.PROCESS != null
+                        && !StorageResetState.PROCESS.busy());
+    }
+
+    // ---------------- v4.1.0: daily track records ----------------
+
+    private static DailyTrackStore.Increment inc(long uptime, long blocks,
+                                                 int peerMax, long peerSum,
+                                                 long peerSamples, long jobs,
+                                                 long miningMs, long hashes) {
+        DailyTrackStore.Increment i = new DailyTrackStore.Increment();
+        i.uptimeDeltaMs = uptime;
+        i.blocksDelta = blocks;
+        i.peerMax = peerMax;
+        i.peerSum = peerSum;
+        i.peerSamples = peerSamples;
+        i.jobsDelta = jobs;
+        i.miningMs = miningMs;
+        i.approxHashes = hashes;
+        return i;
+    }
+
+    private static java.util.Map<String, DailyTrackStore.Increment> day(
+            String date, DailyTrackStore.Increment i) {
+        java.util.Map<String, DailyTrackStore.Increment> m =
+                new java.util.LinkedHashMap<>();
+        m.put(date, i);
+        return m;
+    }
+
+    private static void testDailyRecords() throws Exception {
+        java.util.TimeZone tokyo = java.util.TimeZone.getTimeZone("Asia/Tokyo");
+        java.util.TimeZone utc = java.util.TimeZone.getTimeZone("UTC");
+        // 2026-11-15T15:00:00Z is midnight of the 16th in Tokyo.
+        long midnightTokyo = 1794754800000L;
+        check("daily: the date is the LOCAL calendar date",
+                "2026-11-16".equals(DailyTrackStore.localDate(
+                        midnightTokyo, tokyo))
+                        && "2026-11-15".equals(DailyTrackStore.localDate(
+                        midnightTokyo - 1, tokyo))
+                        && "2026-11-15".equals(DailyTrackStore.localDate(
+                        midnightTokyo, utc)));
+        check("daily: the file is <files>/track/daily.jsonl",
+                "/f/track/daily.jsonl".equals(
+                        DailyTrackStore.file(new File("/f")).getPath()));
+
+        String line = "{\"date\":\"2026-11-16\",\"uptimeDeltaMs\":86399000,"
+                + "\"blocksDelta\":7201,\"peerMax\":12,\"peerSum\":230112,"
+                + "\"peerSamples\":28764,\"jobsDelta\":5,\"miningMs\":3600000,"
+                + "\"approxHashes\":36000000}";
+        DailyTrackStore.Record r = DailyTrackStore.parseLine(line);
+        check("daily: a record line parses to its nine fields",
+                r != null && "2026-11-16".equals(r.date)
+                        && r.uptimeDeltaMs == 86399000L && r.blocksDelta == 7201
+                        && r.peerMax == 12 && r.peerSum == 230112
+                        && r.peerSamples == 28764 && r.jobsDelta == 5
+                        && r.miningMs == 3600000 && r.approxHashes == 36000000);
+        check("daily: and is written back as exactly that line",
+                r != null && line.equals(r.toLine()));
+        check("daily: a field a later version adds is ignored, not fatal",
+                DailyTrackStore.parseLine(line.replace("}",
+                        ",\"later\":7,\"note\":\"x\"}")) != null);
+        String[] bad = {
+                null, "", "   ", "{}", "not json",
+                line.substring(0, line.length() - 1),
+                line.replace("2026-11-16", "2026-13-01"),
+                line.replace("2026-11-16", "2026-02-30"),
+                line.replace("2026-11-16", "16/11/2026"),
+                line.replace("\"date\":\"2026-11-16\",", ""),
+                line.replace("\"blocksDelta\":7201,", ""),
+                line.replace("7201", "-1"),
+                line.replace("7201", "\"7201\""),
+                line.replace("7201", "99999999999999999999"),
+                line.replace("\"peerMax\":12", "\"peerMax\":4294967296"),
+                line + repeat(" ", 2000) + "}",
+        };
+        boolean allRejected = true;
+        for (String b : bad) {
+            if (DailyTrackStore.parseLine(b) != null) {
+                allRejected = false;
+            }
+        }
+        check("daily: a damaged line is no record", allRejected);
+
+        // merge: add into the day, max for peerMax, sorted, pruned.
+        final String today = "2026-11-16";
+        List<DailyTrackStore.Record> one = DailyTrackStore.merge(null,
+                day("2026-11-16", inc(1000, 2, 5, 50, 10, 1, 500, 5000)),
+                today);
+        List<DailyTrackStore.Record> two = DailyTrackStore.merge(one,
+                day("2026-11-16", inc(3000, 1, 4, 8, 2, 2, 250, 2500)),
+                today);
+        check("daily: increments of one day add up; the peer maximum is a"
+                        + " maximum",
+                two.size() == 1 && two.get(0).uptimeDeltaMs == 4000
+                        && two.get(0).blocksDelta == 3
+                        && two.get(0).peerMax == 5 && two.get(0).peerSum == 58
+                        && two.get(0).peerSamples == 12
+                        && two.get(0).jobsDelta == 3
+                        && two.get(0).miningMs == 750
+                        && two.get(0).approxHashes == 7500);
+        List<DailyTrackStore.Record> three = DailyTrackStore.merge(two,
+                day("2026-11-14", inc(7, 0, 0, 0, 0, 0, 0, 0)), today);
+        check("daily: records are kept oldest first, whatever the order they"
+                        + " arrive in",
+                three.size() == 2 && "2026-11-14".equals(three.get(0).date)
+                        && "2026-11-16".equals(three.get(1).date));
+        List<DailyTrackStore.Record> same = DailyTrackStore.merge(two,
+                day("yesterday", inc(1, 1, 1, 1, 1, 1, 1, 1)), today);
+        check("daily: an invalid date or a missing increment adds nothing",
+                same.size() == 1 && same.get(0).blocksDelta == 3
+                        && same.get(0).uptimeDeltaMs == 4000
+                        && DailyTrackStore.merge(two, day("2026-11-16", null),
+                        today).get(0).blocksDelta == 3
+                        && DailyTrackStore.merge(null, null, today).isEmpty());
+        check("daily: counters saturate instead of wrapping",
+                DailyTrackStore.merge(DailyTrackStore.merge(null,
+                                day("2026-11-16", inc(Long.MAX_VALUE - 1, 0, 0,
+                                        0, 0, 0, 0, 0)), today),
+                        day("2026-11-16", inc(5, 0, 0, 0, 0, 0, 0, 0)), today)
+                        .get(0).uptimeDeltaMs == Long.MAX_VALUE);
+
+        // Retention: the 400 days ending at the day being written.
+        java.util.Map<String, DailyTrackStore.Increment> many =
+                new java.util.LinkedHashMap<>();
+        java.time.LocalDate newest = java.time.LocalDate.parse("2026-11-16");
+        for (int i = 0; i < 450; i++) {
+            many.put(newest.minusDays(i).toString(),
+                    inc(i + 1, 0, 0, 0, 0, 0, 0, 0));
+        }
+        List<DailyTrackStore.Record> kept =
+                DailyTrackStore.merge(null, many, today);
+        check("daily: 400 days are kept, counted back from today (found "
+                        + kept.size() + ")",
+                kept.size() == 400
+                        && "2025-10-13".equals(kept.get(0).date)
+                        && kept.get(0).uptimeDeltaMs == 400
+                        && "2026-11-16".equals(kept.get(399).date));
+        List<DailyTrackStore.Record> sparse = DailyTrackStore.merge(
+                DailyTrackStore.merge(null, day("2025-10-12",
+                        inc(1, 0, 0, 0, 0, 0, 0, 0)), "2025-10-12"),
+                day("2026-11-16", inc(2, 0, 0, 0, 0, 0, 0, 0)), today);
+        check("daily: retention goes by date, not by line count - a day 401"
+                        + " days back is dropped even from a short file",
+                sparse.size() == 1 && "2026-11-16".equals(sparse.get(0).date));
+        List<DailyTrackStore.Record> clockBack = DailyTrackStore.merge(kept,
+                day("2026-11-10", inc(1000, 0, 0, 0, 0, 0, 0, 0)), today);
+        check("daily: a clock set back adds to the earlier day and drops"
+                        + " nothing",
+                clockBack.size() == 400
+                        && "2026-11-16".equals(clockBack.get(399).date)
+                        && clockBack.get(393).uptimeDeltaMs == 7 + 1000);
+
+        // Audit M-1: the anchor is today, never the newest date in
+        // the file.
+        List<DailyTrackStore.Record> ahead = DailyTrackStore.merge(kept,
+                day("2099-01-01", inc(9, 9, 9, 9, 9, 9, 9, 9)), today);
+        check("daily: an increment dated far in the future is ignored - it"
+                        + " is not recorded and prunes nothing",
+                ahead.size() == 400
+                        && "2025-10-13".equals(ahead.get(0).date)
+                        && "2026-11-16".equals(ahead.get(399).date));
+        List<DailyTrackStore.Record> tomorrow = DailyTrackStore.merge(kept,
+                day("2026-11-17", inc(5, 0, 0, 0, 0, 0, 0, 0)), today);
+        List<DailyTrackStore.Record> dayAfter = DailyTrackStore.merge(kept,
+                day("2026-11-18", inc(5, 0, 0, 0, 0, 0, 0, 0)), today);
+        check("daily: one day ahead of today is accepted (a time-zone change"
+                        + " between reading and save), two days ahead is"
+                        + " not; neither moves the 400-day window",
+                tomorrow.size() == 401
+                        && "2026-11-17".equals(tomorrow.get(400).date)
+                        && "2025-10-13".equals(tomorrow.get(0).date)
+                        && dayAfter.size() == 400
+                        && "2026-11-16".equals(dayAfter.get(399).date));
+        List<DailyTrackStore.Record> poisoned = new ArrayList<>(
+                DailyTrackStore.merge(null, day("2026-11-15",
+                        inc(1, 0, 0, 0, 0, 0, 0, 0)), "2026-11-15"));
+        poisoned.add(DailyTrackStore.parseLine(line.replace("2026-11-16",
+                "2099-01-01")));
+        List<DailyTrackStore.Record> healed = DailyTrackStore.merge(poisoned,
+                day("2026-11-16", inc(2, 0, 0, 0, 0, 0, 0, 0)), today);
+        check("daily: a future-dated record already in a file neither prunes"
+                        + " the real records nor keeps today's out",
+                healed.size() == 3 && "2026-11-15".equals(healed.get(0).date)
+                        && "2026-11-16".equals(healed.get(1).date)
+                        && healed.get(1).uptimeDeltaMs == 2);
+        List<DailyTrackStore.Record> past = DailyTrackStore.merge(kept,
+                day("2020-01-01", inc(3, 0, 0, 0, 0, 0, 0, 0)), "2020-01-01");
+        check("daily: a save made while the clock reads a past date drops"
+                        + " none of the real records",
+                past.size() == 401 && "2020-01-01".equals(past.get(0).date)
+                        && "2026-11-16".equals(past.get(400).date));
+        check("daily: without a valid date for today nothing is added and"
+                        + " nothing is pruned",
+                DailyTrackStore.merge(kept, day("2026-11-16",
+                        inc(1, 0, 0, 0, 0, 0, 0, 0)), null).size() == 400
+                        && DailyTrackStore.merge(kept, day("2026-11-16",
+                        inc(1, 0, 0, 0, 0, 0, 0, 0)), "today").get(399)
+                        .uptimeDeltaMs == 1);
+
+        // The file.
+        File dir = tempDir("daily");
+        File f = DailyTrackStore.file(dir);
+        check("daily: no file yet is an empty record, and 0 days",
+                DailyTrackStore.read(f).isEmpty()
+                        && DailyTrackStore.dayCount(f) == 0);
+        DailyTrackStore.fold(f, day("2026-11-15",
+                inc(1000, 2, 5, 50, 10, 0, 0, 0)), "2026-11-15");
+        DailyTrackStore.fold(f, day("2026-11-16",
+                inc(2000, 3, 7, 70, 10, 4, 60000, 600000)), today);
+        DailyTrackStore.fold(f, day("2026-11-16",
+                inc(500, 1, 6, 6, 1, 1, 3000, 30000)), today);
+        String want = "{\"date\":\"2026-11-15\",\"uptimeDeltaMs\":1000,"
+                + "\"blocksDelta\":2,\"peerMax\":5,\"peerSum\":50,"
+                + "\"peerSamples\":10,\"jobsDelta\":0,\"miningMs\":0,"
+                + "\"approxHashes\":0}\n"
+                + "{\"date\":\"2026-11-16\",\"uptimeDeltaMs\":2500,"
+                + "\"blocksDelta\":4,\"peerMax\":7,\"peerSum\":76,"
+                + "\"peerSamples\":11,\"jobsDelta\":5,\"miningMs\":63000,"
+                + "\"approxHashes\":630000}\n";
+        check("daily: the file holds one line per day, the day's record"
+                + " updated in place", want.equals(readAll(f)));
+        check("daily: a save leaves no temporary file behind",
+                f.getParentFile().list().length == 1);
+        check("daily: the day count is the number of days on record",
+                DailyTrackStore.dayCount(f) == 2);
+        write(f, "garbage\n" + want + "{\"date\":\"2026-11-16\"\n\n");
+        DailyTrackStore.fold(f, day("2026-11-17",
+                inc(1, 0, 0, 0, 0, 0, 0, 0)), "2026-11-17");
+        check("daily: damaged lines are dropped at the next save; the good"
+                        + " ones survive it",
+                readAll(f).equals(want + "{\"date\":\"2026-11-17\","
+                        + "\"uptimeDeltaMs\":1,\"blocksDelta\":0,\"peerMax\":0,"
+                        + "\"peerSum\":0,\"peerSamples\":0,\"jobsDelta\":0,"
+                        + "\"miningMs\":0,\"approxHashes\":0}\n"));
+        // A file that cannot be read must not be replaced.
+        File dir2 = tempDir("daily-unreadable");
+        File f2 = DailyTrackStore.file(dir2);
+        f2.mkdirs(); // a directory where the file should be
+        boolean threw = false;
+        try {
+            DailyTrackStore.fold(f2, day("2026-11-16",
+                    inc(1, 0, 0, 0, 0, 0, 0, 0)), today);
+        } catch (IOException e) {
+            threw = true;
+        }
+        check("daily: a record that cannot be read is never overwritten",
+                threw && f2.isDirectory()
+                        && DailyTrackStore.dayCount(f2) == -1);
+
+        // Audit M-1, the auditor's probe: five saves in this order,
+        // the third dated 2099 while the real date is the 16th. It
+        // used to leave the file holding the 2099 record alone.
+        File f3 = DailyTrackStore.file(tempDir("daily-probe"));
+        DailyTrackStore.fold(f3, day("2026-11-15",
+                inc(15, 1, 0, 0, 0, 0, 0, 0)), "2026-11-15");
+        DailyTrackStore.fold(f3, day("2026-11-16",
+                inc(16, 1, 0, 0, 0, 0, 0, 0)), "2026-11-16");
+        DailyTrackStore.fold(f3, day("2099-01-01",
+                inc(99, 1, 0, 0, 0, 0, 0, 0)), "2026-11-16");
+        DailyTrackStore.fold(f3, day("2026-11-17",
+                inc(17, 1, 0, 0, 0, 0, 0, 0)), "2026-11-17");
+        DailyTrackStore.fold(f3, day("2026-11-18",
+                inc(18, 1, 0, 0, 0, 0, 0, 0)), "2026-11-18");
+        List<DailyTrackStore.Record> probe = DailyTrackStore.read(f3);
+        check("daily (probe): after 11-15, 11-16, 2099-01-01, 11-17, 11-18"
+                        + " the file holds the four real days and no 2099"
+                        + " (found " + readAll(f3).replace("\n", " ") + ")",
+                probe.size() == 4
+                        && "2026-11-15".equals(probe.get(0).date)
+                        && probe.get(0).uptimeDeltaMs == 15
+                        && "2026-11-16".equals(probe.get(1).date)
+                        && probe.get(1).uptimeDeltaMs == 16
+                        && "2026-11-17".equals(probe.get(2).date)
+                        && probe.get(2).uptimeDeltaMs == 17
+                        && "2026-11-18".equals(probe.get(3).date)
+                        && probe.get(3).uptimeDeltaMs == 18
+                        && !readAll(f3).contains("2099"));
+    }
+
+    /** One day of milliseconds. */
+    private static final long DAY_MS = 86_400_000L;
+
+    private static void testDailySamplerClock() throws Exception {
+        // Audit M-1 at the sampler: the same five dates, as the wall
+        // clock of five poll cycles. The third reads 2099 for one
+        // poll; the monotonic clock says three seconds went by.
+        final java.util.TimeZone utc = java.util.TimeZone.getTimeZone("UTC");
+        final long day15 = 1794787200000L - DAY_MS + 12 * 3600_000L;
+        final long year2099 = 4070908800000L; // 2099-01-01T00:00:00Z
+        check("daily sampler clock: (premise) the test's dates",
+                "2026-11-15".equals(DailyTrackStore.localDate(day15, utc))
+                        && "2099-01-01".equals(DailyTrackStore.localDate(
+                        year2099, utc)));
+        File f = DailyTrackStore.file(tempDir("sampler-clock"));
+        DailyTrackStore.Sampler s = new DailyTrackStore.Sampler(f, 60_000);
+        long up = 1000;
+        s.tick(0, day15, utc, up, 0, null, false, 0, -1);
+        s.tick(3000, day15 + 3000, utc, up += 15, 0, null, false, 0, -1);
+        // The 16th: the date changes, the 15th is saved.
+        boolean due = s.tick(DAY_MS, day15 + DAY_MS, utc, up += 16, 0,
+                null, false, 0, -1);
+        check("daily sampler clock: (setup) the 15th is saved when the 16th"
+                        + " begins",
+                due && s.save() == null && DailyTrackStore.dayCount(f) == 1);
+        // 2099 for one poll.
+        due = s.tick(DAY_MS + 3000, year2099, utc, up += 99, 0,
+                null, false, 0, -1);
+        java.util.Map<String, DailyTrackStore.Increment> pend =
+                s.pendingForTest();
+        check("daily sampler clock: a wall clock that jumps to 2099 between"
+                        + " two polls is not believed - the increment stays"
+                        + " with the 16th and no date change is seen",
+                !due && pend.size() == 1 && pend.containsKey("2026-11-16")
+                        && pend.get("2026-11-16").uptimeDeltaMs == 99);
+        check("daily sampler clock: a save made right then keeps the real"
+                        + " days",
+                s.save() == null && DailyTrackStore.dayCount(f) == 2
+                        && !readAll(f).contains("2099"));
+        // The clock is back; the 17th and the 18th follow.
+        s.tick(DAY_MS + 6000, day15 + DAY_MS + 6000, utc, up += 1, 0,
+                null, false, 0, -1);
+        due = s.tick(2 * DAY_MS, day15 + 2 * DAY_MS, utc, up += 17, 0,
+                null, false, 0, -1);
+        check("daily sampler clock: the 17th begins as usual", due
+                && s.save() == null);
+        s.tick(2 * DAY_MS + 3000, day15 + 2 * DAY_MS + 3000, utc, up += 1, 0,
+                null, false, 0, -1);
+        due = s.tick(3 * DAY_MS, day15 + 3 * DAY_MS, utc, up += 18, 0,
+                null, false, 0, -1);
+        s.tick(3 * DAY_MS + 3000, day15 + 3 * DAY_MS + 3000, utc, up += 1, 0,
+                null, false, 0, -1);
+        check("daily sampler clock: and the 18th", due && s.save() == null);
+        List<DailyTrackStore.Record> got = DailyTrackStore.read(f);
+        check("daily sampler clock (probe): the file holds 11-15 to 11-18"
+                        + " with every increment in it, and no 2099 (found "
+                        + readAll(f).replace("\n", " ") + ")",
+                got.size() == 4 && "2026-11-15".equals(got.get(0).date)
+                        && got.get(0).uptimeDeltaMs == 15 + 16
+                        && "2026-11-16".equals(got.get(1).date)
+                        && got.get(1).uptimeDeltaMs == 99 + 1 + 17
+                        && "2026-11-17".equals(got.get(2).date)
+                        && got.get(2).uptimeDeltaMs == 1 + 18
+                        && "2026-11-18".equals(got.get(3).date)
+                        && got.get(3).uptimeDeltaMs == 1
+                        && !readAll(f).contains("2099"));
+
+        // A clock that jumps and STAYS is a correction (the time
+        // sync after a boot with a bad clock) or the user's own
+        // doing: it is believed once it has lasted.
+        File f2 = DailyTrackStore.file(tempDir("sampler-sync"));
+        DailyTrackStore.Sampler c = new DailyTrackStore.Sampler(f2, 60_000);
+        final long year2000 = 946684800000L + 3600_000L;
+        final long real = day15 + DAY_MS; // the 16th, 12:00
+        long e = 0;
+        up = 0;
+        c.tick(e, year2000, utc, up, 0, null, false, 0, -1);
+        c.tick(e += 3000, year2000 + 3000, utc, up += 3000, 0,
+                null, false, 0, -1);
+        // The time sync: the wall clock is right from here on.
+        final long confirm = DailyTrackStore.Sampler.CLOCK_CONFIRM_MS;
+        final long firstOffAt = e + 3000;
+        long newDaySeenAt = -1;
+        for (int i = 1; i <= 1000 && newDaySeenAt < 0; i++) {
+            c.tick(e += 3000, real + i * 3000L, utc, up += 3000, 0,
+                    null, false, 0, -1);
+            if (c.pendingForTest().containsKey("2026-11-16")) {
+                newDaySeenAt = e;
+            }
+        }
+        // The tick that believes the new clock still closes the old
+        // day; the one after it is the first of the new day.
+        check("daily sampler clock: a clock that jumps and stays is believed"
+                        + " once it has lasted " + (confirm / 60_000)
+                        + " minutes, not before (first reading of the new"
+                        + " day " + (newDaySeenAt - firstOffAt) + " ms after"
+                        + " the jump)",
+                newDaySeenAt == firstOffAt + confirm + 3000
+                        && c.pendingForTest().get("2026-11-16").uptimeDeltaMs
+                        == 3000
+                        && c.pendingForTest().get("2000-01-01").uptimeDeltaMs
+                        == confirm + 6000);
+        check("daily sampler clock: the save is anchored to the believed"
+                        + " day - the real day is recorded, the stray old"
+                        + " date falls outside the 400 days as it always"
+                        + " did",
+                c.save() == null && DailyTrackStore.dayCount(f2) == 1
+                        && "2026-11-16".equals(
+                        DailyTrackStore.read(f2).get(0).date));
+        // A step within a day (a time-zone or daylight change, an
+        // ordinary adjustment) is believed at once.
+        DailyTrackStore.Sampler z = new DailyTrackStore.Sampler(
+                DailyTrackStore.file(tempDir("sampler-step")), 60_000);
+        z.tick(0, real, utc, 0, 0, null, false, 0, -1);
+        boolean stepped = z.tick(3000, real + 13 * 3600_000L, utc, 3000, 0,
+                null, false, 0, -1);
+        z.tick(6000, real + 13 * 3600_000L + 3000, utc, 6000, 0,
+                null, false, 0, -1);
+        check("daily sampler clock: a step of less than a day is believed at"
+                        + " once",
+                stepped && z.pendingForTest().containsKey("2026-11-17")
+                        && z.pendingForTest().get("2026-11-16").uptimeDeltaMs
+                        == 3000);
+    }
+
+    private static void testDailySampler() throws Exception {
+        final java.util.TimeZone utc = java.util.TimeZone.getTimeZone("UTC");
+        final long day16 = 1794787200000L; // 2026-11-16T00:00:00Z
+        check("daily sampler: (premise) the test's clock",
+                "2026-11-16".equals(DailyTrackStore.localDate(day16, utc)));
+        File dir = tempDir("sampler");
+        File f = DailyTrackStore.file(dir);
+        DailyTrackStore.Sampler s = new DailyTrackStore.Sampler(f, 60_000);
+        long wall = day16 + 3600_000L;
+
+        // First readings are the baseline: the totals accumulated
+        // before this process started are not this day's.
+        boolean due = s.tick(1000, wall, utc, 5_000_000L, 40_000L,
+                null, false, 0, -1);
+        check("daily sampler: the first reading is a baseline and adds"
+                        + " nothing",
+                !due && s.pendingForTest().isEmpty() && !f.exists());
+        s.observePeers(8);
+        s.observePeers(12);
+        s.observePeers(-1);
+        due = s.tick(4000, wall + 3000, utc, 5_003_000L, 40_002L,
+                null, false, 0, -1);
+        DailyTrackStore.Increment p = s.pendingForTest().get("2026-11-16");
+        check("daily sampler: the next reading adds the growth of the totals"
+                        + " and the peers seen",
+                !due && p != null && p.uptimeDeltaMs == 3000
+                        && p.blocksDelta == 2 && p.peerMax == 12
+                        && p.peerSum == 20 && p.peerSamples == 2
+                        && p.jobsDelta == 0 && p.miningMs == 0
+                        && p.approxHashes == 0);
+        // A reading below the last one is stale: nothing is added,
+        // and nothing is counted twice when the total catches up.
+        s.tick(7000, wall + 6000, utc, 5_001_000L, 40_001L, null, false, 0, -1);
+        s.tick(10000, wall + 9000, utc, 5_004_000L, 40_003L, null, false, 0, -1);
+        p = s.pendingForTest().get("2026-11-16");
+        check("daily sampler: a stale (lower) reading adds nothing and causes"
+                        + " no double count",
+                p.uptimeDeltaMs == 4000 && p.blocksDelta == 3);
+        s.tick(13000, wall + 12000, utc, -1, -1, null, false, 0, -1);
+        check("daily sampler: an unknown total changes nothing",
+                s.pendingForTest().get("2026-11-16").uptimeDeltaMs == 4000);
+
+        // Mining: a supervisor's session counters.
+        Object sup1 = new Object();
+        s.tick(16000, wall + 15000, utc, 5_010_000L, 40_003L,
+                sup1, true, 2, 1000.0);
+        p = s.pendingForTest().get("2026-11-16");
+        check("daily sampler: a new supervisor's jobs count from zero; no"
+                        + " mining time before it was seen running twice",
+                p.jobsDelta == 2 && p.miningMs == 0 && p.approxHashes == 0
+                        && p.uptimeDeltaMs == 10000);
+        s.tick(19000, wall + 18000, utc, 5_013_000L, 40_003L,
+                sup1, true, 5, 1000.5);
+        p = s.pendingForTest().get("2026-11-16");
+        check("daily sampler: running on both ticks adds the time between"
+                        + " them and rate x time",
+                p.jobsDelta == 5 && p.miningMs == 3000
+                        && p.approxHashes == 3001);
+        s.tick(22000, wall + 21000, utc, 5_016_000L, 40_003L,
+                sup1, true, 5, 1000.5);
+        p = s.pendingForTest().get("2026-11-16");
+        check("daily sampler: the fraction of a hash is carried, not lost"
+                        + " (3001.5 + 3001.5 = 6003)",
+                p.miningMs == 6000 && p.approxHashes == 6003);
+        s.tick(25000, wall + 24000, utc, 5_019_000L, 40_003L,
+                sup1, true, 5, -1.0);
+        p = s.pendingForTest().get("2026-11-16");
+        check("daily sampler: with no reported rate, time counts and hashes"
+                        + " do not",
+                p.miningMs == 9000 && p.approxHashes == 6003);
+        s.tick(28000, wall + 27000, utc, 5_022_000L, 40_003L,
+                sup1, false, 5, 1000.0);
+        s.tick(31000, wall + 30000, utc, 5_025_000L, 40_003L,
+                sup1, true, 5, 1000.0);
+        p = s.pendingForTest().get("2026-11-16");
+        check("daily sampler: a miner that was not running at one end of an"
+                        + " interval adds no mining time for it",
+                p.miningMs == 9000 && p.approxHashes == 6003);
+        s.tick(31000 + 61_000, wall + 91000, utc, 5_086_000L, 40_003L,
+                sup1, true, 5, 1000.0);
+        p = s.pendingForTest().get("2026-11-16");
+        check("daily sampler: a gap longer than a minute between ticks is not"
+                        + " mining time (uptime still follows its total)",
+                p.miningMs == 9000 && p.uptimeDeltaMs == 86000);
+        Object sup2 = new Object();
+        s.tick(95000, wall + 94000, utc, 5_089_000L, 40_003L,
+                sup2, true, 1, 1000.0);
+        p = s.pendingForTest().get("2026-11-16");
+        check("daily sampler: the next node process's supervisor starts its"
+                        + " own count (5 + 1 jobs), and its first tick adds"
+                        + " no mining time",
+                p.jobsDelta == 6 && p.miningMs == 9000);
+        s.tick(98000, wall + 97000, utc, 5_092_000L, 40_003L,
+                null, false, 0, -1);
+        s.tick(101000, wall + 100000, utc, 5_095_000L, 40_003L,
+                sup2, true, 1, 1000.0);
+        check("daily sampler: with no supervisor nothing is added to mining,"
+                        + " and the same supervisor seen again is not counted"
+                        + " from zero a second time",
+                s.pendingForTest().get("2026-11-16").jobsDelta == 6
+                        && s.pendingForTest().get("2026-11-16").miningMs
+                        == 9000);
+
+        // Saving.
+        check("daily sampler: tick() itself never touches the file",
+                !f.exists());
+        DailyTrackStore.Sampler t = new DailyTrackStore.Sampler(f, 60_000);
+        check("daily sampler: save() with nothing pending writes nothing",
+                t.save() == null && !f.exists());
+        t.tick(0, wall, utc, 100, 10, null, false, 0, -1);
+        boolean d1 = t.tick(30_000, wall + 30_000, utc, 30_100, 11,
+                null, false, 0, -1);
+        boolean d2 = t.tick(59_999, wall + 59_999, utc, 60_099, 11,
+                null, false, 0, -1);
+        boolean d3 = t.tick(60_000, wall + 60_000, utc, 60_100, 12,
+                null, false, 0, -1);
+        check("daily sampler: a save is due once the interval has passed, not"
+                        + " before", !d1 && !d2 && d3);
+        check("daily sampler: save() writes the day and clears what was"
+                        + " pending",
+                t.save() == null && t.pendingForTest().isEmpty()
+                        && readAll(f).equals("{\"date\":\"2026-11-16\","
+                        + "\"uptimeDeltaMs\":60000,\"blocksDelta\":2,"
+                        + "\"peerMax\":0,\"peerSum\":0,\"peerSamples\":0,"
+                        + "\"jobsDelta\":0,\"miningMs\":0,"
+                        + "\"approxHashes\":0}\n"));
+        boolean d4 = t.tick(63_000, wall + 63_000, utc, 63_100, 12,
+                null, false, 0, -1);
+        check("daily sampler: the interval starts again after a save", !d4);
+
+        // Midnight: what was pending belongs to the old day.
+        long beforeMidnight = day16 + 86_400_000L - 2000;
+        t.observePeers(9);
+        t.tick(66_000, beforeMidnight, utc, 66_100, 13, null, false, 0, -1);
+        t.observePeers(11);
+        boolean d5 = t.tick(69_000, beforeMidnight + 3000, utc, 69_100, 15,
+                null, false, 0, -1);
+        java.util.Map<String, DailyTrackStore.Increment> pend =
+                t.pendingForTest();
+        check("daily sampler: when the date changes a save is due at once, and"
+                        + " what was pending stays with the day it was seen"
+                        + " on",
+                d5 && pend.size() == 1 && pend.containsKey("2026-11-16")
+                        && pend.get("2026-11-16").uptimeDeltaMs == 9000
+                        && pend.get("2026-11-16").blocksDelta == 3
+                        && pend.get("2026-11-16").peerMax == 11
+                        && pend.get("2026-11-16").peerSamples == 2);
+        t.observePeers(4);
+        t.tick(72_000, beforeMidnight + 6000, utc, 72_100, 16,
+                null, false, 0, -1);
+        pend = t.pendingForTest();
+        check("daily sampler: the next readings belong to the new day",
+                pend.size() == 2 && pend.get("2026-11-17").uptimeDeltaMs == 3000
+                        && pend.get("2026-11-17").blocksDelta == 1
+                        && pend.get("2026-11-17").peerMax == 4);
+        check("daily sampler: one save writes both days",
+                t.save() == null && DailyTrackStore.dayCount(f) == 2
+                        && DailyTrackStore.read(f).get(0).uptimeDeltaMs == 69000
+                        && DailyTrackStore.read(f).get(1).uptimeDeltaMs == 3000);
+
+        // A failed save keeps the increments for the next one.
+        File dir2 = tempDir("sampler-fail");
+        File f2 = DailyTrackStore.file(dir2);
+        f2.mkdirs();
+        DailyTrackStore.Sampler u = new DailyTrackStore.Sampler(f2, 1000);
+        u.tick(0, wall, utc, 0, 0, null, false, 0, -1);
+        u.tick(3000, wall + 3000, utc, 3000, 1, null, false, 0, -1);
+        String failure = u.save();
+        check("daily sampler: a failed save reports the error's class, no"
+                        + " path (" + failure + ")",
+                failure != null && failure.startsWith("java.")
+                        && !failure.contains("/"));
+        u.tick(6000, wall + 6000, utc, 6000, 2, null, false, 0, -1);
+        check("daily sampler: and keeps what it could not write",
+                u.pendingForTest().get("2026-11-16").uptimeDeltaMs == 6000
+                        && u.pendingForTest().get("2026-11-16").blocksDelta
+                        == 2);
+        f2.delete();
+        check("daily sampler: the next save writes all of it, once",
+                u.save() == null && u.pendingForTest().isEmpty()
+                        && DailyTrackStore.read(f2).size() == 1
+                        && DailyTrackStore.read(f2).get(0).uptimeDeltaMs == 6000
+                        && DailyTrackStore.read(f2).get(0).blocksDelta == 2);
+    }
+
     // ---------------- share assembly ----------------
 
     private static void testShareAssembly() {
@@ -2860,13 +4493,16 @@ public final class MiningHarnessMain {
 
     private static void testStrings() {
         java.util.Set<String> keys = StringsTable.keys();
-        check("strings: the table holds 400 keys - the 329 of v3.0.1, 67 for"
-                + " mining, the thermal stop's one and the donation footer's"
-                + " three (found " + keys.size()
-                + ")", keys.size() == 400);
+        check("strings: the table holds 427 keys - the 329 of v3.0.1, 67 for"
+                + " mining, the thermal stop's one, the donation footer's"
+                + " three, the 24 of v4.1.0's storage section and the four"
+                + " of the UI/UX phase 0 (found "
+                + keys.size() + ")", keys.size() == 427);
         int miningKeys = 0;
         int donateKeys = 0;
+        int storageKeys = 0;
         String lastKey = null;
+        String lastBeforeStorage = null;
         for (String k : keys) {
             if (k.startsWith("mining_")) {
                 miningKeys++;
@@ -2874,15 +4510,29 @@ public final class MiningHarnessMain {
             if (k.startsWith("donate_")) {
                 donateKeys++;
             }
+            if (k.startsWith("storage_")) {
+                storageKeys++;
+            } else {
+                lastBeforeStorage = k;
+            }
             lastKey = k;
         }
         check("strings: 68 keys are mining keys (found " + miningKeys + ")",
                 miningKeys == 68);
         check("strings: 3 keys are donation keys (found " + donateKeys + ")",
                 donateKeys == 3);
-        check("strings: the donation footer's toast is the 400th key",
+        check("strings: 24 keys are storage keys (found " + storageKeys + ")",
+                storageKeys == 24);
+        check("strings: the donation footer's toast ends the pre-storage"
+                        + " run in the constant order, and the UI/UX phase 0"
+                        + " keys close the table after the storage section",
                 "donate_copied".equals(StringsTable.DONATE_COPIED)
-                        && "donate_copied".equals(lastKey));
+                        && "note_reset_incomplete".equals(lastBeforeStorage)
+                        && "storage_resync_failed".equals(
+                        StringsTable.STORAGE_RESYNC_FAILED)
+                        && "storage_fail_internal".equals(
+                        StringsTable.STORAGE_FAIL_INTERNAL)
+                        && "note_reset_incomplete".equals(lastKey));
         check("strings: nine languages, Japanese first",
                 Arrays.asList("ja", "en", "zh", "es", "hi", "ar", "ko", "ru",
                         "fr").equals(Arrays.asList(StringsTable.TAGS)));
@@ -2910,7 +4560,7 @@ public final class MiningHarnessMain {
                 if (!placeholders(v).equals(placeholders(ja.get(k)))) {
                     badPlaceholders.add(tag + ":" + k);
                 }
-                if (!k.startsWith("mining_")) {
+                if (!k.startsWith("mining_") && !k.startsWith("storage_")) {
                     continue;
                 }
                 boolean control = false;
@@ -2944,12 +4594,61 @@ public final class MiningHarnessMain {
                 extra.isEmpty());
         check("strings: placeholders match the Japanese source everywhere "
                 + badPlaceholders, badPlaceholders.isEmpty());
-        check("strings: every mining string is one clean paragraph " + badShape,
-                badShape.isEmpty());
-        check("strings: no mining string was left in Japanese " + untranslated,
-                untranslated.isEmpty());
-        check("strings: every mining format string formats " + badFormat,
-                badFormat.isEmpty());
+        check("strings: every mining and storage string is one clean"
+                + " paragraph " + badShape, badShape.isEmpty());
+        check("strings: no mining or storage string was left in Japanese "
+                + untranslated, untranslated.isEmpty());
+        check("strings: every mining and storage format string formats "
+                + badFormat, badFormat.isEmpty());
+        boolean keepsNamed = true;
+        for (String tag : StringsTable.TAGS) {
+            java.util.Map<String, String> t = StringsTable.table(tag);
+            String keeps = t.get(StringsTable.STORAGE_RESYNC_CONFIRM_KEEPS);
+            String failedText = t.get(StringsTable.STORAGE_RESYNC_FAILED);
+            if (keeps == null || !keeps.contains("DePIN")
+                    || !keeps.contains("Inner Hash") || failedText == null
+                    || !placeholders(failedText).equals(
+                    Arrays.asList("%1$s"))) {
+                keepsNamed = false;
+            }
+        }
+        check("strings: the resync confirmation names DePIN and the Inner"
+                + " Hash among what is kept, in every language; the failure"
+                + " line takes exactly one value", keepsNamed);
+        // Audit I-4: what goes into the failure line's brackets is a
+        // phrase of the same language, one per failure kind.
+        List<String> badKinds = new ArrayList<>();
+        java.util.Set<String> kindKeys = new java.util.TreeSet<>();
+        List<StorageLogic.FailureKind> kinds = new ArrayList<>(
+                Arrays.asList(StorageLogic.FailureKind.values()));
+        kinds.add(null);
+        for (StorageLogic.FailureKind kind : kinds) {
+            String key = StorageResetState.failureKey(kind);
+            kindKeys.add(key);
+            for (String tag : StringsTable.TAGS) {
+                java.util.Map<String, String> t = StringsTable.table(tag);
+                String phrase = t.get(key);
+                if (phrase == null || phrase.isEmpty()
+                        || !placeholders(phrase).isEmpty()
+                        || !String.format(java.util.Locale.US,
+                        t.get(StringsTable.STORAGE_RESYNC_FAILED), phrase)
+                        .contains(phrase)
+                        || (!"en".equals(tag) && phrase.equals(StringsTable
+                        .table("en").get(key)))) {
+                    badKinds.add(tag + ":" + kind);
+                }
+            }
+        }
+        check("strings: every failure kind of a reset has a phrase of its own"
+                        + " language for the failure line, and none is the"
+                        + " English one " + badKinds,
+                badKinds.isEmpty() && kindKeys.equals(new java.util.TreeSet<>(
+                        Arrays.asList("storage_fail_location",
+                                "storage_fail_entries",
+                                "storage_fail_internal")))
+                        && StringsTable.STORAGE_FAIL_INTERNAL.equals(
+                        StorageResetState.failureKey(
+                                StorageLogic.FailureKind.MARKER)));
         check("strings: the status words the specification names",
                 "オフ".equals(ja.get(StringsTable.MINING_STATE_OFF))
                         && "準備中".equals(ja.get(StringsTable.MINING_STATE_PREPARING))

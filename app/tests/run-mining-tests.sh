@@ -2,7 +2,8 @@
 # Plain-JVM harness for the mining feature (v4.0.0), in the shape of
 # core/tests/run-tests.sh: javac + java only, no Gradle, no Android
 # SDK. It compiles the app module's Android-free mining classes
-# together with the string table and runs MiningHarnessMain.
+# together with the string table — and, since v4.1.0, the storage
+# rules and the daily track store — and runs MiningHarnessMain.
 #
 #   app/tests/run-mining-tests.sh
 #
@@ -25,6 +26,9 @@ trap 'rm -rf "$OUT"' EXIT
   "$SRC/MiningLogic.java" \
   "$SRC/BoundedLogFile.java" \
   "$SRC/MinerSupervisor.java" \
+  "$SRC/StorageLogic.java" \
+  "$SRC/StorageResetState.java" \
+  "$SRC/DailyTrackStore.java" \
   "$SRC/StringsTable.java" \
   "$APP/tests/app/quantusnode/node/MiningHarnessMain.java"
 

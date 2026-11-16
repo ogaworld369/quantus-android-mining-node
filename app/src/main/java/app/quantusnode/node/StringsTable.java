@@ -530,6 +530,49 @@ public final class StringsTable {
     public static final String DONATE_NOTE = "donate_note";
     /** Toast shown when the donation address is copied. */
     public static final String DONATE_COPIED = "donate_copied";
+    /** Settings: heading of the storage section (v4.1.0). */
+    public static final String STORAGE_SECTION = "storage_section";
+    /** Shown under the figures while the node runs: they are estimates. */
+    public static final String STORAGE_RUNNING_NOTE = "storage_running_note";
+    public static final String STORAGE_LABEL_CHAIN_DB = "storage_label_chain_db";
+    public static final String STORAGE_LABEL_NODE = "storage_label_node";
+    public static final String STORAGE_LABEL_LOGS = "storage_label_logs";
+    public static final String STORAGE_LABEL_DEPIN = "storage_label_depin";
+    public static final String STORAGE_LABEL_TOTAL = "storage_label_total";
+    /** A figure's value until the first measurement has come back. */
+    public static final String STORAGE_MEASURING = "storage_measuring";
+    public static final String STORAGE_RESYNC_BUTTON = "storage_resync_button";
+    /** Under the resync button while it is disabled because the node runs. */
+    public static final String STORAGE_RESYNC_NEEDS_STOP = "storage_resync_needs_stop";
+    public static final String STORAGE_RESYNC_CONFIRM_TITLE = "storage_resync_confirm_title";
+    /** Confirmation dialog: what the resync deletes. */
+    public static final String STORAGE_RESYNC_CONFIRM_DELETES = "storage_resync_confirm_deletes";
+    /** Confirmation dialog: what the resync never touches. */
+    public static final String STORAGE_RESYNC_CONFIRM_KEEPS = "storage_resync_confirm_keeps";
+    public static final String STORAGE_RESYNC_CONFIRM_NOTE = "storage_resync_confirm_note";
+    public static final String STORAGE_RESYNC_CONFIRM_BUTTON = "storage_resync_confirm_button";
+    public static final String STORAGE_RESYNC_WORKING = "storage_resync_working";
+    public static final String STORAGE_RESYNC_DONE = "storage_resync_done";
+    /** Result line: there was no chain database, so nothing was deleted. */
+    public static final String STORAGE_RESYNC_NOTHING = "storage_resync_nothing";
+    /** Result line: refused because a node is, or may be, running. */
+    public static final String STORAGE_RESYNC_REFUSED = "storage_resync_refused";
+    /** Format: %1$s = one of the STORAGE_FAIL_* phrases below. */
+    public static final String STORAGE_RESYNC_FAILED = "storage_resync_failed";
+    /** Failure kinds, set into STORAGE_RESYNC_FAILED's brackets. */
+    public static final String STORAGE_FAIL_LOCATION = "storage_fail_location";
+    public static final String STORAGE_FAIL_ENTRIES = "storage_fail_entries";
+    public static final String STORAGE_FAIL_INTERNAL = "storage_fail_internal";
+    /** Generic dialog buttons, from this table (not the platform's,
+     *  which follows the device language, not the app's). */
+    public static final String BUTTON_CANCEL = "button_cancel";
+    public static final String BUTTON_OK = "button_ok";
+    /** Storage line: a chain database reset is pending; the rest is
+     *  deleted when the node next starts. */
+    public static final String STORAGE_RESYNC_PENDING = "storage_resync_pending";
+    /** Start was refused because a chain database reset could not be
+     *  completed. No technical detail is included. */
+    public static final String NOTE_RESET_INCOMPLETE = "note_reset_incomplete";
 
     /** Supported language tags, in picker order. "zh" is Simplified Chinese. */
     public static final String[] TAGS = {
@@ -1096,7 +1139,36 @@ public final class StringsTable {
                 MINING_STOPPED_THERMAL, "端末の温度が高いため、マイニングを停止しました。ノードを再起動すると再開します。",
                 DONATE_TITLE, "開発者を支援",
                 DONATE_NOTE, "このアプリは無料のオープンソースです。役に立ったら、開発者への QTC の寄付を歓迎します（任意です）。",
-                DONATE_COPIED, "寄付用アドレスをコピーしました"
+                DONATE_COPIED, "寄付用アドレスをコピーしました",
+                // Storage management (v4.1.0).
+                STORAGE_SECTION, "ストレージ",
+                STORAGE_RUNNING_NOTE, "ノードの稼働中は値が変わり続けるため、目安です。",
+                STORAGE_LABEL_CHAIN_DB, "チェーンDB",
+                STORAGE_LABEL_NODE, "ノード全体",
+                STORAGE_LABEL_LOGS, "ログ",
+                STORAGE_LABEL_DEPIN, "DePINの記録",
+                STORAGE_LABEL_TOTAL, "合計（アプリのデータ）",
+                STORAGE_MEASURING, "計測中…",
+                STORAGE_RESYNC_BUTTON, "チェーンDBを消して再同期",
+                STORAGE_RESYNC_NEEDS_STOP, "ノードを停止しているときだけ使えます。",
+                STORAGE_RESYNC_CONFIRM_TITLE, "チェーンDBを消しますか",
+                STORAGE_RESYNC_CONFIRM_DELETES, "消えるもの：チェーンのデータベース（この端末がこれまでに同期したブロックのデータ）だけです。",
+                STORAGE_RESYNC_CONFIRM_KEEPS, "残るもの：ノードのネットワーク鍵、マイニングの設定と報酬の宛先（Inner Hash）、DePINのIDと記録、航跡の記録、ログ、アプリの設定。",
+                STORAGE_RESYNC_CONFIRM_NOTE, "この操作は取り消せません。次にノードを起動すると、同期が最初から始まります（時間と通信量がかかります）。ノードが自動で起動することはありません。",
+                STORAGE_RESYNC_CONFIRM_BUTTON, "消す",
+                STORAGE_RESYNC_WORKING, "削除しています…",
+                STORAGE_RESYNC_DONE, "チェーンDBを削除しました。次にノードを起動すると、同期が最初から始まります。",
+                STORAGE_RESYNC_NOTHING, "チェーンDBが見つからなかったため、何も削除していません。",
+                STORAGE_RESYNC_REFUSED, "ノードが動いているか、停止処理の途中のため、削除しませんでした。少し待ってからやり直してください。",
+                STORAGE_RESYNC_FAILED, "削除を完了できませんでした（%1$s）。もう一度お試しください。途中まで削除されている場合、残りは次にノードを起動する前に削除されます。",
+                STORAGE_FAIL_LOCATION, "データベースの場所が想定と異なる",
+                STORAGE_FAIL_ENTRIES, "一部のファイルを削除できなかった",
+                STORAGE_FAIL_INTERNAL, "内部エラー",
+                // UI/UX phase 0: dialog buttons, pending reset, reset refusal.
+                BUTTON_CANCEL, "キャンセル",
+                BUTTON_OK, "OK",
+                STORAGE_RESYNC_PENDING, "再同期の準備ができています。次にノードを開始すると、残りのチェーンDBを削除してから同期を始めます。",
+                NOTE_RESET_INCOMPLETE, "チェーンDBの削除を完了できなかったため、ノードを開始しませんでした。"
         );
     }
 
@@ -1506,7 +1578,36 @@ public final class StringsTable {
                 MINING_STOPPED_THERMAL, "Mining was stopped because the device temperature is high. It resumes when the node is restarted.",
                 DONATE_TITLE, "Support the developer",
                 DONATE_NOTE, "This app is free and open source. If it is useful to you, a QTC donation to the developer is welcome — entirely voluntary.",
-                DONATE_COPIED, "Donation address copied"
+                DONATE_COPIED, "Donation address copied",
+                // Storage management (v4.1.0).
+                STORAGE_SECTION, "Storage",
+                STORAGE_RUNNING_NOTE, "While the node is running these figures keep changing, so they are estimates.",
+                STORAGE_LABEL_CHAIN_DB, "Chain database",
+                STORAGE_LABEL_NODE, "Node data (all)",
+                STORAGE_LABEL_LOGS, "Logs",
+                STORAGE_LABEL_DEPIN, "DePIN records",
+                STORAGE_LABEL_TOTAL, "Total (app data)",
+                STORAGE_MEASURING, "Measuring…",
+                STORAGE_RESYNC_BUTTON, "Delete the chain database and resync",
+                STORAGE_RESYNC_NEEDS_STOP, "Available only while the node is stopped.",
+                STORAGE_RESYNC_CONFIRM_TITLE, "Delete the chain database?",
+                STORAGE_RESYNC_CONFIRM_DELETES, "Deleted: the chain database only — the block data this device has synced so far.",
+                STORAGE_RESYNC_CONFIRM_KEEPS, "Kept: the node's network key, the mining settings and rewards destination (Inner Hash), the DePIN ID and records, the track record, the logs and the app's settings.",
+                STORAGE_RESYNC_CONFIRM_NOTE, "This cannot be undone. The next time you start the node, syncing begins from the start again, which takes time and data. The node is not started automatically.",
+                STORAGE_RESYNC_CONFIRM_BUTTON, "Delete",
+                STORAGE_RESYNC_WORKING, "Deleting…",
+                STORAGE_RESYNC_DONE, "The chain database was deleted. The next time the node starts, syncing begins from the start.",
+                STORAGE_RESYNC_NOTHING, "No chain database was found, so nothing was deleted.",
+                STORAGE_RESYNC_REFUSED, "Nothing was deleted, because the node is running or still shutting down. Wait a moment and try again.",
+                STORAGE_RESYNC_FAILED, "The deletion could not be completed (%1$s). Please try again. If part of the database is already gone, the rest is deleted before the node next starts.",
+                STORAGE_FAIL_LOCATION, "the database is not in its expected location",
+                STORAGE_FAIL_ENTRIES, "some files could not be deleted",
+                STORAGE_FAIL_INTERNAL, "internal error",
+                // UI/UX phase 0: dialog buttons, pending reset, reset refusal.
+                BUTTON_CANCEL, "Cancel",
+                BUTTON_OK, "OK",
+                STORAGE_RESYNC_PENDING, "A resync is ready. The next time the node starts, the rest of the chain database will be deleted before syncing begins.",
+                NOTE_RESET_INCOMPLETE, "The node was not started, because the chain database deletion could not be completed."
         );
     }
 
@@ -1916,7 +2017,36 @@ public final class StringsTable {
                 MINING_STOPPED_THERMAL, "由于设备温度过高，挖矿已停止。重启节点后将恢复挖矿。",
                 DONATE_TITLE, "支持开发者",
                 DONATE_NOTE, "本应用免费且开源。如果对您有帮助，欢迎向开发者捐赠 QTC（完全自愿）。",
-                DONATE_COPIED, "捐赠地址已复制"
+                DONATE_COPIED, "捐赠地址已复制",
+                // Storage management (v4.1.0).
+                STORAGE_SECTION, "存储",
+                STORAGE_RUNNING_NOTE, "节点运行期间数值会不断变化，仅供参考。",
+                STORAGE_LABEL_CHAIN_DB, "链数据库",
+                STORAGE_LABEL_NODE, "节点全部数据",
+                STORAGE_LABEL_LOGS, "日志",
+                STORAGE_LABEL_DEPIN, "DePIN 记录",
+                STORAGE_LABEL_TOTAL, "合计（应用数据）",
+                STORAGE_MEASURING, "正在计算…",
+                STORAGE_RESYNC_BUTTON, "删除链数据库并重新同步",
+                STORAGE_RESYNC_NEEDS_STOP, "仅在节点停止时可用。",
+                STORAGE_RESYNC_CONFIRM_TITLE, "要删除链数据库吗？",
+                STORAGE_RESYNC_CONFIRM_DELETES, "将被删除：仅链数据库（本设备迄今同步的区块数据）。",
+                STORAGE_RESYNC_CONFIRM_KEEPS, "将保留：节点的网络密钥、挖矿设置和奖励接收地址（Inner Hash）、DePIN 的 ID 和记录、航迹记录、日志以及应用设置。",
+                STORAGE_RESYNC_CONFIRM_NOTE, "此操作无法撤销。下次启动节点时，同步将从头开始（需要时间和流量）。节点不会自动启动。",
+                STORAGE_RESYNC_CONFIRM_BUTTON, "删除",
+                STORAGE_RESYNC_WORKING, "正在删除…",
+                STORAGE_RESYNC_DONE, "链数据库已删除。下次启动节点时，同步将从头开始。",
+                STORAGE_RESYNC_NOTHING, "未找到链数据库，因此未删除任何内容。",
+                STORAGE_RESYNC_REFUSED, "节点正在运行或仍在停止中，因此未执行删除。请稍候再试。",
+                STORAGE_RESYNC_FAILED, "未能完成删除（%1$s）。请重试。如果已删除了一部分，其余部分会在下次启动节点之前删除。",
+                STORAGE_FAIL_LOCATION, "数据库位置与预期不符",
+                STORAGE_FAIL_ENTRIES, "部分文件无法删除",
+                STORAGE_FAIL_INTERNAL, "内部错误",
+                // UI/UX phase 0: dialog buttons, pending reset, reset refusal.
+                BUTTON_CANCEL, "取消",
+                BUTTON_OK, "确定",
+                STORAGE_RESYNC_PENDING, "重新同步已准备就绪。下次启动节点时，将先删除剩余的链数据库，然后开始同步。",
+                NOTE_RESET_INCOMPLETE, "由于链数据库删除未能完成，节点未启动。"
         );
     }
 
@@ -2326,7 +2456,36 @@ public final class StringsTable {
                 MINING_STOPPED_THERMAL, "La minería se ha detenido porque la temperatura del dispositivo es alta. Se reanudará al reiniciar el nodo.",
                 DONATE_TITLE, "Apoya al desarrollador",
                 DONATE_NOTE, "Esta aplicación es gratuita y de código abierto. Si te resulta útil, una donación en QTC al desarrollador es bienvenida, siempre voluntaria.",
-                DONATE_COPIED, "Dirección de donación copiada"
+                DONATE_COPIED, "Dirección de donación copiada",
+                // Storage management (v4.1.0).
+                STORAGE_SECTION, "Almacenamiento",
+                STORAGE_RUNNING_NOTE, "Mientras el nodo está en marcha, estas cifras cambian continuamente; son aproximadas.",
+                STORAGE_LABEL_CHAIN_DB, "Base de datos de la cadena",
+                STORAGE_LABEL_NODE, "Datos del nodo (total)",
+                STORAGE_LABEL_LOGS, "Archivos de registro (logs)",
+                STORAGE_LABEL_DEPIN, "Registros de DePIN",
+                STORAGE_LABEL_TOTAL, "Total (datos de la app)",
+                STORAGE_MEASURING, "Calculando…",
+                STORAGE_RESYNC_BUTTON, "Eliminar la base de datos de la cadena y resincronizar",
+                STORAGE_RESYNC_NEEDS_STOP, "Solo disponible con el nodo detenido.",
+                STORAGE_RESYNC_CONFIRM_TITLE, "¿Eliminar la base de datos de la cadena?",
+                STORAGE_RESYNC_CONFIRM_DELETES, "Se elimina: solo la base de datos de la cadena (los datos de bloques que este dispositivo ha sincronizado hasta ahora).",
+                STORAGE_RESYNC_CONFIRM_KEEPS, "Se conserva: la clave de red del nodo, los ajustes de minería y el destino de las recompensas (Inner Hash), el ID y los registros de DePIN, la trayectoria, los archivos de registro (logs) y los ajustes de la app.",
+                STORAGE_RESYNC_CONFIRM_NOTE, "Esta acción no se puede deshacer. La próxima vez que inicies el nodo, la sincronización empezará desde el principio (lleva tiempo y consume datos). El nodo no se inicia automáticamente.",
+                STORAGE_RESYNC_CONFIRM_BUTTON, "Eliminar",
+                STORAGE_RESYNC_WORKING, "Eliminando…",
+                STORAGE_RESYNC_DONE, "Se eliminó la base de datos de la cadena. La próxima vez que se inicie el nodo, la sincronización empezará desde el principio.",
+                STORAGE_RESYNC_NOTHING, "No se encontró ninguna base de datos de la cadena; no se eliminó nada.",
+                STORAGE_RESYNC_REFUSED, "No se eliminó nada porque el nodo está en marcha o todavía se está deteniendo. Espera un momento y vuelve a intentarlo.",
+                STORAGE_RESYNC_FAILED, "No se pudo completar la eliminación (%1$s). Vuelve a intentarlo. Si ya se eliminó una parte, el resto se eliminará antes del próximo inicio del nodo.",
+                STORAGE_FAIL_LOCATION, "la base de datos no está en la ubicación esperada",
+                STORAGE_FAIL_ENTRIES, "no se pudieron eliminar algunos archivos",
+                STORAGE_FAIL_INTERNAL, "error interno",
+                // UI/UX phase 0: dialog buttons, pending reset, reset refusal.
+                BUTTON_CANCEL, "Cancelar",
+                BUTTON_OK, "Aceptar",
+                STORAGE_RESYNC_PENDING, "La resincronización está lista. La próxima vez que se inicie el nodo, se eliminará el resto de la base de datos de la cadena antes de comenzar la sincronización.",
+                NOTE_RESET_INCOMPLETE, "El nodo no se inició porque no se pudo completar la eliminación de la base de datos de la cadena."
         );
     }
 
@@ -2736,7 +2895,36 @@ public final class StringsTable {
                 MINING_STOPPED_THERMAL, "डिवाइस का तापमान अधिक होने के कारण माइनिंग रोक दी गई है। नोड को पुनः आरंभ करने पर यह फिर से शुरू होगी।",
                 DONATE_TITLE, "डेवलपर का समर्थन करें",
                 DONATE_NOTE, "यह ऐप मुफ़्त और ओपन सोर्स है। यदि यह आपके काम आए, तो डेवलपर को QTC दान का स्वागत है — पूरी तरह स्वैच्छिक।",
-                DONATE_COPIED, "दान पता कॉपी किया गया"
+                DONATE_COPIED, "दान पता कॉपी किया गया",
+                // Storage management (v4.1.0).
+                STORAGE_SECTION, "स्टोरेज",
+                STORAGE_RUNNING_NOTE, "नोड चलते समय ये आँकड़े बदलते रहते हैं, इसलिए ये अनुमानित हैं।",
+                STORAGE_LABEL_CHAIN_DB, "चेन डेटाबेस",
+                STORAGE_LABEL_NODE, "नोड का कुल डेटा",
+                STORAGE_LABEL_LOGS, "लॉग",
+                STORAGE_LABEL_DEPIN, "DePIN रिकॉर्ड",
+                STORAGE_LABEL_TOTAL, "कुल (ऐप का डेटा)",
+                STORAGE_MEASURING, "गणना हो रही है…",
+                STORAGE_RESYNC_BUTTON, "चेन डेटाबेस हटाकर फिर से सिंक करें",
+                STORAGE_RESYNC_NEEDS_STOP, "केवल नोड बंद होने पर उपलब्ध।",
+                STORAGE_RESYNC_CONFIRM_TITLE, "चेन डेटाबेस हटाएँ?",
+                STORAGE_RESYNC_CONFIRM_DELETES, "हटेगा: केवल चेन डेटाबेस (इस डिवाइस द्वारा अब तक सिंक किया गया ब्लॉक डेटा)।",
+                STORAGE_RESYNC_CONFIRM_KEEPS, "बना रहेगा: नोड की नेटवर्क कुंजी, माइनिंग सेटिंग्स और इनाम का गंतव्य (Inner Hash), DePIN की ID और रिकॉर्ड, ट्रैक रिकॉर्ड, लॉग और ऐप की सेटिंग्स।",
+                STORAGE_RESYNC_CONFIRM_NOTE, "यह कार्रवाई वापस नहीं ली जा सकती। अगली बार नोड शुरू करने पर सिंक शुरू से होगा (इसमें समय और डेटा लगता है)। नोड अपने आप शुरू नहीं होता।",
+                STORAGE_RESYNC_CONFIRM_BUTTON, "हटाएँ",
+                STORAGE_RESYNC_WORKING, "हटाया जा रहा है…",
+                STORAGE_RESYNC_DONE, "चेन डेटाबेस हटा दिया गया। अगली बार नोड शुरू होने पर सिंक शुरू से होगा।",
+                STORAGE_RESYNC_NOTHING, "कोई चेन डेटाबेस नहीं मिला, इसलिए कुछ भी नहीं हटाया गया।",
+                STORAGE_RESYNC_REFUSED, "कुछ भी नहीं हटाया गया, क्योंकि नोड चल रहा है या अभी बंद हो रहा है। थोड़ी देर रुककर फिर प्रयास करें।",
+                STORAGE_RESYNC_FAILED, "हटाना पूरा नहीं हो सका (%1$s)। कृपया फिर से प्रयास करें। यदि कुछ हिस्सा पहले ही हट चुका है, तो बाकी अगली बार नोड शुरू होने से पहले हटा दिया जाएगा।",
+                STORAGE_FAIL_LOCATION, "डेटाबेस अपेक्षित स्थान पर नहीं है",
+                STORAGE_FAIL_ENTRIES, "कुछ फ़ाइलें हटाई नहीं जा सकीं",
+                STORAGE_FAIL_INTERNAL, "आंतरिक त्रुटि",
+                // UI/UX phase 0: dialog buttons, pending reset, reset refusal.
+                BUTTON_CANCEL, "रद्द करें",
+                BUTTON_OK, "ठीक है",
+                STORAGE_RESYNC_PENDING, "रीसिंक तैयार है। अगली बार नोड शुरू होने पर, सिंक शुरू होने से पहले चेन डेटाबेस का शेष भाग हटा दिया जाएगा।",
+                NOTE_RESET_INCOMPLETE, "चेन डेटाबेस का विलोपन पूरा नहीं हो सका, इसलिए नोड शुरू नहीं किया गया।"
         );
     }
 
@@ -3146,7 +3334,36 @@ public final class StringsTable {
                 MINING_STOPPED_THERMAL, "أُوقف التعدين لأن درجة حرارة الجهاز مرتفعة. سيُستأنف عند إعادة تشغيل العقدة.",
                 DONATE_TITLE, "ادعم المطوّر",
                 DONATE_NOTE, "هذا التطبيق مجاني ومفتوح المصدر. إذا كان مفيدًا لك، فالتبرّع بـ QTC للمطوّر مرحّب به — وهو طوعي تمامًا.",
-                DONATE_COPIED, "تم نسخ عنوان التبرع"
+                DONATE_COPIED, "تم نسخ عنوان التبرع",
+                // Storage management (v4.1.0).
+                STORAGE_SECTION, "التخزين",
+                STORAGE_RUNNING_NOTE, "أثناء تشغيل العقدة تتغيّر هذه الأرقام باستمرار، لذا فهي تقديرية.",
+                STORAGE_LABEL_CHAIN_DB, "قاعدة بيانات السلسلة",
+                STORAGE_LABEL_NODE, "بيانات العقدة (الكل)",
+                STORAGE_LABEL_LOGS, "ملفات السجل",
+                STORAGE_LABEL_DEPIN, "سجلات DePIN",
+                STORAGE_LABEL_TOTAL, "الإجمالي (بيانات التطبيق)",
+                STORAGE_MEASURING, "جارٍ الحساب…",
+                STORAGE_RESYNC_BUTTON, "حذف قاعدة بيانات السلسلة وإعادة المزامنة",
+                STORAGE_RESYNC_NEEDS_STOP, "متاح فقط عندما تكون العقدة متوقفة.",
+                STORAGE_RESYNC_CONFIRM_TITLE, "حذف قاعدة بيانات السلسلة؟",
+                STORAGE_RESYNC_CONFIRM_DELETES, "ما سيُحذف: قاعدة بيانات السلسلة فقط (بيانات الكتل التي زامنها هذا الجهاز حتى الآن).",
+                STORAGE_RESYNC_CONFIRM_KEEPS, "ما سيبقى: مفتاح شبكة العقدة، إعدادات التعدين ووجهة المكافآت (Inner Hash)، معرّف DePIN وسجلاته، سجل الأثر، ملفات السجل وإعدادات التطبيق.",
+                STORAGE_RESYNC_CONFIRM_NOTE, "لا يمكن التراجع عن هذا الإجراء. عند بدء العقدة في المرة القادمة تبدأ المزامنة من البداية (يستغرق ذلك وقتًا ويستهلك بيانات). لا تبدأ العقدة تلقائيًا.",
+                STORAGE_RESYNC_CONFIRM_BUTTON, "حذف",
+                STORAGE_RESYNC_WORKING, "جارٍ الحذف…",
+                STORAGE_RESYNC_DONE, "تم حذف قاعدة بيانات السلسلة. عند بدء العقدة في المرة القادمة تبدأ المزامنة من البداية.",
+                STORAGE_RESYNC_NOTHING, "لم يُعثر على قاعدة بيانات السلسلة، لذا لم يُحذف شيء.",
+                STORAGE_RESYNC_REFUSED, "لم يُحذف شيء لأن العقدة تعمل أو ما زالت قيد الإيقاف. انتظر قليلًا ثم حاول مرة أخرى.",
+                STORAGE_RESYNC_FAILED, "تعذّر إكمال الحذف (%1$s). حاول مرة أخرى. إذا كان جزء قد حُذف بالفعل، فسيُحذف الباقي قبل بدء العقدة في المرة القادمة.",
+                STORAGE_FAIL_LOCATION, "قاعدة البيانات ليست في الموقع المتوقع",
+                STORAGE_FAIL_ENTRIES, "تعذّر حذف بعض الملفات",
+                STORAGE_FAIL_INTERNAL, "خطأ داخلي",
+                // UI/UX phase 0: dialog buttons, pending reset, reset refusal.
+                BUTTON_CANCEL, "إلغاء",
+                BUTTON_OK, "موافق",
+                STORAGE_RESYNC_PENDING, "إعادة المزامنة جاهزة. في المرة التالية التي يبدأ فيها العقدة، سيتم حذف ما تبقى من قاعدة بيانات السلسلة قبل بدء المزامنة.",
+                NOTE_RESET_INCOMPLETE, "لم يتم بدء العقدة لأنه تعذر إكمال حذف قاعدة بيانات السلسلة."
         );
     }
 
@@ -3556,7 +3773,36 @@ public final class StringsTable {
                 MINING_STOPPED_THERMAL, "기기 온도가 높아 채굴을 정지했습니다. 노드를 재시작하면 채굴이 재개됩니다.",
                 DONATE_TITLE, "개발자 후원하기",
                 DONATE_NOTE, "이 앱은 무료 오픈 소스입니다. 도움이 되셨다면 개발자에게 QTC 기부를 환영합니다(전적으로 자발적입니다).",
-                DONATE_COPIED, "기부 주소가 복사되었습니다"
+                DONATE_COPIED, "기부 주소가 복사되었습니다",
+                // Storage management (v4.1.0).
+                STORAGE_SECTION, "저장 공간",
+                STORAGE_RUNNING_NOTE, "노드가 가동 중일 때는 값이 계속 바뀌므로 참고용입니다.",
+                STORAGE_LABEL_CHAIN_DB, "체인 DB",
+                STORAGE_LABEL_NODE, "노드 전체",
+                STORAGE_LABEL_LOGS, "로그",
+                STORAGE_LABEL_DEPIN, "DePIN 기록",
+                STORAGE_LABEL_TOTAL, "합계(앱 데이터)",
+                STORAGE_MEASURING, "계산 중…",
+                STORAGE_RESYNC_BUTTON, "체인 DB를 지우고 다시 동기화",
+                STORAGE_RESYNC_NEEDS_STOP, "노드가 정지된 동안에만 사용할 수 있습니다.",
+                STORAGE_RESYNC_CONFIRM_TITLE, "체인 DB를 지울까요?",
+                STORAGE_RESYNC_CONFIRM_DELETES, "지워지는 것: 체인 DB(이 기기가 지금까지 동기화한 블록 데이터)뿐입니다.",
+                STORAGE_RESYNC_CONFIRM_KEEPS, "남는 것: 노드의 네트워크 키, 채굴 설정과 보상 수령처(Inner Hash), DePIN의 ID와 기록, 항적 기록, 로그, 앱 설정.",
+                STORAGE_RESYNC_CONFIRM_NOTE, "이 작업은 되돌릴 수 없습니다. 다음에 노드를 시작하면 동기화가 처음부터 다시 시작됩니다(시간과 데이터 통신량이 듭니다). 노드가 자동으로 시작되지는 않습니다.",
+                STORAGE_RESYNC_CONFIRM_BUTTON, "지우기",
+                STORAGE_RESYNC_WORKING, "지우는 중…",
+                STORAGE_RESYNC_DONE, "체인 DB를 지웠습니다. 다음에 노드를 시작하면 동기화가 처음부터 시작됩니다.",
+                STORAGE_RESYNC_NOTHING, "체인 DB를 찾지 못해 아무것도 지우지 않았습니다.",
+                STORAGE_RESYNC_REFUSED, "노드가 가동 중이거나 아직 정지하는 중이어서 지우지 않았습니다. 잠시 후 다시 시도하세요.",
+                STORAGE_RESYNC_FAILED, "삭제를 끝내지 못했습니다(%1$s). 다시 시도하세요. 일부가 이미 지워진 경우, 나머지는 다음에 노드를 시작하기 전에 지워집니다.",
+                STORAGE_FAIL_LOCATION, "데이터베이스 위치가 예상과 다름",
+                STORAGE_FAIL_ENTRIES, "일부 파일을 지우지 못함",
+                STORAGE_FAIL_INTERNAL, "내부 오류",
+                // UI/UX phase 0: dialog buttons, pending reset, reset refusal.
+                BUTTON_CANCEL, "취소",
+                BUTTON_OK, "확인",
+                STORAGE_RESYNC_PENDING, "재동기화 준비가 되었습니다. 다음에 노드를 시작하면 나머지 체인 데이터베이스를 삭제한 뒤 동기화를 시작합니다.",
+                NOTE_RESET_INCOMPLETE, "체인 데이터베이스 삭제를 완료할 수 없어 노드를 시작하지 않았습니다."
         );
     }
 
@@ -3966,7 +4212,36 @@ public final class StringsTable {
                 MINING_STOPPED_THERMAL, "Майнинг остановлен из-за высокой температуры устройства. Он возобновится после перезапуска узла.",
                 DONATE_TITLE, "Поддержать разработчика",
                 DONATE_NOTE, "Это приложение бесплатное и с открытым исходным кодом. Если оно вам полезно, пожертвование в QTC разработчику приветствуется — полностью добровольно.",
-                DONATE_COPIED, "Адрес для пожертвований скопирован"
+                DONATE_COPIED, "Адрес для пожертвований скопирован",
+                // Storage management (v4.1.0).
+                STORAGE_SECTION, "Хранилище",
+                STORAGE_RUNNING_NOTE, "Пока узел работает, эти значения постоянно меняются, поэтому они приблизительны.",
+                STORAGE_LABEL_CHAIN_DB, "База данных цепочки",
+                STORAGE_LABEL_NODE, "Данные узла (всего)",
+                STORAGE_LABEL_LOGS, "Журналы",
+                STORAGE_LABEL_DEPIN, "Записи DePIN",
+                STORAGE_LABEL_TOTAL, "Всего (данные приложения)",
+                STORAGE_MEASURING, "Подсчёт…",
+                STORAGE_RESYNC_BUTTON, "Удалить базу данных цепочки и синхронизировать заново",
+                STORAGE_RESYNC_NEEDS_STOP, "Доступно только при остановленном узле.",
+                STORAGE_RESYNC_CONFIRM_TITLE, "Удалить базу данных цепочки?",
+                STORAGE_RESYNC_CONFIRM_DELETES, "Будет удалено: только база данных цепочки (данные блоков, которые это устройство синхронизировало до сих пор).",
+                STORAGE_RESYNC_CONFIRM_KEEPS, "Останется: сетевой ключ узла, настройки майнинга и получатель вознаграждений (Inner Hash), ID и записи DePIN, след, журналы и настройки приложения.",
+                STORAGE_RESYNC_CONFIRM_NOTE, "Это действие нельзя отменить. При следующем запуске узла синхронизация начнётся с самого начала (это требует времени и трафика). Узел не запускается автоматически.",
+                STORAGE_RESYNC_CONFIRM_BUTTON, "Удалить",
+                STORAGE_RESYNC_WORKING, "Удаление…",
+                STORAGE_RESYNC_DONE, "База данных цепочки удалена. При следующем запуске узла синхронизация начнётся с самого начала.",
+                STORAGE_RESYNC_NOTHING, "База данных цепочки не найдена, поэтому ничего не удалено.",
+                STORAGE_RESYNC_REFUSED, "Ничего не удалено: узел работает или ещё завершает работу. Подождите немного и повторите попытку.",
+                STORAGE_RESYNC_FAILED, "Не удалось завершить удаление (%1$s). Повторите попытку. Если часть уже удалена, остальное будет удалено перед следующим запуском узла.",
+                STORAGE_FAIL_LOCATION, "база данных находится не в ожидаемом месте",
+                STORAGE_FAIL_ENTRIES, "некоторые файлы не удалось удалить",
+                STORAGE_FAIL_INTERNAL, "внутренняя ошибка",
+                // UI/UX phase 0: dialog buttons, pending reset, reset refusal.
+                BUTTON_CANCEL, "Отмена",
+                BUTTON_OK, "ОК",
+                STORAGE_RESYNC_PENDING, "Ресинхронизация готова. При следующем запуске узла остаток базы данных цепочки будет удалён перед началом синхронизации.",
+                NOTE_RESET_INCOMPLETE, "Узел не был запущен, так как не удалось завершить удаление базы данных цепочки."
         );
     }
 
@@ -4376,7 +4651,36 @@ public final class StringsTable {
                 MINING_STOPPED_THERMAL, "Le minage a été arrêté car la température de l'appareil est élevée. Il reprendra au redémarrage du nœud.",
                 DONATE_TITLE, "Soutenir le développeur",
                 DONATE_NOTE, "Cette application est gratuite et open source. Si elle vous est utile, un don en QTC au développeur est le bienvenu — toujours volontaire.",
-                DONATE_COPIED, "Adresse de don copiée"
+                DONATE_COPIED, "Adresse de don copiée",
+                // Storage management (v4.1.0).
+                STORAGE_SECTION, "Stockage",
+                STORAGE_RUNNING_NOTE, "Tant que le nœud fonctionne, ces chiffres changent en permanence : ce sont des estimations.",
+                STORAGE_LABEL_CHAIN_DB, "Base de données de la chaîne",
+                STORAGE_LABEL_NODE, "Données du nœud (total)",
+                STORAGE_LABEL_LOGS, "Journaux",
+                STORAGE_LABEL_DEPIN, "Enregistrements DePIN",
+                STORAGE_LABEL_TOTAL, "Total (données de l'application)",
+                STORAGE_MEASURING, "Calcul…",
+                STORAGE_RESYNC_BUTTON, "Supprimer la base de données de la chaîne et resynchroniser",
+                STORAGE_RESYNC_NEEDS_STOP, "Disponible uniquement lorsque le nœud est arrêté.",
+                STORAGE_RESYNC_CONFIRM_TITLE, "Supprimer la base de données de la chaîne ?",
+                STORAGE_RESYNC_CONFIRM_DELETES, "Supprimé : uniquement la base de données de la chaîne (les données de blocs que cet appareil a synchronisées jusqu'ici).",
+                STORAGE_RESYNC_CONFIRM_KEEPS, "Conservé : la clé réseau du nœud, les réglages de minage et la destination des récompenses (Inner Hash), l'ID et les enregistrements DePIN, les traces, les journaux et les réglages de l'application.",
+                STORAGE_RESYNC_CONFIRM_NOTE, "Cette action est irréversible. Au prochain démarrage du nœud, la synchronisation reprendra depuis le début (cela prend du temps et consomme des données). Le nœud n'est pas démarré automatiquement.",
+                STORAGE_RESYNC_CONFIRM_BUTTON, "Supprimer",
+                STORAGE_RESYNC_WORKING, "Suppression…",
+                STORAGE_RESYNC_DONE, "La base de données de la chaîne a été supprimée. Au prochain démarrage du nœud, la synchronisation reprendra depuis le début.",
+                STORAGE_RESYNC_NOTHING, "Aucune base de données de la chaîne n'a été trouvée ; rien n'a été supprimé.",
+                STORAGE_RESYNC_REFUSED, "Rien n'a été supprimé, car le nœud fonctionne ou est encore en cours d'arrêt. Patientez un instant et réessayez.",
+                STORAGE_RESYNC_FAILED, "La suppression n'a pas pu être terminée (%1$s). Réessayez. Si une partie a déjà été supprimée, le reste le sera avant le prochain démarrage du nœud.",
+                STORAGE_FAIL_LOCATION, "la base de données n'est pas à l'emplacement attendu",
+                STORAGE_FAIL_ENTRIES, "certains fichiers n'ont pas pu être supprimés",
+                STORAGE_FAIL_INTERNAL, "erreur interne",
+                // UI/UX phase 0: dialog buttons, pending reset, reset refusal.
+                BUTTON_CANCEL, "Annuler",
+                BUTTON_OK, "OK",
+                STORAGE_RESYNC_PENDING, "La resynchronisation est prête. Au prochain démarrage du nœud, le reste de la base de données de la chaîne sera supprimé avant le début de la synchronisation.",
+                NOTE_RESET_INCOMPLETE, "Le nœud n'a pas été démarré car la suppression de la base de données de la chaîne n'a pas pu être terminée."
         );
     }
 }

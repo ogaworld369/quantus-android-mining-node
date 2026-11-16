@@ -7,7 +7,7 @@ it has synced.
 
 - applicationId: `app.quantusnode.node`
 - minSdk 31 / targetSdk 35 / arm64-v8a only
-- versionName `4.0.0` (versionCode 64; public releases began at v0.1.0)
+- versionName `4.1.0` (versionCode 65; public releases began at v0.1.0)
 - Permissions (only these): `INTERNET`, `ACCESS_NETWORK_STATE`,
   `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_SPECIAL_USE`,
   `POST_NOTIFICATIONS`

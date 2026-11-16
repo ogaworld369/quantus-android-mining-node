@@ -121,6 +121,14 @@ public class NodeService extends Service {
      *  observer was never relaunched. The poller is the one
      *  loop that runs whenever the node runs. */
     private static final long APP_DRIVERS_EVERY_MS = 30000;
+    /**
+     * How often the day's track record is saved while a session
+     * runs (v4.1.0, {@link DailyTrackStore}). An app process killed
+     * between two saves loses at most this much of the day's
+     * increments; the running totals in {@link TrackStore} keep
+     * their own, finer cadence and are not affected.
+     */
+    private static final long DAILY_SAVE_EVERY_MS = 60000;
 
     /** Log rotation: at ~512 KB the older half is dropped. Never unbounded. */
     private static final long LOG_MAX_BYTES = 512L * 1024L;
@@ -1229,8 +1237,12 @@ public class NodeService extends Service {
                 }
                 synchronized (stateLock) {
                     if (gen == sessionGen.get()) {
-                        NodeState.get().lastNote = I18n.format(
-                                this, StringsTable.NOTE_START_FAILED, e.getMessage());
+                        NodeState.get().lastNote =
+                                e instanceof ResetIncompleteException
+                                        ? I18n.get(this,
+                                                StringsTable.NOTE_RESET_INCOMPLETE)
+                                        : I18n.format(
+                                                this, StringsTable.NOTE_START_FAILED, e.getMessage());
                         // versionCode 26: display classification —
                         // both launch attempts failed (spec A (a)).
                         markStopKindLocked(NodeState.StopKind.START_FAILED);
@@ -1423,7 +1435,40 @@ public class NodeService extends Service {
             final NodeOutputTap nodeTap;
             if (miningPlan.active) {
                 MiningLogic.MinerStats minerStats = new MiningLogic.MinerStats();
-                miner = startMinerFor(gen, launchScrubber, minerStats);
+                // v4.1.0 (final check FC-2): the start side gets the
+                // isolation the stop side has had since fix2 (audit
+                // L-5). MinerSupervisor.start() no longer throws when
+                // its thread cannot be created — it reports
+                // START_FAILED — and this net stands behind it for
+                // everything else on the way: nothing thrown while
+                // the miner is being set up, an Error included, may
+                // end this worker and abandon the node it has just
+                // accepted. The node then runs without a miner; its
+                // output keeps being scrubbed with the launch's own
+                // scrubber (the tap below falls back to it).
+                MinerSupervisor startedMiner = null;
+                try {
+                    startedMiner = startMinerFor(gen, launchScrubber, minerStats);
+                } catch (Throwable t) {
+                    try {
+                        logApp("WARN miner: could not be set up ("
+                                + t.getClass().getName() + "); this node"
+                                + " process runs without a miner");
+                        // A supervisor the failed set-up had already
+                        // installed for this session is detached and
+                        // stopped: it has no worker to end it later.
+                        MinerSupervisor half = null;
+                        synchronized (stateLock) {
+                            if (gen == sessionGen.get()) {
+                                half = takeMinerLocked();
+                            }
+                        }
+                        stopMiner(half, "miner set-up failed");
+                    } catch (Throwable ignored) {
+                        // Best effort: the node comes first.
+                    }
+                }
+                miner = startedMiner;
                 nodeTap = new NodeOutputTap(launchScrubber, miner, minerStats);
             } else {
                 miner = null;
@@ -1433,7 +1478,37 @@ public class NodeService extends Service {
             Thread drain = new Thread(
                     () -> drainOutput(running, capture, nodeTap), "node-output");
             drain.setDaemon(true);
-            drain.start();
+            // v4.1.0 (final check FC-2): the same exposure, as old as
+            // this drain — a thread that cannot be started must not
+            // end the worker with the node still running behind it.
+            // A node nobody reads from blocks on its own logging as
+            // soon as the pipe fills, so it is not left running: it
+            // is ended here and the ordinary exit path below settles
+            // the session, with the reason in the log. No retry of
+            // any kind follows (an immediate relaunch would need the
+            // same thread again); the user starts the node again.
+            boolean drainFailed = false;
+            try {
+                drain.start();
+            } catch (Throwable t) {
+                drainFailed = true;
+                try {
+                    logApp("WARN node output reader could not be started ("
+                            + t.getClass().getName() + "); ending this node"
+                            + " process, which would otherwise block on its"
+                            + " own output. Start the node again");
+                } catch (Throwable ignored) {
+                    // The destroy below is what matters.
+                }
+                try {
+                    running.destroy();
+                    escalateAfterDestroyAsync(running);
+                } catch (Throwable ignored) {
+                    // waitFor() below still observes the exit; a
+                    // process that outlives destroy() is the leftover
+                    // path's to handle at the next start.
+                }
+            }
 
             int code = -1;
             boolean interrupted = false;
@@ -1585,7 +1660,8 @@ public class NodeService extends Service {
             // between (started cleared, generation moved on)
             // falls through to the ordinary finish instead,
             // and the session reset clears any leftover.
-            if (!interrupted && started.get() && gen == sessionGen.get()
+            if (!interrupted && !drainFailed
+                    && started.get() && gen == sessionGen.get()
                     && stallRestartRequested.getAndSet(false)) {
                 logApp("WARN sync stall: node process relaunched"
                         + " after the stall detection above");
@@ -1595,7 +1671,8 @@ public class NodeService extends Service {
             // Quick, failed start on the direct path: try linker64 once.
             // Anything else is a real exit — record it and stop, no loop.
             // An interrupted attempt is not retried either (see above).
-            if (!interrupted && started.get() && gen == sessionGen.get()
+            if (!interrupted && !drainFailed
+                    && started.get() && gen == sessionGen.get()
                     && !triedLinker && quickFailure) {
                 logApp("quick exit; retrying once via /system/bin/linker64");
                 triedLinker = true;
@@ -1619,6 +1696,18 @@ public class NodeService extends Service {
     }
 
     /** What a successful launch() hands back to the worker. */
+    /** A launch refused because a pending chain database reset
+     *  could not be completed. Carries the technical detail for the
+     *  log and the attempt evidence; the note shown to the user is
+     *  the classified NOTE_RESET_INCOMPLETE line, without it
+     *  (UI/UX phase 0, design S-4). */
+    private static final class ResetIncompleteException
+            extends IOException {
+        ResetIncompleteException(String message) {
+            super(message);
+        }
+    }
+
     private static final class LaunchOutcome {
         final Process process;
         /** elapsedRealtime the moment ProcessBuilder.start() returned (finding 7). */
@@ -1823,6 +1912,28 @@ public class NodeService extends Service {
             if (!started.get() || gen != sessionGen.get()) {
                 throw new IOException("start cancelled while waiting"
                         + " for the previous node process to exit");
+            }
+            // v4.1.0 (storage management): a chain database reset
+            // the user confirmed, and that an app-process death cut
+            // short, is finished here — no node is alive (the wait
+            // above) and none can start (this lock) — before a node
+            // is put on a half-deleted database. Without the marker
+            // this is one existence check and nothing else.
+            if (StorageLogic.resetPending(getFilesDir())) {
+                StorageLogic.ResetOutcome reset =
+                        StorageLogic.completePendingReset(
+                                getFilesDir(), CHAIN_NAME);
+                if (reset.result == StorageLogic.ResetResult.FAILED) {
+                    logApp("WARN chain database reset left unfinished could"
+                            + " not be completed (" + reset.failure + ");"
+                            + " not starting the node on it");
+                    throw new ResetIncompleteException(
+                            "an unfinished chain database"
+                            + " reset could not be completed ("
+                            + reset.failure + ")");
+                }
+                logApp("chain database reset completed before this start ("
+                        + reset.entriesDeleted + " entries removed)");
             }
             // versionCode 25 (audit finding M3): stamp the
             // spawn-intent marker BEFORE the spawn, so a death of
@@ -2650,10 +2761,25 @@ public class NodeService extends Service {
      * checked before the scan.
      */
     private List<Long> scanForOrphanNodeProcesses() {
+        List<Long> found = scanForOwnNodeProcesses(new File(
+                getApplicationInfo().nativeLibraryDir, NODE_LIB)
+                .getAbsolutePath());
+        return found != null ? found : new ArrayList<Long>();
+    }
+
+    /**
+     * The scan itself, usable without a service instance (v4.1.0,
+     * the chain database reset).
+     *
+     * @return the pids, ascending; null when /proc could not be
+     *         listed at all — "none found" and "could not look" are
+     *         different answers to a caller about to delete
+     */
+    private static List<Long> scanForOwnNodeProcesses(String expectedBin) {
         List<Long> out = new ArrayList<>();
         String[] entries = new File("/proc").list();
         if (entries == null) {
-            return out;
+            return null;
         }
         for (String name : entries) {
             if (name.isEmpty() || !Character.isDigit(name.charAt(0))) {
@@ -2669,12 +2795,106 @@ public class NodeService extends Service {
             if (cmdline == null || !cmdline.contains(NODE_LIB)) {
                 continue;
             }
-            if (isOwnNodeProcessStrict(pid)) {
+            if (isOwnNodeProcessStrict(pid, expectedBin)) {
                 out.add(pid);
             }
         }
         java.util.Collections.sort(out);
         return out;
+    }
+
+    // ------------------------------------------------------------------
+    // Chain database reset (v4.1.0, storage management)
+    // ------------------------------------------------------------------
+
+    /**
+     * Delete the chain database so that the next start syncs from
+     * the beginning — the settings screen's "resync", after the
+     * user's confirmation. What is deleted, and what never is, is
+     * {@link StorageLogic}'s rule; this method supplies the one
+     * thing that rule cannot: the guarantee that no node has the
+     * database open.
+     *
+     * It runs under {@link #PID_LOCK}, the lock every launch holds
+     * from its leftover check through its spawn. Inside it the
+     * request is REFUSED unless all of this holds: no session is
+     * live or being established, the process-wide registry holds no
+     * living child, and /proc shows no process started from this
+     * app's node executable — an orphan of a killed app process
+     * included; if /proc cannot be read, that too is a refusal. A
+     * start that arrives while the deletion runs waits on the lock
+     * and then finds no database, which is the intended result. The
+     * node is never started from here.
+     *
+     * Blocking (it walks and deletes a directory tree): call it off
+     * the UI thread.
+     *
+     * @return the outcome, or null when the request was refused
+     *         because a node is, or may be, running
+     */
+    static StorageLogic.ResetOutcome resetChainDatabase(Context ctx) {
+        final Context app = ctx.getApplicationContext();
+        final File filesDir = app.getFilesDir();
+        final String nodeBin = new File(
+                app.getApplicationInfo().nativeLibraryDir, NODE_LIB)
+                .getAbsolutePath();
+        String refusal = null;
+        StorageLogic.ResetOutcome outcome = null;
+        synchronized (PID_LOCK) {
+            if (NodeState.get().status != NodeState.Status.STOPPED) {
+                refusal = "a node session is active";
+            } else if (liveRegisteredChild() != null) {
+                refusal = "a node process is still exiting";
+            } else {
+                List<Long> alive = scanForOwnNodeProcesses(nodeBin);
+                if (alive == null) {
+                    refusal = "running processes could not be checked";
+                } else if (!alive.isEmpty()) {
+                    refusal = "a node process is still alive";
+                }
+            }
+            if (refusal == null) {
+                try {
+                    outcome = StorageLogic.resetChainDb(filesDir, CHAIN_NAME);
+                } catch (RuntimeException | Error e) {
+                    // The screen says "internal error"; the log is
+                    // where the kind of error is kept.
+                    try {
+                        new LogSink(new File(filesDir, "logs")).write(
+                                "[app] WARN chain database reset threw "
+                                        + e.getClass().getName());
+                    } catch (Throwable ignored) {
+                        // Nothing more to do about it here.
+                    }
+                    throw e;
+                }
+            }
+        }
+        try {
+            LogSink log = new LogSink(new File(filesDir, "logs"));
+            if (outcome == null) {
+                log.write("[app] chain database reset refused: " + refusal);
+            } else if (outcome.result == StorageLogic.ResetResult.DELETED) {
+                log.write("[app] chain database deleted at the user's request"
+                        + " (" + outcome.entriesDeleted + " entries removed);"
+                        + " the next start syncs from the beginning");
+            } else if (outcome.result
+                    == StorageLogic.ResetResult.NOTHING_TO_DELETE) {
+                log.write("[app] chain database reset requested: no chain"
+                        + " database was found, nothing was deleted");
+            } else if (StorageLogic.resetPending(filesDir)) {
+                log.write("[app] WARN chain database reset did not finish ("
+                        + outcome.failure + "; " + outcome.entriesDeleted
+                        + " entries removed); it is completed before the"
+                        + " next start");
+            } else {
+                log.write("[app] WARN chain database reset refused ("
+                        + outcome.failure + "); nothing was deleted");
+            }
+        } catch (Throwable ignored) {
+            // The outcome is what matters; the screen shows it.
+        }
+        return outcome;
     }
 
     /**
@@ -2721,11 +2941,17 @@ public class NodeService extends Service {
      * kill. Read failures read as "not ours", as there.
      */
     private boolean isOwnNodeProcessStrict(long pid) {
+        return isOwnNodeProcessStrict(pid, new File(
+                getApplicationInfo().nativeLibraryDir, NODE_LIB)
+                .getAbsolutePath());
+    }
+
+    /** {@link #isOwnNodeProcessStrict(long)} for a caller without a
+     *  service instance (v4.1.0, the chain database reset). */
+    private static boolean isOwnNodeProcessStrict(long pid, String expected) {
         if (pid <= 0 || pid == android.os.Process.myPid()) {
             return false;
         }
-        String expected = new File(getApplicationInfo().nativeLibraryDir,
-                NODE_LIB).getAbsolutePath();
         try (FileInputStream in = new FileInputStream(
                 new File("/proc/" + pid, "cmdline"));
              ByteArrayOutputStream buf = new ByteArrayOutputStream()) {
@@ -3957,6 +4183,16 @@ public class NodeService extends Service {
     // ------------------------------------------------------------------
 
     private void runPoller(int gen) {
+        try {
+            runPollerLoop(gen);
+        } finally {
+            // v4.1.0: whatever the day's record still holds unsaved
+            // is written when this session's poller ends.
+            finishDailySampling();
+        }
+    }
+
+    private void runPollerLoop(int gen) {
         while (pollerOn.get() && gen == sessionGen.get()) {
             // P-4: fixed rate, not fixed delay. The sleep used to be a
             // flat POLL_MS after the work, so the real period was "two
@@ -3984,6 +4220,7 @@ public class NodeService extends Service {
                 // next poll re-reads everything.
             }
             saveUptimePeriodically(gen);
+            sampleDaily(gen);
             driveAppFeaturesPeriodically(gen);
             long sleepMs = Math.max(0,
                     POLL_MS - (SystemClock.elapsedRealtime() - cycleStartMs));
@@ -4090,6 +4327,10 @@ public class NodeService extends Service {
             if (peers >= 0) {
                 st.peers = peers;
                 TrackStore.observePeers(this, peers);
+                // v4.1.0: the same observation, for the day's
+                // record (memory only; the file is written by the
+                // poller loop, outside this lock).
+                dailySampler().observePeers(peers);
             }
             if (freshSyncing != null) {
                 lastKnownSyncing = freshSyncing;
@@ -4553,6 +4794,113 @@ public class NodeService extends Service {
         }
     }
 
+    // ------------------------------------------------------------------
+    // Daily track record (v4.1.0; see DailyTrackStore)
+    // ------------------------------------------------------------------
+
+    /**
+     * One sampler per app process, like the totals it reads: its
+     * baselines must outlive a service instance, or every stop and
+     * start would begin a new baseline and drop what accrued in
+     * between.
+     */
+    private static volatile DailyTrackStore.Sampler dailySamplerInstance;
+    private static final Object DAILY_SAMPLER_INIT_LOCK = new Object();
+    private static volatile boolean dailySaveFailureNoted;
+
+    private DailyTrackStore.Sampler dailySampler() {
+        DailyTrackStore.Sampler s = dailySamplerInstance;
+        if (s == null) {
+            synchronized (DAILY_SAMPLER_INIT_LOCK) {
+                s = dailySamplerInstance;
+                if (s == null) {
+                    s = new DailyTrackStore.Sampler(
+                            DailyTrackStore.file(getFilesDir()),
+                            DAILY_SAVE_EVERY_MS);
+                    dailySamplerInstance = s;
+                }
+            }
+        }
+        return s;
+    }
+
+    /**
+     * Fold this poll cycle into today's record: the growth of the
+     * cumulative uptime and block count, and — when this session
+     * mines — of the miner's job count, its running time and the
+     * reported hash rate. It rides the poller (no thread, alarm or
+     * job of its own), reads the totals under the lock that guards
+     * them and does its file access outside every lock. Like the
+     * poll itself it can never disturb the node: everything is
+     * wrapped, and a record that cannot be saved is retried at the
+     * next interval.
+     */
+    private void sampleDaily(int gen) {
+        try {
+            final long now = SystemClock.elapsedRealtime();
+            final long cumUptimeMs;
+            final long cumBlocks;
+            final MiningLogic.MinerView view;
+            synchronized (stateLock) {
+                if (gen != sessionGen.get()) {
+                    return; // stale poller: the live one samples
+                }
+                cumUptimeMs = baseUptimeMs + (sessionStartElapsedMs >= 0
+                        ? now - sessionStartElapsedMs : 0);
+                cumBlocks = TrackStore.blockUpdates(this);
+                view = NodeState.get().minerView;
+            }
+            boolean minerRunning = false;
+            long jobs = 0;
+            double hashrate = -1.0;
+            if (view != null) {
+                MiningLogic.MinerSnapshot snap = view.snapshot(now);
+                minerRunning = snap.phase == MiningLogic.Phase.RUNNING;
+                jobs = snap.stats.jobsReceived;
+                hashrate = snap.stats.hashrateHps;
+            }
+            DailyTrackStore.Sampler sampler = dailySampler();
+            if (sampler.tick(now, System.currentTimeMillis(),
+                    java.util.TimeZone.getDefault(), cumUptimeMs, cumBlocks,
+                    view, minerRunning, jobs, hashrate)) {
+                saveDaily(sampler);
+            }
+        } catch (Throwable ignored) {
+            // The day's record is a convenience; the node is not.
+        }
+    }
+
+    /**
+     * The poller's last act: one more reading, from the stored
+     * totals (the session's teardown has folded its uptime into
+     * them by now), and a save.
+     */
+    private void finishDailySampling() {
+        try {
+            DailyTrackStore.Sampler sampler = dailySampler();
+            sampler.tick(SystemClock.elapsedRealtime(),
+                    System.currentTimeMillis(),
+                    java.util.TimeZone.getDefault(),
+                    TrackStore.uptimeMs(this), TrackStore.blockUpdates(this),
+                    null, false, 0, -1.0);
+            saveDaily(sampler);
+        } catch (Throwable ignored) {
+            // As above.
+        }
+    }
+
+    private void saveDaily(DailyTrackStore.Sampler sampler) {
+        String failure = sampler.save();
+        if (failure == null) {
+            dailySaveFailureNoted = false;
+        } else if (!dailySaveFailureNoted) {
+            // Once per run of failures, not once a minute.
+            dailySaveFailureNoted = true;
+            logApp("WARN daily track record could not be saved (" + failure
+                    + "); it is kept in memory and retried");
+        }
+    }
+
     /**
      * Drive the two main-process features whose refresh used to
      * depend on the activity being open (internal.23; the
@@ -4648,7 +4996,7 @@ public class NodeService extends Service {
         NodeState st = NodeState.get();
         StringBuilder text = new StringBuilder(statusText);
         if (st.bestBlock >= 0) {
-            text.append(" · #").append(st.bestBlock);
+            text.append(" · #").append(UiLogic.grouped(st.bestBlock));
         }
         if (st.peers >= 0) {
             text.append(" · ").append(I18n.format(this, StringsTable.NOTIF_PEERS, st.peers));

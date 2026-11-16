@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  The application theme (UI/UX phase 0). The app draws its own
+  screens; the platform theme only shows through in dialogs and
+  pickers, where the stock Material accent is a teal that belongs
+  to no part of this app. The accent family is the brand flare
+  (#FF6B35) instead. Everything else inherits the dark Material
+  parent, as before.
+-->
+<resources>
+    <style name="AppTheme" parent="@android:style/Theme.Material.NoActionBar">
+        <item name="android:colorAccent">#FF6B35</item>
+        <item name="android:colorPrimary">#FF6B35</item>
+        <item name="android:colorControlActivated">#FF6B35</item>
+    </style>
+</resources>

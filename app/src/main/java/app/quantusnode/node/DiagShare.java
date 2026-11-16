@@ -116,6 +116,8 @@ public final class DiagShare {
         public long trackUptimeMs = -1;
         public long trackBlocks = -1;
         public long trackMaxPeers = -1;
+        /** Days in the daily track record (v4.1.0); the count only. */
+        public int dailyRecordDays = -1;
         public long telemetryChangedMs = 0;
         public long nameChangedMs = 0;
         public long languageChangedMs = 0;
@@ -204,6 +206,7 @@ public final class DiagShare {
                 ? NA : formatDurationEn(f.trackUptimeMs));
         line(sb, "Blocks observed (cumulative)", numOrNa(f.trackBlocks));
         line(sb, "Max peers (cumulative)", numOrNa(f.trackMaxPeers));
+        line(sb, "Daily track record (days)", numOrNa(f.dailyRecordDays));
         line(sb, "Telemetry setting changed", tsOrNa(f.telemetryChangedMs));
         line(sb, "Display name changed", tsOrNa(f.nameChangedMs));
         line(sb, "Language setting changed", tsOrNa(f.languageChangedMs));

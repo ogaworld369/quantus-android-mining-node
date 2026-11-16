@@ -1383,8 +1383,8 @@ public final class MiningLogic {
      *
      * One of these exists per node process launched with mining. It
      * is fed by the service's thermal listener and read by the miner
-     * supervisor's worker count; every method is synchronized, and
-     * none calls out while holding the lock.
+     * supervisor's worker count; every method takes the lock for
+     * what it reads or changes, and none calls out while holding it.
      */
     public static final class ThermalGovernor {
         private int cap = THERMAL_NO_CAP;
@@ -1412,9 +1412,11 @@ public final class MiningLogic {
          * out. The order of the two halves is the point: the status
          * is taken in first — the cap comes down, or the stop is
          * latched — and only then is the miner asked what it runs
-         * with. A miner start that read its worker count before the
-         * cap came down has published that count with its STARTING
-         * phase under the supervisor's lock by the time it is asked
+         * with. A miner start reads the cap and publishes its worker
+         * count, with its STARTING phase, inside one scope of the
+         * supervisor's lock (v4.1.0, final check FC-1), so a start
+         * that read the cap before it came down has published its
+         * count by the time it is asked
          * (MinerSupervisor.runningWorkers counts a start in flight)
          * and is reduced here; one that reads afterwards gets the
          * cap. Asking first and lowering the cap second would leave
@@ -1484,9 +1486,26 @@ public final class MiningLogic {
          * The worker count a miner start may use: what the setting
          * resolves to, or the cap where that is lower.
          */
-        public synchronized int capWorkers(int resolvedWorkers) {
-            return Math.min(resolvedWorkers, cap);
+        public int capWorkers(int resolvedWorkers) {
+            final int workers;
+            synchronized (this) {
+                workers = Math.min(resolvedWorkers, cap);
+            }
+            // Test seam (pre-release audit of v4.1.0, L-1); null in
+            // the app. Run after the cap was read and outside this
+            // object's lock, so that a harness can deliver a status
+            // exactly between a start's cap read and its publication
+            // — the window FC-1 closes by making the caller hold the
+            // supervisor's lock across both.
+            Runnable hook = afterCapReadForTest;
+            if (hook != null) {
+                hook.run();
+            }
+            return workers;
         }
+
+        /** See {@link #capWorkers}. Never set outside the harness. */
+        volatile Runnable afterCapReadForTest;
     }
 
     /** A thermal status for the app log: "moderate (2)". */

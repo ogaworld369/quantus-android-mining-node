@@ -126,6 +126,9 @@ public final class MinerSupervisor implements MiningLogic.MinerView,
         long[] restartDelaysMs;
         long stableRunMs;
         Launcher launcher;
+        /** Creates the supervisor's own thread; null means a plain
+         *  {@code new Thread}. */
+        java.util.concurrent.ThreadFactory threads;
     }
 
     private static final String LINKER64 = "/system/bin/linker64";
@@ -262,16 +265,48 @@ public final class MinerSupervisor implements MiningLogic.MinerView,
     // Control
     // ------------------------------------------------------------------
 
-    /** Start supervising. A second call, or one after a stop, does nothing. */
+    /**
+     * Start supervising. A second call, or one after a stop, does
+     * nothing.
+     *
+     * Never throws (v4.1.0, final check FC-2): the caller is the
+     * node's own worker thread, and a thread that cannot be created
+     * here — an OutOfMemoryError from Thread.start() is the known
+     * shape — must not end that worker and the node session with
+     * it. The supervisor is then finished before it began: the
+     * snapshot reports START_FAILED, the app log says why, and
+     * nothing is left to stop.
+     */
     public void start() {
+        Throwable failure;
         synchronized (lock) {
             if (started || stopRequested) {
                 return;
             }
             started = true;
-            thread = new Thread(this::run, "miner-supervisor");
-            thread.setDaemon(true);
-            thread.start();
+            try {
+                Thread t = cfg.threads != null
+                        ? cfg.threads.newThread(this::run)
+                        : new Thread(this::run, "miner-supervisor");
+                t.setDaemon(true);
+                thread = t;
+                t.start();
+                return;
+            } catch (Throwable t) {
+                failure = t;
+                thread = null;
+                phase = MiningLogic.Phase.START_FAILED;
+                finished = true;
+                lock.notifyAll();
+            }
+        }
+        try {
+            safeLog("WARN miner: the supervisor thread could not be started ("
+                    + failure.getClass().getName() + "); mining stays off"
+                    + " until the node is restarted. The node is not"
+                    + " affected");
+        } catch (Throwable ignored) {
+            // The state above already tells the status screen.
         }
     }
 
@@ -336,9 +371,10 @@ public final class MinerSupervisor implements MiningLogic.MinerView,
 
     /** Workers of the miner process alive or being started right
      *  now; 0 while there is none (fix2,
-     *  {@link MiningLogic.ThermalControl}). The worker count and
-     *  the STARTING phase are published together under the lock, so
-     *  a start in flight is counted (fix2 audit L-1). */
+     *  {@link MiningLogic.ThermalControl}). The thermal cap is
+     *  read, and the worker count and the STARTING phase are
+     *  published, in one scope of the lock, so a start in flight is
+     *  counted (fix2 audit L-1; v4.1.0, final check FC-1). */
     @Override
     public int runningWorkers() {
         synchronized (lock) {
@@ -529,20 +565,31 @@ public final class MinerSupervisor implements MiningLogic.MinerView,
 
             final boolean useLinker = preferLinker || retryViaLinker;
             retryViaLinker = false;
-            // The environment resolves the setting; this session's
-            // thermal cap is applied here, by the governor's owner
-            // (fix2 audit L-6).
-            final int workers = Math.max(1,
-                    thermalGovernor.capWorkers(env.cpuWorkers()));
-            List<String> cmd = MiningLogic.minerCommand(
-                    cfg.minerBinary.getAbsolutePath(), useLinker,
-                    cfg.tokenFile.getAbsolutePath(),
-                    cfg.fingerprintFile.getAbsolutePath(), workers);
+            // The environment resolves the setting, outside the lock
+            // (it reads a preference). This session's thermal cap is
+            // applied by the governor's owner (fix2 audit L-6), and
+            // the cap is read and the result published — with the
+            // STARTING phase — inside ONE lock scope (v4.1.0, final
+            // check FC-1): ThermalGovernor.apply lowers the cap
+            // first and asks runningWorkers() second, so it either
+            // sees this start's count (and reduces it) or this
+            // start sees the lowered cap. Reading the cap before
+            // the lock left a start in between that neither side
+            // saw. Lock order is this lock, then the governor's —
+            // the order snapshot() already uses; the governor calls
+            // nothing while it holds its own.
+            final int resolved = env.cpuWorkers();
+            final int workers;
             synchronized (lock) {
+                workers = Math.max(1, thermalGovernor.capWorkers(resolved));
                 phase = MiningLogic.Phase.STARTING;
                 cpuWorkers = workers;
                 viaLinker = useLinker;
             }
+            List<String> cmd = MiningLogic.minerCommand(
+                    cfg.minerBinary.getAbsolutePath(), useLinker,
+                    cfg.tokenFile.getAbsolutePath(),
+                    cfg.fingerprintFile.getAbsolutePath(), workers);
             ensureMarker();
             if (stopRequested()) {
                 break;

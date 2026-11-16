@@ -8,6 +8,12 @@ the first public release (published 2026-11-04).
 "versionCode" is the Android build number of the MVP app (the bundled
 node binary is unchanged unless a build says otherwise).
 
+## versionCode 65 / v4.1.0 — 2026-11-16
+- **Storage management in Settings.** The Settings screen now shows how much space the chain database, the node as a whole, the logs and the DePIN records use, with a total for the app's data. A "delete the chain database and resync" action — available only while the node is stopped, behind a confirmation that spells out what is deleted and what is kept — removes only the chain database. The node's network key, the mining settings and rewards inner hash, the DePIN identity and records, the track records, the logs and the app settings are all kept. The node does not restart by itself; the next start syncs from the beginning.
+- **Daily activity sampling (foundation, no UI yet).** The app now keeps a lightweight on-device daily record — uptime, blocks observed, peer counts, mining jobs and mining time, and an approximate hash total. Nothing is displayed yet and nothing leaves the device; a later release will draw the activity track from it.
+- **Readability and polish fixes.** Dialog buttons now always use the app's own wording in the selected language instead of falling back to the device locale; the block number in the notification is digit-grouped; the faintest label color is split so that text meant to be read is lighter than pure decoration; the "how to read this screen" sheet can be dismissed with the back key, its close button or a tap outside; a pending chain-database reset is shown in the Storage section; and the home screen's field and card animations pause while the app is in the background or the node is stopped.
+- Two robustness fixes carried over from the v4.0.0 external audit's follow-up list: the mining worker cap is now read and published under the same lock, and miner thread startup is isolated from Error-level failures the same way the shutdown path already was.
+
 ## versionCode 64 / v4.0.0 — 2026-11-16
 - **On-device mining, as an opt-in (off by default).** Verified
   on a real device (Pixel 9a / GrapheneOS) before release: an

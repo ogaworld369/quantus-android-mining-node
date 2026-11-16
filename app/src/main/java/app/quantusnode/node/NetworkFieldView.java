@@ -25,7 +25,7 @@ import java.util.List;
  * connected peer on a single ring, a quiet flare core, the
  * record ring of the last 48 checkpoint slots, and — in the
  * 24 h segment — the ghost layer of the last day's own
- * checkpoints. It follows the {@link PulseView} discipline
+ * checkpoints. It follows the pulse discipline
  * — a custom Canvas view whose data-bound motion is driven
  * ONLY by real events the service recorded (a newly observed
  * best block while SYNCED arrives via {@link #onBlockArrived()},
@@ -531,7 +531,7 @@ public class NetworkFieldView extends View {
         paint.setAlpha(255);
 
         // Sonar rings of landed arrivals (3.6 s, (1-t)^2 decay —
-        // the PulseView ripple language, widened to the field).
+        // the pulse ripple language, widened to the field).
         it = arrivals.iterator();
         while (it.hasNext()) {
             Arrival a = it.next();
@@ -583,7 +583,7 @@ public class NetworkFieldView extends View {
         // window is known at all, every tick stays dark. For
         // FLASH_MS after a checkpoint lands, the newest tick
         // burns brighter and longer.
-        float spin = anim
+        float spin = anim && running
                 ? (float) (((now % SPIN_MS) / (double) SPIN_MS)
                         * Math.PI * 2)
                 : 0f;
@@ -684,10 +684,13 @@ public class NetworkFieldView extends View {
         }
         paint.setAlpha(255);
 
-        if (fieldActive && anim) {
+        if (fieldActive && anim && running) {
             // ~30 fps while the tab is in front of the user; the
             // loop dies with the tab, and a reduced-motion device
-            // gets the still frame only.
+            // gets the still frame only. UI/UX phase 0: a stopped
+            // node is a still frame too — nothing here moves, so
+            // the loop stops instead of redrawing it 30 times a
+            // second (setNodeState invalidates on the next start).
             postInvalidateDelayed(33);
         }
     }

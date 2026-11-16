@@ -40,6 +40,42 @@ public class GlowCardView extends View {
     private final Paint paint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final RectF rect = new RectF();
     private boolean cardActive;
+    // UI/UX phase 0: the shaders are built once per size, not once
+    // per frame. The sweep's rotation and the gloss's wander are
+    // applied through the shared matrix (setLocalMatrix copies the
+    // values), so the animation is unchanged.
+    private LinearGradient bodyShader;
+    private SweepGradient edgeShader;
+    private RadialGradient glossShader;
+    private final Matrix shaderMatrix = new Matrix();
+    private float shaderW = -1f;
+    private float shaderH = -1f;
+    private float glossBaseX;
+    private float glossBaseY;
+
+    private void ensureShaders(float w, float h) {
+        if (bodyShader != null && w == shaderW && h == shaderH) {
+            return;
+        }
+        shaderW = w;
+        shaderH = h;
+        bodyShader = new LinearGradient(
+                0, 0, w * 0.3f, h,
+                SURFACE2, VOID, Shader.TileMode.CLAMP);
+        edgeShader = new SweepGradient(w / 2f, h / 2f,
+                new int[]{Color.argb(26, 0xFF, 0x6B, 0x35),
+                        Color.argb(26, 0xFF, 0x6B, 0x35),
+                        FLARE,
+                        Color.argb(26, 0xFF, 0x6B, 0x35)},
+                new float[]{0f, 0.58f, 0.79f, 0.94f});
+        glossBaseX = w * 0.2f;
+        glossBaseY = h * 0.1f;
+        glossShader = new RadialGradient(
+                glossBaseX, glossBaseY, w * 0.55f,
+                Color.argb(18, 0xE8, 0xE6, 0xE0),
+                Color.argb(0, 0xE8, 0xE6, 0xE0),
+                Shader.TileMode.CLAMP);
+    }
 
     public GlowCardView(Context context) {
         super(context);
@@ -94,14 +130,12 @@ public class GlowCardView extends View {
         float radius = 27f * d;
         boolean anim = animationsEnabled();
         long now = SystemClock.uptimeMillis();
+        ensureShaders(w, h);
 
         // Body: the 165-degree surface gradient of the mock.
         rect.set(0.5f * d, 0.5f * d, w - 0.5f * d, h - 0.5f * d);
-        LinearGradient body = new LinearGradient(
-                0, 0, w * 0.3f, h,
-                SURFACE2, VOID, Shader.TileMode.CLAMP);
         paint.setStyle(Paint.Style.FILL);
-        paint.setShader(body);
+        paint.setShader(bodyShader);
         canvas.drawRoundRect(rect, radius, radius, paint);
         paint.setShader(null);
 
@@ -109,17 +143,10 @@ public class GlowCardView extends View {
         float angle = anim
                 ? (float) (((now % SPIN_MS) / (double) SPIN_MS) * 360.0)
                 : 120f;
-        SweepGradient edge = new SweepGradient(w / 2f, h / 2f,
-                new int[]{Color.argb(26, 0xFF, 0x6B, 0x35),
-                        Color.argb(26, 0xFF, 0x6B, 0x35),
-                        FLARE,
-                        Color.argb(26, 0xFF, 0x6B, 0x35)},
-                new float[]{0f, 0.58f, 0.79f, 0.94f});
-        Matrix m = new Matrix();
-        m.setRotate(angle, w / 2f, h / 2f);
-        edge.setLocalMatrix(m);
+        shaderMatrix.setRotate(angle, w / 2f, h / 2f);
+        edgeShader.setLocalMatrix(shaderMatrix);
         paint.setStyle(Paint.Style.STROKE);
-        paint.setShader(edge);
+        paint.setShader(edgeShader);
         paint.setStrokeWidth(9f * d);
         paint.setAlpha(70);
         rect.inset(2f * d, 2f * d);
@@ -130,7 +157,9 @@ public class GlowCardView extends View {
         canvas.drawRoundRect(rect, radius, radius, paint);
         paint.setShader(null);
 
-        // Gloss: a soft light wandering the top of the card.
+        // Gloss: a soft light wandering the top of the card. The
+        // cached gradient sits at its rest position; the wander is
+        // a translation of it.
         float gx = w * 0.2f;
         float gy = h * 0.1f;
         if (anim) {
@@ -138,13 +167,10 @@ public class GlowCardView extends View {
             gx = (float) (w * (0.15 + 0.7 * ph));
             gy = (float) (h * (0.08 + 0.1 * Math.sin(ph * Math.PI)));
         }
-        RadialGradient gloss = new RadialGradient(
-                gx, gy, w * 0.55f,
-                Color.argb(18, 0xE8, 0xE6, 0xE0),
-                Color.argb(0, 0xE8, 0xE6, 0xE0),
-                Shader.TileMode.CLAMP);
+        shaderMatrix.setTranslate(gx - glossBaseX, gy - glossBaseY);
+        glossShader.setLocalMatrix(shaderMatrix);
         paint.setStyle(Paint.Style.FILL);
-        paint.setShader(gloss);
+        paint.setShader(glossShader);
         canvas.drawRoundRect(rect, radius, radius, paint);
         paint.setShader(null);
 
