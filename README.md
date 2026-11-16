@@ -10,7 +10,7 @@ The design concept is to make the node's pulse visible: live block/peer visualiz
 
 | | |
 |---|---|
-| Current release | **v4.2.2** (versionCode 68), published 2026-11-16 — [release page](https://github.com/ogaworld369/quantus-android-mining-node/releases/tag/v4.2.2) |
+| Current release | **v4.2.3** (versionCode 69), published 2026-11-17 — [release page](https://github.com/ogaworld369/quantus-android-mining-node/releases/tag/v4.2.3) |
 | First public release | v0.1.0, published 2026-11-04 |
 | Download | Signed APK from [GitHub Releases](https://github.com/ogaworld369/quantus-android-mining-node/releases) |
 | Requirements | Android 12 or later, arm64 device |
@@ -24,6 +24,11 @@ The design concept is to make the node's pulse visible: live block/peer visualiz
 - **It is** a full node for Quantus mainnet: it syncs, verifies every block itself, and relays data to peers. With mining switched on (v4.0.0, opt-in and off by default), the same node also validates and mines for the user's own rewards address.
 - **It is not** a wallet. It never handles wallet seed phrases and cannot spend funds. The one mining value it can hold is the rewards inner hash the user pastes in — a preimage that is published in block headers when mining and controls no assets by itself (see "Security first" below).
 - **New in v3.0 — activity recording (DePIN), built in.** Opt-in and off by default. With it on, the app keeps a signed record of the node's uptime and relay work, which you can export as a proof bundle file whenever you choose.
+
+## What's in v4.2.3
+
+- **The bundled binaries are rebuilt** — the first binary change since v3.0.2. The node's miner endpoint now binds to **loopback only** (127.0.0.1:9833) instead of all interfaces: the only miner it ever serves is the one bundled in the same app, and the auth token and TLS pin remain in place as further layers. The mining confirmation text now says the port is reachable only from within the device, in all nine languages.
+- **Dependency security updates in both binaries** (node: `quinn-udp` 0.5.16, `hickory-net` / `hickory-proto` 0.26.2; miner: `rustls` 0.23.46, `rustls-webpki` 0.103.16, `quinn-proto` 0.11.19, `quinn-udp` 0.5.16, `anyhow` 1.0.104, `crossbeam-epoch` 0.9.20), the dependency audit re-run, and the bundled CA roots refreshed. No feature, permission, launch-argument or data changes. Details: [CHANGELOG.md](CHANGELOG.md).
 
 ## What's in v4.2.2
 
@@ -78,7 +83,7 @@ Details and the full version history: [CHANGELOG.md](CHANGELOG.md).
 
 ## Download
 
-Get the signed APK from [GitHub Releases](https://github.com/ogaworld369/quantus-android-mining-node/releases). The current release is [v4.2.2](https://github.com/ogaworld369/quantus-android-mining-node/releases/tag/v4.2.2); its APK size and SHA-256 are listed on the release page (and in the release records in [docs/RELEASE.md](docs/RELEASE.md)), so you can verify your download. v4.2.2 installs over v4.2.1 keeping settings and records.
+Get the signed APK from [GitHub Releases](https://github.com/ogaworld369/quantus-android-mining-node/releases). The current release is [v4.2.3](https://github.com/ogaworld369/quantus-android-mining-node/releases/tag/v4.2.3); its APK size and SHA-256 are listed on the release page (and in the release records in [docs/RELEASE.md](docs/RELEASE.md)), so you can verify your download. v4.2.3 installs over v4.2.2 keeping settings and records.
 
 ## Usage
 
@@ -86,7 +91,7 @@ New to the app? Start with the Usage Guide — available in all 9 languages the 
 
 ## Status
 
-- Publicly released since 2026-11-04; the current release is v4.2.2 (above). Per-version details live in the [CHANGELOG](CHANGELOG.md), not here.
+- Publicly released since 2026-11-04; the current release is v4.2.3 (above). Per-version details live in the [CHANGELOG](CHANGELOG.md), not here.
 - Still being watched on the reference device: the remaining on-device checks — where the pruned database size plateaus, and battery/heat over long uptimes.
 - Release gates: [docs/RELEASE.md](docs/RELEASE.md). Design: [docs/DESIGN.md](docs/DESIGN.md).
 

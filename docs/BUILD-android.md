@@ -41,11 +41,11 @@ cd chain
 cargo update -p rustix   # 1.1.2 -> 1.1.6 (linux-raw-sys 0.11.0->0.12.1, libc 0.2.175->0.2.191 follow along)
 ```
 
-The change is limited to `Cargo.lock` (11 lines). **At the compile-verification (Phase 0) stage**, no source code patches were needed. However, the current build that runs on a real device requires the three patches in the next section.
+The change is limited to `Cargo.lock` (11 lines). **At the compile-verification (Phase 0) stage**, no source code patches were needed. However, the current build that runs on a real device requires the four patches in the next section.
 
-## 3. Source code patches (required for the shipping build; three of them)
+## 3. Source code patches (required for the shipping build; four of them)
 
-Not needed for compile verification alone, but to produce a binary that works on a real device, apply the three patches in the repository's `patches/` before building. **If any one is missing, the result is unusable on a real device** (even when built exactly per the procedure in §5, pruning does not take effect and archive storage is forced / the binary panics and dies immediately right after networking starts. Both were actually hit on a real device).
+Not needed for compile verification alone, but to produce a binary that works on a real device, apply the four patches in the repository's `patches/` before building. **If any one is missing, the result is unusable on a real device** (even when built exactly per the procedure in §5, pruning does not take effect and archive storage is forced / the binary panics and dies immediately right after networking starts. Both were actually hit on a real device).
 
 ### 3.1 Pruning patch
 
@@ -73,6 +73,15 @@ The default instantiation strategy (PoolingCopyOnWrite) makes wasmtime reserve i
 ```sh
 cd chain
 patch -p1 < ../patches/wasmtime-pooling-patch.diff   # adjust the path to patches/ to match your layout
+```
+
+### 3.4 Miner endpoint loopback patch
+
+Upstream binds the miner endpoint (QUIC, `--miner-listen-port`) to `0.0.0.0`, exposing it to the whole LAN while mining is on, with the auth token and the TLS certificate pin as the only boundary. The only miner the Android build ever serves is the one bundled in the same app, connecting over loopback, so `patches/miner-loopback-patch.diff` (a one-file diff to `node/src/miner_server.rs`) binds the endpoint to `127.0.0.1` instead; the token and the pin stay in place as the second and third layers for that local connection. Verified in the built binary by string inspection: the `127.0.0.1:` bind literal is present and no `0.0.0.0:` literal remains (the previous shipped binary contained exactly one — this endpoint). The in-app mining confirmation text was updated in the same release to say the port is reachable only from within the device.
+
+```sh
+cd chain
+patch -p1 < ../patches/miner-loopback-patch.diff   # adjust the path to patches/ to match your layout
 ```
 
 ## 4. Environment variables (the required set)
@@ -154,3 +163,11 @@ Linking passed, but the following remain unverified. **Link success is not proof
 - Note that the above figures are from the first release build before the §3.2 vendor patch was applied. The rebuild with the patch applied shipped at 53,408,792 bytes after strip (through versionCode 9), and **the binary currently bundled is a rebuild reflecting dependency security updates, at 77,892,888 bytes unstripped → 53,411,080 bytes after strip** (versionCode 10)
 - Correction of a premise: upstream's `[profile.release]` is opt-level=3 only and **does not include LTO** (LTO is in the separate `[profile.production]` profile). The initial concern that "release overflows link memory with LTO" did not occur with this profile
 - Memory reality: MemAvailable during the build dropped to a minimum of about 49 MB but was not exhausted. The largest consumer was not the final link but pallet-wormhole's build script inside the Wasm build (ZK circuit generation, RSS about 4.96 GB)
+
+### Rebuild record (appended 2026-11-17)
+
+The bundled node binary was rebuilt from the same upstream source (node v1.0.5) with the §3.4 patch added (four patches in total) and the dependency lock updated: `quinn-udp` 0.5.14 → 0.5.16 and `hickory-net` / `hickory-proto` 0.26.1 → 0.26.2 (the vendored `hickory-resolver` 0.26.1 is unchanged and resolves against 0.26.2). A RustSec re-audit of both bundled binaries' locks followed the rebuild (see SECURITY.md, "Dependency advisories").
+
+- `cargo build --release -p quantus-node --target aarch64-linux-android -j2` (android-env.sh, Wasm enabled) succeeded in about 9 minutes against the warm `target/` directory.
+- Artifact: 77,888,096 bytes unstripped → **53,409,528 bytes** after strip, SHA-256 `c49252c03822ebe3bc073a52a74453d7d3bf60d7769a7e0e2ebccacb4124c766`. The previously bundled build (versionCode 10 lock updates plus the §3.3 patch, shipped through v4.2.2) was 53,410,952 bytes after strip, SHA-256 `f69474e338c7e110abca088fb64dccaa26842de416c5878716a22d142b212697`.
+- The bundled miner was rebuilt in the same round; see docs/BUILD-miner.md.

@@ -282,8 +282,8 @@ Apache-2.0, and its own crates below are covered by its LICENSE.
 | hex | 0.4.3 | MIT OR Apache-2.0 |
 | hex-conservative | 0.2.1 | CC0-1.0 |
 | hex-literal | 0.4.1 | MIT OR Apache-2.0 |
-| hickory-net | 0.26.1 | MIT OR Apache-2.0 |
-| hickory-proto | 0.26.1 | MIT OR Apache-2.0 |
+| hickory-net | 0.26.2 | MIT OR Apache-2.0 |
+| hickory-proto | 0.26.2 | MIT OR Apache-2.0 |
 | hickory-resolver | 0.26.1 | MIT OR Apache-2.0 |
 | hkdf | 0.12.4 | MIT OR Apache-2.0 |
 | hmac | 0.12.1 | MIT OR Apache-2.0 |
@@ -532,7 +532,7 @@ Apache-2.0, and its own crates below are covered by its LICENSE.
 | quantus-runtime | 1.0.2-Qm | Apache-2.0 |
 | quinn | 0.11.11 | MIT OR Apache-2.0 |
 | quinn-proto | 0.11.19 | MIT OR Apache-2.0 |
-| quinn-udp | 0.5.14 | MIT OR Apache-2.0 |
+| quinn-udp | 0.5.16 | MIT OR Apache-2.0 |
 | quote | 1.0.47 | MIT OR Apache-2.0 |
 | rand | 0.10.1 | MIT OR Apache-2.0 |
 | rand | 0.8.6 | MIT OR Apache-2.0 |
@@ -844,7 +844,7 @@ Apache-2.0, and its own crates below are covered by its LICENSE.
 | zstd-safe | 7.4.0 | BSD-3-Clause |
 | zstd-sys | 2.1.2+zstd.1.5.7 | BSD-3-Clause |
 
-### Miner dependency list (230 crates)
+### Miner dependency list (229 crates)
 
 | Crate | Version | Licence |
 |---|---|---|
@@ -855,7 +855,7 @@ Apache-2.0, and its own crates below are covered by its LICENSE.
 | anstyle | 1.0.14 | MIT OR Apache-2.0 |
 | anstyle-parse | 1.0.0 | MIT OR Apache-2.0 |
 | anstyle-query | 1.1.5 | MIT OR Apache-2.0 |
-| anyhow | 1.0.102 | MIT OR Apache-2.0 |
+| anyhow | 1.0.104 | MIT OR Apache-2.0 |
 | arrayvec | 0.7.6 | MIT OR Apache-2.0 |
 | ash | 0.38.0+1.3.281 | MIT OR Apache-2.0 |
 | autocfg | 1.5.0 | Apache-2.0 OR MIT |
@@ -882,7 +882,7 @@ Apache-2.0, and its own crates below are covered by its LICENSE.
 | cpufeatures | 0.2.17 | MIT OR Apache-2.0 |
 | crossbeam-channel | 0.5.15 | MIT OR Apache-2.0 |
 | crossbeam-deque | 0.8.6 | MIT OR Apache-2.0 |
-| crossbeam-epoch | 0.9.18 | MIT OR Apache-2.0 |
+| crossbeam-epoch | 0.9.20 | MIT OR Apache-2.0 |
 | crossbeam-utils | 0.8.21 | MIT OR Apache-2.0 |
 | crunchy | 0.2.4 | MIT |
 | crypto-common | 0.1.7 | MIT OR Apache-2.0 |
@@ -998,8 +998,8 @@ Apache-2.0, and its own crates below are covered by its LICENSE.
 | quantus-miner-api | 0.3.0 | MIT-0 |
 | quic-transport | 4.2.1 | (see note)<br>The miner project's own crate, covered by that project's LICENSE (Apache-2.0). |
 | quinn | 0.11.12 | MIT OR Apache-2.0 |
-| quinn-proto | 0.11.18 | MIT OR Apache-2.0 |
-| quinn-udp | 0.5.15 | MIT OR Apache-2.0 |
+| quinn-proto | 0.11.19 | MIT OR Apache-2.0 |
+| quinn-udp | 0.5.16 | MIT OR Apache-2.0 |
 | quote | 1.0.45 | MIT OR Apache-2.0 |
 | rand | 0.10.3 | MIT OR Apache-2.0 |
 | rand | 0.8.5 | MIT OR Apache-2.0 |
@@ -1022,9 +1022,9 @@ Apache-2.0, and its own crates below are covered by its LICENSE.
 | rustc-hash | 2.1.3 | Apache-2.0 OR MIT |
 | rustc-hex | 2.1.0 | MIT/Apache-2.0 |
 | rustc_version | 0.4.1 | MIT OR Apache-2.0 |
-| rustls | 0.23.37 | Apache-2.0 OR ISC OR MIT |
+| rustls | 0.23.46 | Apache-2.0 OR ISC OR MIT |
 | rustls-pki-types | 1.14.0 | MIT OR Apache-2.0 |
-| rustls-webpki | 0.103.10 | ISC |
+| rustls-webpki | 0.103.16 | ISC |
 | scopeguard | 1.2.0 | MIT OR Apache-2.0 |
 | semver | 1.0.27 | MIT OR Apache-2.0 |
 | serde | 1.0.228 | MIT OR Apache-2.0 |
@@ -1036,7 +1036,6 @@ Apache-2.0, and its own crates below are covered by its LICENSE.
 | signal-hook-registry | 1.4.8 | MIT OR Apache-2.0 |
 | slab | 0.4.12 | MIT |
 | smallvec | 1.15.1 | MIT OR Apache-2.0 |
-| socket2 | 0.5.10 | MIT OR Apache-2.0 |
 | socket2 | 0.6.3 | MIT OR Apache-2.0 |
 | spirv | 0.3.0+sdk-1.3.268.0 | Apache-2.0 |
 | static_assertions | 1.1.0 | MIT OR Apache-2.0 |
