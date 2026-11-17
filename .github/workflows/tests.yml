@@ -1,0 +1,43 @@
+name: JVM test suites
+
+# Runs the repository's plain-JVM suites on every push and pull
+# request (gap inventory B-6). The suites need only a JDK, except
+# the vision and observer-hold checks, which compile against the
+# Android SDK's android.jar; the runner image provides the SDK,
+# and the step below makes sure platform 35 is present.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  jvm-suites:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Ensure Android platform 35 (for the android.jar stubs)
+        run: |
+          if [ ! -f "$ANDROID_HOME/platforms/android-35/android.jar" ]; then
+            yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" \
+              "platforms;android-35" >/dev/null
+          fi
+          ls "$ANDROID_HOME/platforms/android-35/android.jar"
+      - name: Core suite
+        run: bash core/tests/run-tests.sh
+      - name: Transfer (core) suite
+        run: bash core/tests/run-transfer-tests.sh
+      - name: Mining suite
+        run: bash app/tests/run-mining-tests.sh
+      - name: Vision logic checks
+        run: bash app/tests/run-vision-tests.sh
+      - name: Strings census check
+        run: bash app/tests/run-strings-tests.sh
+      - name: Transfer flow checks
+        run: bash app/tests/run-transfer-flow-tests.sh
+      - name: Observer hold checks
+        run: bash app/tests/run-observer-hold-tests.sh
