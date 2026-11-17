@@ -16,7 +16,8 @@ Current status: v4.2.4 (versionCode 70), published 2026-11-17, is the current re
 
 Measurement log (tracked items above; add a dated line per reading — the Storage page and the diagnostic summary make a DB-size reading a one-minute job):
 
-- DB size: 1.30 GB on 2026-11-05 (the only reading so far).
+- DB size: 1.30 GB on 2026-11-05.
+- DB size: chain DB 1.31 GB (node data 1.36 GB) on 2026-11-17 — essentially level with the 2026-11-05 reading, consistent with the pruned size plateauing.
 
 Judgment: this gate is the foundation of everything. If even one item fails, fix the cause before moving on.
 
