@@ -72,11 +72,12 @@ To get an Inner Hash:
 
 - On a PC, run the official node's command `quantus-node key quantus --scheme wormhole`. It prints three values: the **Address** (where the rewards will go), the **Inner Hash** (the value this app needs), and a **Secret phrase** (your backup — store it safely, offline).
 - If you already use the official wallet, you can derive the same values from its seed phrase instead: add `--words` to the same command and enter the phrase when asked — on the PC, never in this app. With the same seed phrase, the rewards appear in that wallet automatically.
+- Or, in the official Quantus wallet app, open the menu of the **Encrypted Account** and choose **Inner Hash**: the app shows that account's Inner Hash directly, and the rewards will go to that Encrypted Account. No PC is needed, and the seed phrase never leaves the wallet app.
 
 Then, in the app:
 
 1. Open **Settings → Mining** and paste the **Inner Hash** value (it looks like `0x` followed by 64 hex digits). Enter only the Inner Hash — never a seed phrase or a secret key: the Inner Hash is written into every block this device produces and becomes public.
-2. The app shows the rewards address the node reports for your Inner Hash. Compare it with the **Address** from the tool before you rely on it.
+2. The app shows the rewards address the node reports for your Inner Hash. Compare it with the address from the same source — the **Address** printed by the tool, or the **Encrypted Account** in the wallet app — before you rely on it.
 3. Turn mining on, then restart the node (Stop → Start). Mining settings take effect from the next node start.
 
 **Check the Inner Hash carefully before saving.** If it is wrong, the rewards are paid to that wrong destination and cannot be recovered. The saved value is stored only on this device; the app never shows it on screen, in logs or in shared text.
