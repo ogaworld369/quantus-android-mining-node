@@ -29,7 +29,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * for two reasons: NodeService's worker is written around exactly
  * one process and its session bookkeeping (uptime, attempts, the pid
  * record), none of which a miner has; and a supervisor that only
- * needs a clock, a logger and four facts about the node can be
+ * needs a clock, a logger and a few facts about the node can be
  * driven on a JVM against real child processes, which is where its
  * tests run.
  *
@@ -37,8 +37,11 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  *  1. removes any miner left over from an earlier session (see
  *     {@link #LIVE_MINERS} and {@link #reapStrayMiners});
- *  2. waits until the node is up — its RPC answers, or its log said
- *     the miner endpoint is listening, or a bounded wait ran out;
+ *  2. waits for the node's own header-anchored "Miner server
+ *     listening" line — and for nothing else: not for the RPC to
+ *     answer, not for a wait to run out (v4.2.4, audit L-7). A node
+ *     that reports "Failed to start miner server" instead gets no
+ *     miner for the rest of its process;
  *  3. waits until the node's token and certificate-pin files exist,
  *     are readable and are non-empty, and says which one it is
  *     waiting for; nothing is started before that;
@@ -70,9 +73,6 @@ public final class MinerSupervisor implements MiningLogic.MinerView,
 
         /** One line for the app's own log ("[app] ..." in node.log). */
         void log(String message);
-
-        /** True once the node has answered its RPC in this session. */
-        boolean nodeUp();
 
         /** The worker count to start the miner with; read at every start. */
         int cpuWorkers();
@@ -117,8 +117,6 @@ public final class MinerSupervisor implements MiningLogic.MinerView,
         public long quickExitMs = 2500;
         /** Readiness is polled this often. */
         public long pollMs = 1000;
-        /** The longest the node's "up" is waited for before the file check. */
-        public long nodeWaitMaxMs = 60_000;
         /** Grace after destroy(), and again after destroyForcibly(). */
         public long stopWaitMs = 5000;
         public long logMaxBytes = 256L * 1024L;
@@ -499,22 +497,21 @@ public final class MinerSupervisor implements MiningLogic.MinerView,
         }
         removeLeftovers();
 
-        // The node first: before it is up there is no endpoint to
-        // connect to, and on a first run no token file either.
+        // The node first: the miner is started only once the node's
+        // own header-anchored "Miner server listening" line has been
+        // seen (v4.2.4, audit L-7). Until v4.2.3 the node's RPC
+        // answering, or a 60 s wait running out, was enough — but
+        // the RPC can be another app's, and a node whose endpoint
+        // failed to bind (a squatter on the port) never listens: the
+        // miner then started against whatever held the port, before
+        // the node's exit. Only the node's own report counts now; a
+        // node that reports "Failed to start miner server" instead
+        // gets no miner at all (the latch below).
         setPhase(MiningLogic.Phase.WAITING_NODE);
-        long waitStart = env.elapsedMs();
         while (!stopRequested()) {
             takeRestartRequest();
-            long now = env.elapsedMs();
-            if (env.nodeUp() || stats.snapshot(now).endpointListening) {
-                break;
-            }
-            if (now - waitStart >= cfg.nodeWaitMaxMs) {
-                // The file check below is the real gate; this wait
-                // only keeps the miner from racing a node that is
-                // still starting.
-                safeLog("miner: the node has not reported ready after "
-                        + cfg.nodeWaitMaxMs + "ms; going on to the file check");
+            MiningLogic.StatsSnapshot facts = stats.snapshot(env.elapsedMs());
+            if (facts.endpointListening || facts.endpointFailed) {
                 break;
             }
             pause(cfg.pollMs);
@@ -534,12 +531,32 @@ public final class MinerSupervisor implements MiningLogic.MinerView,
         long probedLivedMs = 0;
         MiningLogic.FilesStatus notedFiles = null;
 
+        boolean endpointFailureNoted = false;
+
         while (!stopRequested()) {
             if (takeRestartRequest()) {
                 linkerProbed = false;
                 retryViaLinker = false;
                 directRefused = false;
                 probedExitCode = null;
+            }
+
+            // v4.2.4 (audit L-7): the node reported that its miner
+            // endpoint could not be opened. Nothing of ours listens
+            // there, so no start attempt — automatic, manual or on a
+            // later "listening" line — is made for this node process;
+            // the node ends itself right after the report.
+            if (stats.snapshot(env.elapsedMs()).endpointFailed) {
+                setPhase(MiningLogic.Phase.ENDPOINT_FAILED);
+                if (!endpointFailureNoted) {
+                    endpointFailureNoted = true;
+                    safeLog("WARN miner: the node could not open its miner"
+                            + " endpoint (\"Failed to start miner server\""
+                            + " in the node log); no miner is started for"
+                            + " this node process");
+                }
+                awaitStopOrRestart();
+                continue;
             }
 
             if (!cfg.minerBinary.isFile()) {
@@ -905,8 +922,11 @@ public final class MinerSupervisor implements MiningLogic.MinerView,
     }
 
     private void onMinerLine(String rawLine, boolean truncated) {
-        // Scrub first: nothing below ever sees the raw line.
-        String line = scrubber.apply(rawLine, truncated);
+        // Sanitise, then scrub: nothing below ever sees the raw line
+        // (v4.2.4, audit L-2 / I-12 — control and bidi characters are
+        // removed before the log, the tail or the statistics see the
+        // line, and the scrubber runs on exactly what is stored).
+        String line = NodeLogLines.intake(rawLine, truncated, scrubber);
         long now = env.elapsedMs();
         logFile.write(line, truncated);
         String shown = line;

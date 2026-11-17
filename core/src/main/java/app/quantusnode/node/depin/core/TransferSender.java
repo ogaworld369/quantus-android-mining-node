@@ -107,6 +107,18 @@ public final class TransferSender {
         return TransferState.load(storeRoot);
     }
 
+    /**
+     * The confirmation-number derivation new exports use (v4.2.4,
+     * audit L-1): 2 — the manifest is marked "commit_v": 2 and the
+     * one-shot confirmation key is derived from the generation's
+     * confirm secret ({@link TransferCommitCode#deriveKeyFromConfirmSecret}).
+     * Harness seam only: 1 makes this sender export exactly as a
+     * pre-v4.2.4 build did (no commit_v, the key derived from the
+     * transfer code), so the suites can drive the v1 paths the
+     * receiver and the sender keep for handovers already in flight.
+     */
+    static volatile int exportCommitVersion = 2;
+
     private static String secretKey(long generation) {
         return TransferVault.senderKey(generation) + ":confirm";
     }
@@ -274,6 +286,13 @@ public final class TransferSender {
             manifest.put("anchor_params", anchorParams);
             manifest.put("created_at_unix", now);
             manifest.put("sender_app", senderApp);
+            final boolean commitV2 = exportCommitVersion == 2;
+            if (commitV2) {
+                // v4.2.4 (audit L-1): every new package says that
+                // its confirmation number is keyed by the confirm
+                // secret, not by the transfer code.
+                manifest.put(TransferCommitCode.MANIFEST_COMMIT_VERSION, 2L);
+            }
             TransferPackage.validateManifest(manifest);
 
             String code = TransferCodec.generateCode(random);
@@ -283,6 +302,12 @@ public final class TransferSender {
                     seed, manifest, confirmSecret, journalBytes,
                     archiveBytes, code, random);
             byte[] packageBytes = TransferCodec.jcs(envelope);
+            // v4.2.4 (audit L-10): never write a package above the
+            // transfer cap no receiver accepts. Checked before the
+            // vault material and the S1 record exist, so a refusal
+            // leaves no durable sender record and the freeze is
+            // released by the catch below.
+            TransferPackage.requireWithinCap(packageBytes.length);
             TransferPackage.Envelope parsedEnv =
                     TransferPackage.parseEnvelope(packageBytes);
             String packageSha = parsedEnv.packageSha256();
@@ -309,7 +334,24 @@ public final class TransferSender {
                 // number-required marker, so no post-export
                 // save is needed — and no crash window exists
                 // in which an E4 handover looks pre-E4.
-                storeCommitKeyPair(vault, generation, code,
+                // v4.2.4 (audit L-1): the key is derived from the
+                // confirm secret as the vault entry just written
+                // holds it — the receiver derives the same key
+                // from the secret in the package — and no longer
+                // from the transfer code.
+                byte[] commitKey;
+                if (commitV2) {
+                    byte[] stored = vault.get(secretKey(generation));
+                    try {
+                        commitKey = TransferCommitCode
+                                .deriveKeyFromConfirmSecret(stored);
+                    } finally {
+                        java.util.Arrays.fill(stored, (byte) 0);
+                    }
+                } else {
+                    commitKey = TransferCommitCode.deriveKey(code);
+                }
+                storeCommitKeyPair(vault, generation, commitKey,
                         TransferCommitCode.manifestHash(manifest),
                         replacedManifestHash);
             }
@@ -418,9 +460,10 @@ public final class TransferSender {
     }
 
     /**
-     * Store the confirmation key derived from an export's
-     * transfer code (the code itself is never stored) as a
-     * (key, manifest hash) PAIR. One pair per export of the
+     * Store an export's confirmation key — since v4.2.4 (audit
+     * L-1) derived from the generation's confirm secret, before
+     * that from the transfer code (which is never stored either
+     * way) — as a (key, manifest hash) PAIR. One pair per export of the
      * generation is kept, so a re-export does not invalidate
      * the previous file's intake (E7) — and pairing matters:
      * a re-export rebuilds the manifest with fresh timestamps
@@ -437,7 +480,7 @@ public final class TransferSender {
      */
     private void storeCommitKeyPair(TransferVault vault,
                                     long generation,
-                                    String transferCode,
+                                    byte[] commitKey,
                                     String manifestHash,
                                     String replacedManifestHash)
             throws Exception {
@@ -466,8 +509,7 @@ public final class TransferSender {
                 }
             }
         }
-        String b64 = TransferCodec.b64Encode(
-                TransferCommitCode.deriveKey(transferCode));
+        String b64 = TransferCodec.b64Encode(commitKey);
         boolean present = false;
         for (Object o : entries) {
             @SuppressWarnings("unchecked")

@@ -42,6 +42,25 @@ public final class TransferFlowVerifyMain {
 
     private static final SecureRandom RANDOM = new SecureRandom();
 
+    /** The v4.2.4 (audit L-1) number for a package, derived here
+     *  independently: the confirm secret read out of the package
+     *  with its code, keyed SHA-256("easy-commit/v2" || secret). */
+    private static String v2NumberOf(File packageFile, String transferCode)
+            throws Exception {
+        TransferPackage.Envelope env = TransferPackage.parseEnvelope(
+                java.nio.file.Files.readAllBytes(packageFile.toPath()));
+        TransferCodec.PayloadReader r = new TransferCodec.PayloadReader(
+                TransferPackage.decryptPayload(env, transferCode));
+        r.next(); // "seed"
+        TransferCodec.PayloadEntry secret = r.next();
+        java.security.MessageDigest md =
+                java.security.MessageDigest.getInstance("SHA-256");
+        md.update("easy-commit/v2".getBytes(StandardCharsets.UTF_8));
+        md.update(secret.content);
+        return TransferCommitCode.codeFor(md.digest(),
+                TransferCommitCode.manifestHash(env.manifest.raw));
+    }
+
     private static SecretKey testWrapKey() {
         byte[] k = new byte[32];
         for (int i = 0; i < 32; i++) k[i] = (byte) (0xA0 + i);
@@ -283,13 +302,18 @@ public final class TransferFlowVerifyMain {
         r.receiver.confirmOneshot(r.deviceId, 1);
         check("oneshot: receiver derives DONE without an ack",
                 deriveReceiver(r) == TransferFlow.ReceiverState.DONE);
-        String expectedCode = TransferCommitCode.codeFor(
-                TransferCommitCode.deriveKey(exr.transferCode),
-                inr.manifestHash);
+        // v4.2.4 (audit L-1): the number is keyed by the package's
+        // confirm secret (v2), derived here independently.
+        String expectedCode = v2NumberOf(exr.packageFile, exr.transferCode);
         TransferFlow.Snapshot rs = TransferFlow.derive(r.receiverRoot);
         check("oneshot-e4: DONE snapshot carries the confirmation number",
                 expectedCode != null
                         && expectedCode.equals(rs.receiverCommitCode));
+        check("oneshot-l1: the re-displayed number is the v2 one, not the"
+                        + " code-derived v1 one",
+                !TransferCommitCode.codeFor(
+                        TransferCommitCode.deriveKey(exr.transferCode),
+                        inr.manifestHash).equals(rs.receiverCommitCode));
         r.sender.closeOneshotHandover(r.deviceId, expectedCode);
         TransferFlow.Snapshot ss2 = TransferFlow.derive(r.senderRoot);
         check("oneshot: closed sender DONE, no ack re-presentation",
@@ -301,6 +325,32 @@ public final class TransferFlowVerifyMain {
         check("oneshot: cancelled sender derives CLOSED",
                 TransferFlow.derive(t.senderRoot).sender
                         == TransferFlow.SenderState.CLOSED);
+
+        // ---- scenario 5b (v4.2.4, audit L-1): a package from a
+        // sender before v4.2.4 (no commit_v) keeps its v1 number on
+        // the re-display path too ----
+        Pair o = newPair();
+        TransferSender.ExportResult exo;
+        TransferSender.exportCommitVersion = 1;
+        try {
+            exo = o.sender.exportPackageOneshot(o.seed);
+        } finally {
+            TransferSender.exportCommitVersion = 2;
+        }
+        TransferReceiver.IntakeResult ino =
+                o.receiver.intakePackage(exo.packageFile, exo.transferCode);
+        o.receiver.confirmOneshot(o.deviceId, 1);
+        String v1Code = TransferCommitCode.codeFor(
+                TransferCommitCode.deriveKey(exo.transferCode),
+                ino.manifestHash);
+        check("oneshot-l1: a v1 package's DONE snapshot re-displays the v1"
+                        + " number",
+                v1Code.equals(TransferFlow.derive(o.receiverRoot)
+                        .receiverCommitCode));
+        o.sender.closeOneshotHandover(o.deviceId, v1Code);
+        check("oneshot-l1: and that older sender closes with it",
+                TransferFlow.derive(o.senderRoot).sender
+                        == TransferFlow.SenderState.DONE);
 
         // ---- scenario 6 (audit M2): the unnotified staging's
         // archive count reads the manifest's "count" key ----

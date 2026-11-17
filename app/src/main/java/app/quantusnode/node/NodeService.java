@@ -16,6 +16,9 @@ import android.os.IBinder;
 import android.os.SystemClock;
 
 import app.quantusnode.node.depin.DepinModule;
+import app.quantusnode.node.depin.core.NodeProcess;
+import app.quantusnode.node.depin.core.NodeRpcEndpoint;
+import app.quantusnode.node.depin.core.TransferIo;
 
 import org.json.JSONObject;
 
@@ -49,7 +52,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
  *   - drains stdout/stderr into a size-capped rotating log file,
  *   - polls the local JSON-RPC endpoint (system_health / system_syncState)
  *     every few seconds and mirrors the result into NodeState, the
- *     notification and the on-device track record,
+ *     notification and the on-device track record — since v4.2.4
+ *     (audit M-1) at the address the node itself reported in its
+ *     startup output, adopting nothing from a round whose
+ *     system_localPeerId is not the identity the node reported, and
+ *     keeping files/node/rpc-endpoint.json for the :depin process,
  *   - if the node process exits, records the exit code and stops. It does
  *     NOT restart it in a loop.
  *   - mining (v4.0.0) is an opt-in, off by default. Only while the
@@ -77,7 +84,9 @@ public class NodeService extends Service {
     public static final String ACTION_START = "app.quantusnode.node.action.START";
     public static final String ACTION_STOP = "app.quantusnode.node.action.STOP";
 
-    private static final String NODE_LIB = "libquantus_node.so";
+    /** The node executable (v4.2.4, audit V4-1: one definition, in
+     *  the core, which the :depin process's record check uses too). */
+    private static final String NODE_LIB = NodeProcess.LIBRARY;
     /** The bundled miner (v4.0.0), packaged the same way as the node. */
     private static final String MINER_LIB = MiningLogic.MINER_LIB;
     /** The miner's own bounded log, kept beside node.log. */
@@ -89,7 +98,11 @@ public class NodeService extends Service {
     private static final String CHANNEL_ID = "node_status";
     private static final int NOTIF_ID = 1;
 
-    private static final String RPC_URL = "http://127.0.0.1:9944/";
+    /**
+     * How often a peer-identity mismatch on the polled endpoint is
+     * written to node.log while it persists (v4.2.4, audit M-1).
+     */
+    private static final long RPC_MISMATCH_LOG_EVERY_MS = 10L * 60 * 1000;
     /** Hard cap on one RPC response (finding 6); real replies are ~100 B. */
     private static final int RPC_MAX_RESPONSE_BYTES = 64 * 1024;
     /**
@@ -236,6 +249,272 @@ public class NodeService extends Service {
 
     private final AtomicBoolean started = new AtomicBoolean(false);
     private final AtomicBoolean pollerOn = new AtomicBoolean(false);
+
+    /**
+     * The endpoint and peer identity the CURRENT node process reported
+     * in its own startup output (v4.2.4, audit M-1), tied to that
+     * process; null until it has reported both, and again once it has
+     * exited. The poller polls this address and nothing else.
+     */
+    private final java.util.concurrent.atomic.AtomicReference<AdoptedRpc>
+            adoptedRpc = new java.util.concurrent.atomic.AtomicReference<>();
+    /**
+     * The endpoint recorder of the CURRENT node process (v4.2.4, audit
+     * V4-10), so the poller can report a process whose startup facts
+     * are still missing after a minute; null between processes.
+     */
+    private final java.util.concurrent.atomic.AtomicReference<EndpointRecorder>
+            liveRecorder = new java.util.concurrent.atomic.AtomicReference<>();
+    /** The node.log line for an identity mismatch, at most every
+     *  {@link #RPC_MISMATCH_LOG_EVERY_MS}. */
+    private final NodeLogLines.RateLimit rpcMismatchLog =
+            new NodeLogLines.RateLimit(RPC_MISMATCH_LOG_EVERY_MS);
+    /**
+     * Serializes this app process's writes and deletes of the
+     * verified-endpoint record (v4.2.4, audit M-1). Static for the
+     * reason {@link #PID_LOCK} is: a recreated service instance is a
+     * new object in the same process. The :depin process only reads
+     * the record; each write replaces it atomically.
+     */
+    private static final Object RPC_RECORD_LOCK = new Object();
+
+    /** One node process's reported endpoint and identity. */
+    private static final class AdoptedRpc {
+        final Process process;
+        final NodeLogLines.RpcIdentity identity;
+
+        AdoptedRpc(Process process, NodeLogLines.RpcIdentity identity) {
+            this.process = process;
+            this.identity = identity;
+        }
+    }
+
+    /**
+     * The verified endpoint of ONE node process (v4.2.4, audit M-1).
+     * The node does not fail when 127.0.0.1:9944 is taken — it
+     * rebinds its RPC to a random port without a word — and until
+     * v4.2.3 both RPC clients polled the fixed address, so another
+     * app holding it answered every poll in the node's place. The
+     * drain feeds this recorder every (sanitised) line; once the
+     * node's own first "Running JSON-RPC server: addr=…" and "Local
+     * node identity is: …" lines have both been seen
+     * ({@link NodeLogLines.StartupCapture}), the poller adopts that
+     * endpoint, and the record the :depin process reads
+     * (files/node/rpc-endpoint.json) is written atomically. When the
+     * process exits, the poller forgets the endpoint and the record
+     * is deleted — if it is still this process's.
+     *
+     * The record also names the node process — its pid and its start
+     * time — so that the :depin process trusts it only while that
+     * process lives (v4.2.4, audit V4-1): an end of the node this
+     * process does not live to see (a force-stop, a reboot, a kill of
+     * this process) leaves the record behind, and the peer ID alone
+     * cannot tell it from a live one. Without an identifiable process
+     * no record is written; the poller is unaffected (it follows the
+     * Process object).
+     */
+    private final class EndpointRecorder {
+        private final Process process;
+        private final long sessionStartMillis;
+        /** The node process's pid as the launch resolved it, or -1
+         *  (v4.2.4, audit V4-1). */
+        private final long pid;
+        /** The spawn, on the elapsed-realtime clock (v4.2.4, audit
+         *  V4-10). */
+        private final long spawnElapsedMs;
+        private final NodeLogLines.StartupCapture capture =
+                new NodeLogLines.StartupCapture();
+        private boolean closed;
+        /** The record text this recorder wrote, or null. */
+        private String written;
+
+        EndpointRecorder(Process process, long sessionStartMillis, long pid,
+                         long spawnElapsedMs) {
+            this.process = process;
+            this.sessionStartMillis = sessionStartMillis;
+            this.pid = pid;
+            this.spawnElapsedMs = spawnElapsedMs;
+        }
+
+        /** Drain thread: one sanitised line of this process. */
+        void onLine(String line) {
+            if (capture.onLine(line)) {
+                adopt(capture.identity());
+            }
+            // v4.2.4 (audit V4-10): a first RPC line without a usable
+            // address is said in the log, once.
+            String warning = capture.takeRpcLineWarning();
+            if (warning != null) {
+                logApp(warning);
+            }
+        }
+
+        /** Poller, while nothing is adopted for this process: after
+         *  about a minute without both startup facts, say so in the
+         *  log, once (v4.2.4, audit V4-10). */
+        void reportMissingFacts(long nowElapsedMs) {
+            String warning = capture.takeLateWarning(
+                    nowElapsedMs - spawnElapsedMs);
+            if (warning != null) {
+                logApp(warning);
+            }
+        }
+
+        private synchronized void adopt(NodeLogLines.RpcIdentity id) {
+            if (closed || written != null || id == null) {
+                return;
+            }
+            synchronized (RPC_RECORD_LOCK) {
+                adoptedRpc.set(new AdoptedRpc(process, id));
+                // v4.2.4 (audit V4-7): Node details shows the address
+                // the poller uses.
+                NodeState.get().rpcEndpoint = id.host + ":" + id.port;
+            }
+            logApp("rpc: polling the node's own endpoint " + id.host + ":"
+                    + id.port + " (reported in its startup output); its"
+                    + " peer identity is checked on every poll");
+            // v4.2.4 (audit V4-1): the start time is read while the
+            // process is known to be ours. A pid is not reused before
+            // its process has been reaped, and isAlive() after the
+            // reads says it had not been.
+            long ticks = pid > 0 && isOwnNodeProcessStrict(pid)
+                    ? NodeProcess.startTicks(NodeProcess.PROC, pid) : -1;
+            if (ticks < 0 || !process.isAlive()) {
+                logApp("WARN rpc: the node process could not be identified"
+                        + " in /proc (pid " + pid + "); no endpoint record"
+                        + " is written, and DePIN observations and transfer"
+                        + " height reads stay unavailable for this node"
+                        + " process");
+                return;
+            }
+            try {
+                String json = new NodeRpcEndpoint(id.host, id.port,
+                        id.peerId, sessionStartMillis, pid, ticks).toJson();
+                synchronized (RPC_RECORD_LOCK) {
+                    TransferIo.writeRecordAtomic(
+                            NodeRpcEndpoint.recordFile(getFilesDir()),
+                            json.getBytes(StandardCharsets.UTF_8));
+                }
+                written = json;
+            } catch (IOException | RuntimeException e) {
+                logApp("WARN rpc: the node's endpoint record could not be"
+                        + " written (" + e.getClass().getName() + ");"
+                        + " DePIN observations and transfer height reads"
+                        + " stay unavailable for this node process");
+            }
+        }
+
+        /** Worker thread, once the process has exited. */
+        synchronized void close() {
+            closed = true;
+            liveRecorder.compareAndSet(this, null);
+            synchronized (RPC_RECORD_LOCK) {
+                AdoptedRpc a = adoptedRpc.get();
+                if (a != null && a.process == process
+                        && adoptedRpc.compareAndSet(a, null)) {
+                    NodeState.get().rpcEndpoint = null;
+                }
+            }
+            if (written == null) {
+                return;
+            }
+            synchronized (RPC_RECORD_LOCK) {
+                // Only this process's own record: a later process's
+                // (a relaunch after this one, in a recreated service)
+                // must survive this late cleanup.
+                File f = NodeRpcEndpoint.recordFile(getFilesDir());
+                try {
+                    NodeRpcEndpoint onDisk = NodeRpcEndpoint.read(f);
+                    if (onDisk != null && written.equals(onDisk.toJson())
+                            && !f.delete()) {
+                        logApp("WARN rpc: the node's endpoint record could"
+                                + " not be deleted after the node stopped");
+                    }
+                } catch (IOException | RuntimeException e) {
+                    // An unreadable record is nobody's to keep.
+                    if (f.exists() && !f.delete()) {
+                        logApp("WARN rpc: the node's endpoint record could"
+                                + " not be deleted after the node stopped");
+                    }
+                }
+            }
+        }
+    }
+
+    /** {@link #clearStaleRpcEndpointRecord} runs once per app process. */
+    private static final AtomicBoolean STALE_RECORD_CHECKED =
+            new AtomicBoolean(false);
+
+    /**
+     * At app-process start (v4.2.4, audit V4-1): delete the
+     * verified-endpoint record when no node of this app is alive. Such
+     * a record is the leftover of a node that ended without this app
+     * seeing it — a force-stop, a reboot, a kill of the app process —
+     * and it would otherwise stay until the next start. Called first
+     * thing in MainActivity.onCreate and in onCreate here, so it runs
+     * before DepinModule's first reconcile can relaunch the observer
+     * that reads the record. The record is kept while a node of this
+     * app runs (an orphan of a killed app process can still be serving
+     * it) and when /proc cannot be listed; the :depin process's own
+     * check ({@link NodeRpcEndpoint#staleReason}) refuses a stale record
+     * either way. Best effort: nothing here may stop the app from
+     * starting.
+     */
+    static void clearStaleRpcEndpointRecord(Context ctx) {
+        if (!STALE_RECORD_CHECKED.compareAndSet(false, true)) {
+            return;
+        }
+        try {
+            Context app = ctx.getApplicationContext();
+            File filesDir = app.getFilesDir();
+            File f = NodeRpcEndpoint.recordFile(filesDir);
+            boolean deleted = false;
+            boolean failed = false;
+            synchronized (RPC_RECORD_LOCK) {
+                if (!f.exists() || liveRegisteredChild() != null) {
+                    return;
+                }
+                List<Long> alive = scanForOwnNodeProcesses(
+                        NodeProcess.binaryPath(
+                                app.getApplicationInfo().nativeLibraryDir));
+                if (alive == null || !alive.isEmpty()) {
+                    return;
+                }
+                if (f.delete()) {
+                    deleted = true;
+                } else {
+                    failed = f.exists();
+                }
+            }
+            LogSink log = new LogSink(new File(filesDir, "logs"));
+            if (deleted) {
+                log.write("[app] rpc: removed the endpoint record of a node"
+                        + " that is no longer running (it ended without this"
+                        + " app seeing it)");
+            } else if (failed) {
+                log.write("[app] WARN rpc: the endpoint record of a node that"
+                        + " is no longer running could not be deleted");
+            }
+        } catch (Throwable ignored) {
+            // See the method doc.
+        }
+    }
+
+    /**
+     * Delete the verified-endpoint record unconditionally (v4.2.4,
+     * audit M-1): called before every node launch, when no node of
+     * this app is alive, so whatever record exists is a previous
+     * process's — including one an app-process death left behind.
+     */
+    private void deleteRpcEndpointRecord() {
+        synchronized (RPC_RECORD_LOCK) {
+            File f = NodeRpcEndpoint.recordFile(getFilesDir());
+            if (f.exists() && !f.delete()) {
+                logApp("WARN rpc: a previous node's endpoint record could"
+                        + " not be deleted");
+            }
+        }
+    }
 
     /**
      * This app process's incarnation id: generated once, when the
@@ -549,6 +828,9 @@ public class NodeService extends Service {
         // The price fetch identifies itself with this version
         // (PriceStore, v4.2.2 B-9).
         PriceStore.initUserAgent(this);
+        // v4.2.4 (audit V4-1): an endpoint record no running node
+        // stands behind goes before anything can read it.
+        clearStaleRpcEndpointRecord(this);
         createNotificationChannel();
         logSink = new LogSink(new File(getFilesDir(), "logs"));
         startNetworkWatch();
@@ -801,6 +1083,7 @@ public class NodeService extends Service {
             st.launchedMiningSkip = MiningLogic.SkipReason.NONE;
             st.launchedRewardsTag = null;
             st.minerView = null;
+            st.minerEndpointFailed = false;
             baseUptimeMs = TrackStore.uptimeMs(this);
             // versionCode 25 (audit finding F-05): the uptime anchor
             // is NOT set here. Uptime accrues from the moment a node
@@ -1476,14 +1759,40 @@ public class NodeService extends Service {
                     }
                 }
                 miner = startedMiner;
-                nodeTap = new NodeOutputTap(launchScrubber, miner, minerStats);
+                // v4.2.4 (audit L-7): the supervisor stops trying on
+                // the node's "Failed to start miner server" report by
+                // itself (it reads the same stats); the service keeps
+                // the fact for the diagnostic summary, past the node
+                // exit the failure causes.
+                nodeTap = new NodeOutputTap(launchScrubber, miner, minerStats,
+                        () -> {
+                            synchronized (stateLock) {
+                                if (gen == sessionGen.get()) {
+                                    NodeState.get().minerEndpointFailed = true;
+                                }
+                            }
+                        });
             } else {
                 miner = null;
                 nodeTap = null;
             }
 
+            // v4.2.4 (audit M-1): this process's own RPC endpoint and
+            // peer identity, read from its startup output by the
+            // drain below — for every launch, with mining or not.
+            // The session start it records is this process's spawn,
+            // on the wall clock.
+            final long recorderSpawnMs = spawnElapsedMs >= 0
+                    ? spawnElapsedMs : SystemClock.elapsedRealtime();
+            final EndpointRecorder rpcRecorder = new EndpointRecorder(
+                    running, System.currentTimeMillis()
+                            - (SystemClock.elapsedRealtime()
+                            - recorderSpawnMs),
+                    resolvedPid, recorderSpawnMs);
+            liveRecorder.set(rpcRecorder);
             Thread drain = new Thread(
-                    () -> drainOutput(running, capture, nodeTap), "node-output");
+                    () -> drainOutput(running, capture, nodeTap, rpcRecorder),
+                    "node-output");
             drain.setDaemon(true);
             // v4.1.0 (final check FC-2): the same exposure, as old as
             // this drain — a thread that cannot be started must not
@@ -1544,6 +1853,11 @@ public class NodeService extends Service {
                     }
                 }
             } finally {
+                // v4.2.4 (audit M-1): first of all, the poller stops
+                // using this process's endpoint and its record is
+                // removed — nothing of it may be trusted once the
+                // process is gone (the port can be taken by anyone).
+                rpcRecorder.close();
                 // versionCode 27 (external audit of v0.2.0): the
                 // exit has been observed — this is the moment the
                 // worker unregisters the child from the process-wide
@@ -1766,38 +2080,25 @@ public class NodeService extends Service {
         // picked up by the NEXT start only — a running node is never
         // restarted behind the user's back.
         boolean telemetry = NodeSettings.telemetryEnabled(this);
-        String nodeName = NodeSettings.effectiveNodeName(this);
+        // v4.2.4 (audit L-4, L-9): the node shows its --name to every
+        // connected peer (identify), not only in telemetry, so the
+        // display name is passed only while telemetry is on — and
+        // never one the node's own rule would refuse (it would stop
+        // the node); the generic default stands in for both.
+        String nodeName = NodeSettings.launchNodeNameFor(telemetry,
+                NodeSettings.nodeNameRaw(this));
+        if (telemetry
+                && !nodeName.equals(NodeSettings.effectiveNodeName(this))) {
+            logApp("WARN display name: the saved name is one the node"
+                    + " would refuse; this launch uses the default name");
+        }
 
-        List<String> cmd = new ArrayList<>();
-        if (viaLinker) {
-            cmd.add("/system/bin/linker64");
-        }
-        cmd.add(bin.getAbsolutePath());
-        // Fixed argument set (verified against the node's CLI). Pruning is
-        // always passed; no --rpc-external / --ws-external, ever, so RPC
-        // stays bound to 127.0.0.1. The name travels as a single argv
-        // element (no shell involved), and the only other variable is
-        // --no-telemetry: present unless the user opted into telemetry,
-        // in which case the node reports to the chain spec's built-in
-        // official endpoint — the app never sets a telemetry URL itself.
-        cmd.add("--chain");         cmd.add(CHAIN_NAME);
-        cmd.add("--base-path");     cmd.add(basePath);
-        cmd.add("--name");          cmd.add(nodeName);
-        cmd.add("--state-pruning"); cmd.add("256");
-        cmd.add("--blocks-pruning"); cmd.add("256");
-        // Phone-sized tuning (2026-11-03 code audit): the default trie
-        // cache ceiling is 1 GiB, which the node itself warns it cannot
-        // initialize on this 8 GB device — cap it at 128 MiB so the
-        // cache actually works and memory pressure (LMK kills) drops.
-        // Blocks-per-request goes to the responder's protocol maximum
-        // (128, was 64), halving request round-trips while syncing.
-        cmd.add("--trie-cache-size"); cmd.add("134217728");
-        cmd.add("--max-blocks-per-request"); cmd.add("128");
-        cmd.add("--rpc-port");      cmd.add("9944");
-        cmd.add("--rpc-methods");   cmd.add("safe");
-        if (!telemetry) {
-            cmd.add("--no-telemetry");
-        }
+        // The fixed, CLI-verified argument set (v4.2.4: built by
+        // NodeLaunch, where the JVM suites check it — pruning,
+        // loopback-only safe RPC, no mDNS, no Prometheus, no offchain
+        // workers, --no-telemetry unless the user opted in).
+        List<String> cmd = NodeLaunch.nodeCommand(bin.getAbsolutePath(),
+                viaLinker, CHAIN_NAME, basePath, nodeName, telemetry);
         // Mining (v4.0.0) — an opt-in, read fresh at each launch like
         // the settings above. With the setting off the plan is
         // LaunchPlan.OFF: nothing is appended, no file is looked at,
@@ -1844,8 +2145,20 @@ public class NodeService extends Service {
         // faster, but the file cannot grow past the cap, and
         // during a stall — exactly when the lines matter —
         // they are the newest content and survive.
-        pb.environment().put("RUST_LOG",
-                "info,sync=debug,sc_network_sync=debug");
+        //
+        // v4.2.4 (audit L-2, M-1): with any target above info,
+        // sc-tracing writes its DETAILED line header (millisecond
+        // timestamp, level, thread, target), and that header is
+        // what NodeLogLines anchors on — the mining statistics,
+        // the miner's start gate, the WARN/ERROR counts and the
+        // RPC endpoint and peer identity this service adopts are
+        // read only from lines that carry it. Changing this value
+        // to plain "info" would switch the node to its undetailed
+        // format and silently stop all of them. The value lives in
+        // NodeLaunch, where the vision suite pins it (audits V4-3,
+        // V4-10); V4-3 added quantus_node::prometheus=error, which
+        // silences a per-block WARN that --no-prometheus causes.
+        pb.environment().put("RUST_LOG", NodeLaunch.NODE_LOG_FILTER);
         // TLS roots for the node's telemetry (wss) connection: the node
         // runs as a bare native process, where rustls-native-certs finds
         // no system roots ("no native root CA certificates found" —
@@ -1942,6 +2255,13 @@ public class NodeService extends Service {
                 logApp("chain database reset completed before this start ("
                         + reset.entriesDeleted + " entries removed)");
             }
+            // v4.2.4 (audit M-1): no node of this app is alive here
+            // (the wait above), so any verified-endpoint record is a
+            // previous process's, and so is any adopted endpoint:
+            // both go before the new process can report its own.
+            adoptedRpc.set(null);
+            NodeState.get().rpcEndpoint = null;
+            deleteRpcEndpointRecord();
             // versionCode 25 (audit finding M3): stamp the
             // spawn-intent marker BEFORE the spawn, so a death of
             // this app process anywhere between here and the pid
@@ -2062,6 +2382,10 @@ public class NodeService extends Service {
                 st.launchedMining = miningPlan.active;
                 st.launchedMiningSkip = miningPlan.skip;
                 st.launchedRewardsTag = miningPlan.rewardsTag;
+                // v4.2.4 (audit L-7): the endpoint-failure fact
+                // describes one node process; a new one starts
+                // without it.
+                st.minerEndpointFailed = false;
             }
         }
         return new LaunchOutcome(proc, spawnElapsedMs, pidRecorded, resolvedPid,
@@ -2128,15 +2452,6 @@ public class NodeService extends Service {
             @Override
             public void log(String message) {
                 logApp(message);
-            }
-
-            @Override
-            public boolean nodeUp() {
-                // "Up" is the poller's own judgement: the node's RPC
-                // has answered in this session.
-                NodeState.Status s = NodeState.get().status;
-                return s == NodeState.Status.SYNCING
-                        || s == NodeState.Status.SYNCED;
             }
 
             @Override
@@ -2382,24 +2697,38 @@ public class NodeService extends Service {
         private final MiningLogic.SecretScrubber base;
         private final MinerSupervisor miner;
         private final MiningLogic.MinerStats stats;
+        /** Runs once when the node reports that its miner endpoint
+         *  failed to start (v4.2.4, audit L-7). */
+        private final Runnable onEndpointFailed;
+        private boolean endpointFailureSeen;
 
         NodeOutputTap(MiningLogic.SecretScrubber base, MinerSupervisor miner,
-                      MiningLogic.MinerStats stats) {
+                      MiningLogic.MinerStats stats, Runnable onEndpointFailed) {
             this.base = base;
             this.miner = miner;
             this.stats = stats;
+            this.onEndpointFailed = onEndpointFailed;
         }
 
-        String clean(String line, boolean truncated) {
+        MiningLogic.SecretScrubber scrubber() {
             // The supervisor's scrubber is the launch's own plus the
             // miner token, once the node has written its file (on a
             // first run that is after the launch).
-            MiningLogic.SecretScrubber s = miner != null ? miner.scrubber() : base;
-            return s == null ? line : s.apply(line, truncated);
+            return miner != null ? miner.scrubber() : base;
         }
 
+        /** Called by the drain thread only. A failure line that
+         *  follows the node's "listening" line is refused by the
+         *  stats and comes back as NONE (v4.2.4, audit V4-2), so it
+         *  never reaches the summary either. */
         void observe(String cleanLine) {
-            stats.onNodeLine(cleanLine, SystemClock.elapsedRealtime());
+            MiningLogic.NodeEvent e = stats.onNodeLine(cleanLine,
+                    SystemClock.elapsedRealtime());
+            if (e == MiningLogic.NodeEvent.MINER_ENDPOINT_FAILED
+                    && !endpointFailureSeen) {
+                endpointFailureSeen = true;
+                onEndpointFailed.run();
+            }
         }
     }
 
@@ -2955,33 +3284,15 @@ public class NodeService extends Service {
     }
 
     /** {@link #isOwnNodeProcessStrict(long)} for a caller without a
-     *  service instance (v4.1.0, the chain database reset). */
+     *  service instance (v4.1.0, the chain database reset). The rule
+     *  itself lives in the core since v4.2.4 (audit V4-1), where the
+     *  :depin process's endpoint-record check uses the same
+     *  implementation: {@link NodeProcess#runsNode}. */
     private static boolean isOwnNodeProcessStrict(long pid, String expected) {
-        if (pid <= 0 || pid == android.os.Process.myPid()) {
+        if (pid == android.os.Process.myPid()) {
             return false;
         }
-        try (FileInputStream in = new FileInputStream(
-                new File("/proc/" + pid, "cmdline"));
-             ByteArrayOutputStream buf = new ByteArrayOutputStream()) {
-            byte[] chunk = new byte[512];
-            int n;
-            while ((n = in.read(chunk)) != -1) {
-                buf.write(chunk, 0, n);
-            }
-            String[] argv = new String(buf.toByteArray(),
-                    StandardCharsets.UTF_8).split("\0", 3);
-            if (argv.length < 1) {
-                return false;
-            }
-            if (expected.equals(argv[0])) {
-                return true;
-            }
-            return argv.length > 1
-                    && "/system/bin/linker64".equals(argv[0])
-                    && expected.equals(argv[1]);
-        } catch (IOException | RuntimeException e) {
-            return false;
-        }
+        return NodeProcess.runsNode(NodeProcess.PROC, pid, expected);
     }
 
     /**
@@ -3715,7 +4026,7 @@ public class NodeService extends Service {
     }
 
     private void drainOutput(Process proc, AttemptCapture capture,
-                             NodeOutputTap tap) {
+                             NodeOutputTap tap, EndpointRecorder rpcRecorder) {
         InputStream in = proc.getInputStream();
         try {
             drainLines(in, DRAIN_LINE_MAX_BYTES, (rawLine, truncated) -> {
@@ -3728,13 +4039,18 @@ public class NodeService extends Service {
                 // is best-effort.) Stream-level IOException from the
                 // read still ends the thread, in the catch below.
                 try {
-                    // v4.0.0: for a node launched with mining, the
-                    // line is scrubbed BEFORE the log and the attempt
-                    // capture (which the details screen shows) see
-                    // it. Without mining there is no tap and the line
-                    // is used exactly as it came.
-                    String line = tap == null
-                            ? rawLine : tap.clean(rawLine, truncated);
+                    // v4.2.4 (audit L-2 / I-12): every line is
+                    // sanitised here, at the one intake point, before
+                    // the log, the attempt capture (which the details
+                    // screen shows) or anything that parses it sees
+                    // it — control and bidi characters removed, with
+                    // or without mining. v4.0.0: for a node launched
+                    // with mining the sanitised line is then scrubbed
+                    // of the session's secrets (NodeLogLines.intake
+                    // runs the two in that order, so the scrubber sees
+                    // exactly what is stored).
+                    String line = NodeLogLines.intake(rawLine, truncated,
+                            tap == null ? null : tap.scrubber());
                     if (logSink != null) {
                         logSink.write(line, truncated);
                     }
@@ -3742,6 +4058,9 @@ public class NodeService extends Service {
                     if (tap != null) {
                         tap.observe(line);
                     }
+                    // v4.2.4 (audit M-1): the node's own startup
+                    // report of its RPC endpoint and identity.
+                    rpcRecorder.onLine(line);
                 } catch (Exception e) {
                     try {
                         logApp("output drain: line dropped after error: " + e);
@@ -4241,11 +4560,48 @@ public class NodeService extends Service {
     }
 
     private void pollOnce(int gen) {
-        if (nodeProcess == null) {
+        Process liveProcess = nodeProcess;
+        if (liveProcess == null) {
             return; // watcher thread owns the stopped transition
         }
         if (gen != sessionGen.get()) {
             return; // stale session: never write state (bug P-1)
+        }
+        // v4.2.4 (audit M-1): poll the endpoint THIS node process
+        // reported in its own startup output, and nothing else —
+        // before it has reported one, nothing is adopted. Every
+        // round first asks that endpoint for its peer identity and
+        // adopts no value unless it is the identity the node
+        // reported: whatever else holds a port answers nothing here.
+        AdoptedRpc rpc = adoptedRpc.get();
+        if (rpc == null || rpc.process != liveProcess) {
+            // v4.2.4 (audit V4-10): a process that never reports its
+            // endpoint and identity is reported once, after a minute.
+            EndpointRecorder recorder = liveRecorder.get();
+            if (recorder != null && recorder.process == liveProcess) {
+                recorder.reportMissingFacts(SystemClock.elapsedRealtime());
+            }
+            markRpcUnanswered(gen);
+            return;
+        }
+        String url = rpc.identity.url();
+        NodeLogLines.PeerCheck identity = NodeLogLines.checkPeerId(
+                rpc.identity.peerId,
+                rpcCallResult(url, "system_localPeerId", gen));
+        if (identity != NodeLogLines.PeerCheck.MATCH) {
+            if (identity == NodeLogLines.PeerCheck.MISMATCH
+                    && rpcMismatchLog.allow(SystemClock.elapsedRealtime())) {
+                // Fixed text: the identity that answered is never
+                // written to the log (it is the impostor's text).
+                logApp("WARN rpc: " + rpc.identity.host + ":"
+                        + rpc.identity.port + " answered with a peer"
+                        + " identity that is not this node's; nothing is"
+                        + " adopted from such a poll (this line repeats at"
+                        + " most every " + (RPC_MISMATCH_LOG_EVERY_MS / 60000)
+                        + " min while it lasts)");
+            }
+            markRpcUnanswered(gen);
+            return;
         }
         // RPC calls run OUTSIDE the lock (they can block for seconds);
         // every resulting write is applied in ONE locked batch at the
@@ -4256,19 +4612,9 @@ public class NodeService extends Service {
         // STOPPED overwritten by this poll (N-5), and the track
         // read-modify-write (prevBestBlock + delta) cannot interleave
         // with another session's poller (N-7).
-        JSONObject health = rpcCall("system_health", gen);
+        JSONObject health = rpcCall(url, "system_health", gen);
         if (health == null) {
-            // RPC not up yet (connection refused etc.): still starting.
-            synchronized (stateLock) {
-                if (gen != sessionGen.get()) {
-                    return;
-                }
-                NodeState st = NodeState.get();
-                if (st.status != NodeState.Status.STOPPED) {
-                    st.status = NodeState.Status.STARTING;
-                }
-            }
-            updateNotificationMaybe(gen);
+            markRpcUnanswered(gen);
             return;
         }
         // versionCode 28 (post-review): the "last RPC response"
@@ -4307,7 +4653,7 @@ public class NodeService extends Service {
         Boolean freshSyncing = (syncingValue instanceof Boolean)
                 ? (Boolean) syncingValue : null;
 
-        JSONObject sync = rpcCall("system_syncState", gen);
+        JSONObject sync = rpcCall(url, "system_syncState", gen);
         long current = -1;
         long highest = -1;
         if (sync != null) {
@@ -4598,8 +4944,38 @@ public class NodeService extends Service {
         return -1;
     }
 
-    /** One JSON-RPC call to the loopback endpoint; null on any failure. */
-    private JSONObject rpcCall(String method, int gen) {
+    /**
+     * A poll that adopts nothing: no usable answer — the RPC is not
+     * up yet (connection refused etc.), the node has not reported its
+     * endpoint yet, or the endpoint answered with another identity
+     * (v4.2.4, audit M-1). The node is starting, as far as the app can
+     * tell; no value from the round is used.
+     */
+    private void markRpcUnanswered(int gen) {
+        synchronized (stateLock) {
+            if (gen != sessionGen.get()) {
+                return;
+            }
+            NodeState st = NodeState.get();
+            if (st.status != NodeState.Status.STOPPED) {
+                st.status = NodeState.Status.STARTING;
+            }
+        }
+        updateNotificationMaybe(gen);
+    }
+
+    /** One JSON-RPC call whose result is an object; null otherwise. */
+    private JSONObject rpcCall(String url, String method, int gen) {
+        Object result = rpcCallResult(url, method, gen);
+        return (result instanceof JSONObject) ? (JSONObject) result : null;
+    }
+
+    /**
+     * One JSON-RPC call to the node's adopted loopback endpoint
+     * {@code url} (v4.2.4: the address the node reported, audit M-1);
+     * the response's "result" member, or null on any failure.
+     */
+    private Object rpcCallResult(String url, String method, int gen) {
         HttpURLConnection conn = null;
         // This call's registration in the in-flight slot (finding
         // N1), and its completion flag for the deadline watchdog.
@@ -4629,7 +5005,7 @@ public class NodeService extends Service {
             req.put("params", new org.json.JSONArray());
             byte[] body = req.toString().getBytes(StandardCharsets.UTF_8);
 
-            conn = (HttpURLConnection) new URL(RPC_URL).openConnection();
+            conn = (HttpURLConnection) new URL(url).openConnection();
             // Registered before any blocking call, so a teardown
             // landing anywhere in this call can abort it via
             // disconnectInFlightRpc() (finding L3). Registration is
@@ -4689,7 +5065,7 @@ public class NodeService extends Service {
                 return null;
             }
             Object result = json.opt("result");
-            return (result instanceof JSONObject) ? (JSONObject) result : null;
+            return result == JSONObject.NULL ? null : result;
         } catch (Exception e) {
             return null; // connection refused while booting is normal
         } finally {

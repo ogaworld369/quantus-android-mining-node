@@ -7,7 +7,7 @@ it has synced.
 
 - applicationId: `app.quantusnode.node`
 - minSdk 31 / targetSdk 35 / arm64-v8a only
-- versionName `4.2.3` (versionCode 69; public releases began at v0.1.0)
+- versionName `4.2.4` (versionCode 70; public releases began at v0.1.0)
 - Permissions (only these): `INTERNET`, `ACCESS_NETWORK_STATE`,
   `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_SPECIAL_USE`,
   `POST_NOTIFICATIONS`
@@ -52,12 +52,21 @@ it has synced.
   minutes apart, once per frozen value per session) and logs a
   WARN line. Process exits are still never auto-restarted. The
   node process environment also sets
-  `RUST_LOG=info,sync=debug,sc_network_sync=debug`, so sync
-  stalls leave debug evidence in `node.log` (bounded by the
-  rotation above); the argument list itself is unchanged.
+  `RUST_LOG=info,sync=debug,sc_network_sync=debug,quantus_node::prometheus=error`
+  (`NodeLaunch.NODE_LOG_FILTER`, pinned by the vision suite):
+  - the sync targets leave debug evidence of stalls in `node.log`
+    (bounded by the rotation above), and keep the node on the
+    detailed line header the app's log anchoring reads;
+  - the last entry (v4.2.4) silences a WARN that `--no-prometheus`
+    would otherwise cause on every imported block while mining.
+
+  The argument list itself is unchanged by the watchdog.
 - Status comes from the **local** JSON-RPC endpoint only
-  (`http://127.0.0.1:9944/`, `system_health` + `system_syncState`,
-  polled every ~3 s). Connection refused while booting is shown as
+  (`system_health` + `system_syncState`, polled every ~3 s). Since
+  v4.2.4 the address is the one the node itself reports in its
+  startup output (normally `http://127.0.0.1:9944/`), and a round
+  is used only when `system_localPeerId` answers with the identity
+  the node reported. Connection refused while booting is shown as
   "起動中" (starting), never as an error. No external endpoint is contacted.
 
 ## Mining (versionCode 64 / v4.0.0)

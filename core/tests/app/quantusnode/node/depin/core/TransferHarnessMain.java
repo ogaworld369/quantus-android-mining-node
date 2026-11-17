@@ -1404,12 +1404,11 @@ public final class TransferHarnessMain {
         check("oneshot: no receipt can be built",
                 throwsAny(() -> p.receiver.buildReceipt(p.deviceId, 1)));
         // E4: the receiver's record carries the confirmation
-        // number, equal to the value derived from the code.
+        // number, equal to the value derived from the package's
+        // confirm secret (v2 since v4.2.4, audit L-1).
         String recordedCode =
                 TransferState.stringOr(rec, "commit_code", null);
-        String expectedCode = TransferCommitCode.codeFor(
-                TransferCommitCode.deriveKey(ex.transferCode),
-                in.manifestHash);
+        String expectedCode = v2NumberOf(ex.packageFile, ex.transferCode);
         check("oneshot-e4: receiver record carries the "
                         + "confirmation number",
                 expectedCode != null && expectedCode.equals(recordedCode));
@@ -1517,9 +1516,7 @@ public final class TransferHarnessMain {
         p.receiver.completeIntake(in1.deviceId, in1.generation,
                 in1.packageSha256);
         p.receiver.confirmOneshot(p.deviceId, 1);
-        String code1 = TransferCommitCode.codeFor(
-                TransferCommitCode.deriveKey(ex1.transferCode),
-                in1.manifestHash);
+        String code1 = v2NumberOf(ex1.packageFile, ex1.transferCode);
         check("oneshot-e1: re-import of a consumed export refuses",
                 throwsAny(() -> p.receiver.intakePackage(
                         ex1.packageFile, ex1.transferCode)));
@@ -1637,9 +1634,7 @@ public final class TransferHarnessMain {
                 in.packageSha256);
         p.receiver.confirmOneshot(p.deviceId, 1);
         p.sender.closeOneshotHandover(p.deviceId,
-                TransferCommitCode.codeFor(
-                        TransferCommitCode.deriveKey(ex.transferCode),
-                        in.manifestHash));
+                v2NumberOf(ex.packageFile, ex.transferCode));
         // A forked sibling history of the same identity tries
         // to come back.
         File forkRoot = tmpDir("fork-sender");
@@ -2034,9 +2029,7 @@ public final class TransferHarnessMain {
         p.receiver.completeIntake(in1.deviceId, in1.generation,
                 in1.packageSha256);
         p.receiver.confirmOneshot(p.deviceId, 1);
-        String code1 = TransferCommitCode.codeFor(
-                TransferCommitCode.deriveKey(ex1.transferCode),
-                in1.manifestHash);
+        String code1 = v2NumberOf(ex1.packageFile, ex1.transferCode);
         p.clock.wall += 3600;
         TransferSender.ExportResult ex2 =
                 p.sender.exportPackageOneshotAgain(p.seed);
@@ -2099,9 +2092,7 @@ public final class TransferHarnessMain {
         p.receiver.completeIntake(in.deviceId, in.generation,
                 in.packageSha256);
         p.receiver.confirmOneshot(p.deviceId, 1);
-        String code = TransferCommitCode.codeFor(
-                TransferCommitCode.deriveKey(ex.transferCode),
-                in.manifestHash);
+        String code = v2NumberOf(ex.packageFile, ex.transferCode);
         p.sender.closeOneshotHandover(p.deviceId, code);
         check("f1: self-intake refuses after the S2 closure too",
                 throwsAny(() -> self.intakePackage(
@@ -2158,9 +2149,7 @@ public final class TransferHarnessMain {
         third.receiver.completeIntake(in2.deviceId, in2.generation,
                 in2.packageSha256);
         third.receiver.confirmOneshot(p.deviceId, 2);
-        String code2 = TransferCommitCode.codeFor(
-                TransferCommitCode.deriveKey(ex2.transferCode),
-                in2.manifestHash);
+        String code2 = v2NumberOf(ex2.packageFile, ex2.transferCode);
         onward.closeOneshotHandover(p.deviceId, code2);
         // The F5 vault state: the received copy's key is gone.
         p.receiverVault.delete(TransferVault.receiverKey(1));
@@ -2302,9 +2291,7 @@ public final class TransferHarnessMain {
         p.receiver.completeIntake(in.deviceId, in.generation,
                 in.packageSha256);
         p.receiver.confirmOneshot(p.deviceId, 1);
-        String code = TransferCommitCode.codeFor(
-                TransferCommitCode.deriveKey(ex.transferCode),
-                in.manifestHash);
+        String code = v2NumberOf(ex.packageFile, ex.transferCode);
         p.sender.closeOneshotHandover(p.deviceId, code);
         check("f5: the completed send awaits home-seed erasure",
                 p.deviceId.equals(TransferRemediation
@@ -2595,9 +2582,7 @@ public final class TransferHarnessMain {
         third.receiver.completeIntake(in2.deviceId, in2.generation,
                 in2.packageSha256);
         third.receiver.confirmOneshot(p.deviceId, 2);
-        String code2 = TransferCommitCode.codeFor(
-                TransferCommitCode.deriveKey(ex2.transferCode),
-                in2.manifestHash);
+        String code2 = v2NumberOf(ex2.packageFile, ex2.transferCode);
         onward.closeOneshotHandover(p.deviceId, code2);
         check("f8: the one-shot S2 closure erases the received copy",
                 !p.receiverVault.has(TransferVault.receiverKey(1)));
@@ -2830,9 +2815,7 @@ public final class TransferHarnessMain {
         third.receiver.completeIntake(in2.deviceId,
                 in2.generation, in2.packageSha256);
         third.receiver.confirmOneshot(p.deviceId, 2);
-        String code2 = TransferCommitCode.codeFor(
-                TransferCommitCode.deriveKey(ex2.transferCode),
-                in2.manifestHash);
+        String code2 = v2NumberOf(ex2.packageFile, ex2.transferCode);
         onward.closeOneshotHandover(p.deviceId, code2);
         File pRoot = TransferStore.stagingRoot(p.receiverRoot,
                 p.deviceId, 1, in.packageSha256);
@@ -3038,9 +3021,7 @@ public final class TransferHarnessMain {
         third.receiver.completeIntake(in2.deviceId,
                 in2.generation, in2.packageSha256);
         third.receiver.confirmOneshot(p.deviceId, 2);
-        String code2 = TransferCommitCode.codeFor(
-                TransferCommitCode.deriveKey(ex2.transferCode),
-                in2.manifestHash);
+        String code2 = v2NumberOf(ex2.packageFile, ex2.transferCode);
         onward.closeOneshotHandover(p.deviceId, code2);
         check("f10: the onward closure erased X's own copy",
                 !p.receiverVault.has(
@@ -3167,9 +3148,7 @@ public final class TransferHarnessMain {
         // closure's erasure must not take it.
         r.receiverVault.put(TransferVault.receiverKey(1),
                 seedY);
-        String rCode2 = TransferCommitCode.codeFor(
-                TransferCommitCode.deriveKey(rEx2.transferCode),
-                rIn2.manifestHash);
+        String rCode2 = v2NumberOf(rEx2.packageFile, rEx2.transferCode);
         rOnward.closeOneshotHandover(r.deviceId, rCode2);
         byte[] survivor = r.receiverVault.get(
                 TransferVault.receiverKey(1));
@@ -3445,6 +3424,292 @@ public final class TransferHarnessMain {
                         + "nothing",
                 !TransferStore.loadStaging(root)
                         .hasCommitKeyMaterial());
+    }
+
+    // ---------------- audit L-1: the v2 confirmation number (v4.2.4) ----
+
+    interface HarnessTest {
+        void run() throws Exception;
+    }
+
+    /** Run a test with this process's senders exporting exactly as a
+     *  pre-v4.2.4 build did (no commit_v; the confirmation key derived
+     *  from the transfer code). The code-derived key, its mandatory
+     *  presence at confirm (M3) and its re-presentation rescue (F7,
+     *  M11, L13) are paths for such packages — kept for handovers
+     *  already in flight — so their tests drive them with such
+     *  packages. */
+    private static void asPreV424Sender(HarnessTest t) throws Exception {
+        TransferSender.exportCommitVersion = 1;
+        try {
+            t.run();
+        } finally {
+            TransferSender.exportCommitVersion = 2;
+        }
+    }
+
+    /** SHA-256("easy-commit/v2" || secret), computed here with the
+     *  JDK's digest — independently of the code under test. */
+    private static byte[] v2KeyOf(byte[] confirmSecret) throws Exception {
+        java.security.MessageDigest md =
+                java.security.MessageDigest.getInstance("SHA-256");
+        md.update("easy-commit/v2".getBytes(StandardCharsets.UTF_8));
+        md.update(confirmSecret);
+        return md.digest();
+    }
+
+    /** The confirmation number a v4.2.4 receiver shows for a v2
+     *  package: the confirm secret read out of the package with its
+     *  transfer code, the v2 key derived independently, the number
+     *  formed by the (unchanged) v1 arithmetic. Read the package
+     *  before any re-export of its generation overwrites the file. */
+    private static String v2NumberOf(File packageFile, String transferCode)
+            throws Exception {
+        TransferPackage.Envelope env = TransferPackage.parseEnvelope(
+                Files.readAllBytes(packageFile.toPath()));
+        TransferCodec.PayloadReader r = new TransferCodec.PayloadReader(
+                TransferPackage.decryptPayload(env, transferCode));
+        r.next(); // "seed"
+        TransferCodec.PayloadEntry secret = r.next();
+        if (!"confirm_secret".equals(secret.name)) {
+            throw new IllegalStateException("unexpected payload order");
+        }
+        return TransferCommitCode.codeFor(v2KeyOf(secret.content),
+                TransferCommitCode.manifestHash(env.manifest.raw));
+    }
+
+    /** The pre-v4.2.4 number for a package: keyed by the transfer
+     *  code alone. */
+    private static String v1NumberOf(File packageFile, String transferCode)
+            throws Exception {
+        TransferPackage.Envelope env = TransferPackage.parseEnvelope(
+                Files.readAllBytes(packageFile.toPath()));
+        return TransferCommitCode.codeFor(
+                TransferCommitCode.deriveKey(transferCode),
+                TransferCommitCode.manifestHash(env.manifest.raw));
+    }
+
+    private static boolean manifestRefused(Map<String, Object> m) {
+        try {
+            TransferPackage.validateManifest(m);
+            return false;
+        } catch (IllegalArgumentException e) {
+            return true;
+        }
+    }
+
+    /** v4.2.4, audit L-1: the easy-handover number is keyed by the
+     *  128-bit confirm secret both sides hold, not by the transfer
+     *  code — so the number shown on screen is no longer a fast test
+     *  for the code. Packages from older senders (no commit_v) keep
+     *  the v1 number, for handovers already in flight. */
+    private static void testL1CommitV2() throws Exception {
+        byte[] secret = new byte[16];
+        for (int i = 0; i < secret.length; i++) {
+            secret[i] = (byte) (i * 7 + 1);
+        }
+        check("l1: the v2 key is SHA-256(\"easy-commit/v2\" || secret)",
+                Arrays.equals(v2KeyOf(secret),
+                        TransferCommitCode.deriveKeyFromConfirmSecret(secret)));
+
+        Pair p = newPair(false);
+        TransferSender.ExportResult ex = p.sender.exportPackageOneshot(p.seed);
+        Map<String, Object> mf = TransferPackage.parseEnvelope(
+                Files.readAllBytes(ex.packageFile.toPath())).manifest.raw;
+        check("l1: new packages are marked commit_v 2",
+                Long.valueOf(2).equals(mf.get("commit_v")));
+        String v2 = v2NumberOf(ex.packageFile, ex.transferCode);
+        String v1 = v1NumberOf(ex.packageFile, ex.transferCode);
+        check("l1: the v2 number differs from the v1 number of the same"
+                + " package", !v2.equals(v1));
+        TransferReceiver.IntakeResult in =
+                p.receiver.stagePackage(ex.packageFile, ex.transferCode);
+        p.receiver.completeIntake(in.deviceId, in.generation,
+                in.packageSha256);
+        p.receiver.confirmOneshot(p.deviceId, 1);
+        String shown = TransferState.stringOr(TransferState.load(
+                p.receiverRoot).receiver(p.deviceId, 1), "commit_code", null);
+        check("l1: the receiver shows the v2 number for a v2 package",
+                v2.equals(shown));
+        check("l1: the true transfer code does not reproduce the shown"
+                        + " number - a code-only (v1) filter rejects it",
+                !TransferCommitCode.codeFor(
+                        TransferCommitCode.deriveKey(ex.transferCode),
+                        in.manifestHash).equals(shown));
+        check("l1: the sender refuses the v1 number for a v2 export",
+                throwsAny(() -> p.sender.closeOneshotHandover(
+                        p.deviceId, v1)));
+        p.sender.closeOneshotHandover(p.deviceId, shown);
+        check("l1: the sender closes with the v2 number",
+                TransferState.load(p.senderRoot).sender(p.deviceId) == null);
+
+        Pair q = newPair(false);
+        TransferSender.ExportResult qx = q.sender.exportPackageOneshot(q.seed);
+        String qv2 = v2NumberOf(qx.packageFile, qx.transferCode);
+        TransferReceiver.IntakeResult qin =
+                q.receiver.stagePackage(qx.packageFile, qx.transferCode);
+        q.receiver.completeIntake(qin.deviceId, qin.generation,
+                qin.packageSha256);
+        File qRoot = TransferStore.stagingRoot(q.receiverRoot,
+                q.deviceId, 1, qin.packageSha256);
+        TransferStore.StagingRecord qsr = TransferStore.loadStaging(qRoot);
+        qsr.commitKeyB64 = null;
+        qsr.commitKeyWrappedB64 = null;
+        TransferStore.saveStaging(qRoot, qsr);
+        q.receiver.confirmOneshot(q.deviceId, 1);
+        check("l1: a v2 staging needs no code-derived key - the number"
+                        + " comes from its wrapped confirm secret",
+                qv2.equals(TransferState.stringOr(TransferState.load(
+                        q.receiverRoot).receiver(q.deviceId, 1),
+                        "commit_code", null)));
+
+        Pair o = newPair(false);
+        TransferSender.ExportResult ox;
+        TransferSender.exportCommitVersion = 1;
+        try {
+            ox = o.sender.exportPackageOneshot(o.seed);
+        } finally {
+            TransferSender.exportCommitVersion = 2;
+        }
+        Map<String, Object> omf = TransferPackage.parseEnvelope(
+                Files.readAllBytes(ox.packageFile.toPath())).manifest.raw;
+        check("l1: an older sender's package carries no commit_v",
+                !omf.containsKey("commit_v"));
+        String ov1 = v1NumberOf(ox.packageFile, ox.transferCode);
+        TransferReceiver.IntakeResult oin =
+                o.receiver.stagePackage(ox.packageFile, ox.transferCode);
+        o.receiver.completeIntake(oin.deviceId, oin.generation,
+                oin.packageSha256);
+        o.receiver.confirmOneshot(o.deviceId, 1);
+        check("l1: a v1 package still stages and shows the v1 number",
+                ov1.equals(TransferState.stringOr(TransferState.load(
+                        o.receiverRoot).receiver(o.deviceId, 1),
+                        "commit_code", null)));
+        o.sender.closeOneshotHandover(o.deviceId, ov1);
+        check("l1: and that older handover still closes with it",
+                TransferState.load(o.senderRoot).sender(o.deviceId) == null);
+
+        Map<String, Object> extra = new LinkedHashMap<>(mf);
+        extra.put("extra", 1L);
+        check("l1: an unknown extra manifest key is still rejected",
+                manifestRefused(extra));
+        Map<String, Object> three = new LinkedHashMap<>(mf);
+        three.put("commit_v", 3L);
+        Map<String, Object> text = new LinkedHashMap<>(mf);
+        text.put("commit_v", "2");
+        check("l1: commit_v must be the integer 2",
+                manifestRefused(three) && manifestRefused(text));
+        check("l1: a manifest with commit_v 2, and one without, validate",
+                !manifestRefused(new LinkedHashMap<>(mf))
+                        && !manifestRefused(new LinkedHashMap<>(omf)));
+    }
+
+    /** v4.2.4, audit L-10: transfer inputs are capped at 16 MiB
+     *  (real packages are ~0.25 MB; ~840 bytes per checkpoint),
+     *  checked before anything is read; a sender never writes a
+     *  package above that cap; and the app's import copies the
+     *  picked stream into the input slot under the cap without
+     *  holding it in memory. */
+    private static void testL10TransferInputCap() throws Exception {
+        long cap = 16L * 1024 * 1024;
+        Pair p = newPair(false);
+        File dir = tmpDir("l10");
+        File over = new File(dir, "over.json");
+        try (java.io.RandomAccessFile raf =
+                     new java.io.RandomAccessFile(over, "rw")) {
+            raf.setLength(cap + 1);
+        }
+        String overMsg = null;
+        try {
+            p.receiver.stagePackage(over, "AAAA-BBBB-CCCC");
+        } catch (IllegalArgumentException e) {
+            overMsg = e.getMessage();
+        }
+        check("l10: a file one byte over 16 MiB is refused before reading",
+                overMsg != null && overMsg.contains("16 MiB"));
+        File at = new File(dir, "at.json");
+        try (java.io.RandomAccessFile raf =
+                     new java.io.RandomAccessFile(at, "rw")) {
+            raf.setLength(cap);
+        }
+        String atMsg = null;
+        try {
+            p.receiver.stagePackage(at, "AAAA-BBBB-CCCC");
+        } catch (Exception e) {
+            atMsg = String.valueOf(e.getMessage());
+        }
+        check("l10: a file of exactly 16 MiB passes the size gate (and fails"
+                        + " later, as the malformed package it is)",
+                atMsg != null && !atMsg.contains("16 MiB"));
+        //noinspection ResultOfMethodCallIgnored
+        over.delete();
+        //noinspection ResultOfMethodCallIgnored
+        at.delete();
+
+        boolean atCapOk = true;
+        try {
+            TransferPackage.requireWithinCap(cap);
+        } catch (IllegalStateException e) {
+            atCapOk = false;
+        }
+        String senderMsg = null;
+        try {
+            TransferPackage.requireWithinCap(cap + 1);
+        } catch (IllegalStateException e) {
+            senderMsg = e.getMessage();
+        }
+        check("l10: a sender's package at the cap is written, one byte over"
+                        + " is not",
+                atCapOk && senderMsg != null && senderMsg.contains("16 MiB"));
+
+        File slot = new File(dir, "transfer-input.bin");
+        byte[] ten = "0123456789".getBytes(StandardCharsets.UTF_8);
+        long n = TransferIo.copyToFileCapped(
+                new java.io.ByteArrayInputStream(ten), slot, 10);
+        check("l10 copy: a stream within the cap lands in the slot whole",
+                n == 10 && Arrays.equals(ten, Files.readAllBytes(slot.toPath())));
+        boolean capped = false;
+        try {
+            TransferIo.copyToFileCapped(new java.io.ByteArrayInputStream(
+                    "0123456789A".getBytes(StandardCharsets.UTF_8)), slot, 10);
+        } catch (TransferIo.CapExceededException e) {
+            capped = true;
+        }
+        String[] left = dir.list();
+        boolean noTemp = true;
+        for (String name : left == null ? new String[0] : left) {
+            if (name.startsWith("transfer-input.bin.")) {
+                noTemp = false;
+            }
+        }
+        check("l10 copy: one byte over the cap aborts, the slot keeps its"
+                        + " previous content, and no temp file is left",
+                capped && Arrays.equals(ten, Files.readAllBytes(slot.toPath()))
+                        && noTemp);
+        java.util.concurrent.atomic.AtomicLong served =
+                new java.util.concurrent.atomic.AtomicLong();
+        java.io.InputStream endless = new java.io.InputStream() {
+            @Override
+            public int read() {
+                served.incrementAndGet();
+                return 'x';
+            }
+
+            @Override
+            public int read(byte[] b, int off, int len) {
+                java.util.Arrays.fill(b, off, off + len, (byte) 'x');
+                served.addAndGet(len);
+                return len;
+            }
+        };
+        boolean endlessCapped = false;
+        try {
+            TransferIo.copyToFileCapped(endless, slot, 100_000);
+        } catch (TransferIo.CapExceededException e) {
+            endlessCapped = true;
+        }
+        check("l10 copy: an endless stream is cut off just past the cap",
+                endlessCapped && served.get() <= 100_000 + 64 * 1024);
     }
 
     /** Audit L15 (predicate level): the signing-time seed
@@ -4057,9 +4322,7 @@ public final class TransferHarnessMain {
         third.receiver.completeIntake(in2.deviceId,
                 in2.generation, in2.packageSha256);
         third.receiver.confirmOneshot(p.deviceId, 2);
-        String code2 = TransferCommitCode.codeFor(
-                TransferCommitCode.deriveKey(ex2.transferCode),
-                in2.manifestHash);
+        String code2 = v2NumberOf(ex2.packageFile, ex2.transferCode);
         onward.closeOneshotHandover(p.deviceId, code2);
         // Y arrives strict at generation 1 and confirms;
         // its plan needed the seed (the slot was empty), so
@@ -4147,9 +4410,7 @@ public final class TransferHarnessMain {
         third.receiver.completeIntake(in2.deviceId,
                 in2.generation, in2.packageSha256);
         third.receiver.confirmOneshot(p.deviceId, 2);
-        String code2 = TransferCommitCode.codeFor(
-                TransferCommitCode.deriveKey(ex2.transferCode),
-                in2.manifestHash);
+        String code2 = v2NumberOf(ex2.packageFile, ex2.transferCode);
         onward.closeOneshotHandover(p.deviceId, code2);
         TransferSender.ExportResult yEx =
                 ySender.exportPackageOneshot(seedY);
@@ -5007,21 +5268,23 @@ public final class TransferHarnessMain {
         testOneshotF3AdvancingClock();
         testF1SelfImportRefusal();
         testF5RecoveryTolerance();
-        testM3MissingCommitKey();
+        asPreV424Sender(TransferHarnessMain::testM3MissingCommitKey);
         testM4SameIdentityFreeze();
         testTracesAndRemediation();
         testS07SentOutErasureCandidates();
         testF6MarkerScope();
         testM8TraceConsistency();
-        testF7CommitKeyRescueLedger();
+        asPreV424Sender(TransferHarnessMain::testF7CommitKeyRescueLedger);
         testF8ReceiverKeyErasureOnOnwardSend();
         testF9JournalPathDecision();
-        testM11RescueVerifiesCode();
+        asPreV424Sender(TransferHarnessMain::testM11RescueVerifiesCode);
         testM10SupersededSweep();
         testF10SweepDerivationProof();
         testF11SlotLineageCheck();
         testSeedDerivesIdentityPredicate();
-        testL13RescueSizeCap();
+        asPreV424Sender(TransferHarnessMain::testL13RescueSizeCap);
+        testL10TransferInputCap();
+        testL1CommitV2();
         testL15SigningSeedCheck();
         testL16ErasureStageMachine();
         testL17ErasureRecordParse();

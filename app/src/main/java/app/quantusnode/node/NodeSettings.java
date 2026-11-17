@@ -11,9 +11,10 @@ import android.content.SharedPreferences;
  *     node name and its live status public information — anyone can
  *     see them at telemetry.quantus.com. The default never announces;
  *     the choice, and what it reveals, belong to the user.
- *   - display name: the value passed to the node as --name. Empty
- *     means the generic default, which identifies the app — never the
- *     device or the person.
+ *   - display name: the value passed to the node as --name while
+ *     telemetry is on (v4.2.4, audit L-4; see the paragraph at the
+ *     end). Empty means the generic default, which identifies the
+ *     app — never the device or the person.
  *   - UI language: "" means "follow the device settings" (the
  *     default); otherwise one of the language tags in
  *     {@link StringsTable#TAGS}. A display preference only — it is
@@ -37,9 +38,16 @@ import android.content.SharedPreferences;
  * Both live in the app's private SharedPreferences and are read by
  * {@link NodeService} at launch time only, so changing them never
  * affects a node that is already running (and never restarts one
- * silently). The app itself transmits these settings nowhere; the
- * display name leaves the phone only as part of the node's telemetry,
- * and only when the opt-in is on.
+ * silently). The app itself transmits these settings nowhere.
+ *
+ * Where the display name goes (v4.2.4, audit L-4): whatever the node
+ * receives as --name it also puts into its identify agent string,
+ * which every connected peer receives — not only into telemetry. Until
+ * v4.2.3 this comment said the name left the phone only through
+ * telemetry, which was false: the name was passed on every launch. The
+ * launch now passes the display name only while telemetry is on
+ * ({@link #launchNodeName}); with telemetry off the node runs under
+ * the generic default name, which is all its peers then see.
  */
 public final class NodeSettings {
 
@@ -83,9 +91,12 @@ public final class NodeSettings {
      * editor refuses a save whose normalized name exceeds it (it
      * never truncates). It is a validation limit, not a step of the
      * normalization itself (versionCode 27, external audit of
-     * v0.2.0).
+     * v0.2.0). Since v4.2.4 (audit L-9) it is the node's own: the
+     * node refuses a name of 64 characters or more, so 63 is the
+     * longest that starts (64 used to be accepted here and then
+     * stopped every launch).
      */
-    private static final int MAX_NAME_CHARS = 64;
+    private static final int MAX_NAME_CHARS = 63;
 
     /**
      * Cap for the name as stored (versionCode 21, audit
@@ -379,9 +390,11 @@ public final class NodeSettings {
     /**
      * THE display-name normalization (versionCode 27, external
      * audit of v0.2.0): control and invisible-format characters
-     * stripped, trimmed, leading '-' runs stripped (see the F-6 /
-     * F11 rules below). Returns "" when nothing usable remains —
-     * the unset case, and the smuggled-dash case — and the caller
+     * stripped — and since v4.2.4 (audit L-9) the characters the
+     * node refuses ('\', '.', '@') with them — trimmed, leading '-'
+     * runs stripped (see the F-6 / F11 rules below). Returns "" when
+     * nothing usable remains — the unset case, the smuggled-dash
+     * case, and a name the node would read as a URL — and the caller
      * (the editor's preview, {@link #effectiveNodeNameForRaw})
      * presents that as the generic default name.
      *
@@ -409,7 +422,15 @@ public final class NodeSettings {
         StringBuilder sb = new StringBuilder(raw.length());
         for (int i = 0; i < raw.length(); i++) {
             char c = raw.charAt(i);
-            if (!Character.isISOControl(c) && !isInvisibleFormatChar(c)) {
+            // v4.2.4 (audit L-9): the characters the node refuses
+            // anywhere in a name ('\', '.', '@') are dropped here, in
+            // the same pass as the invisible ones — before the trim
+            // and the dash rules below, so a dropped character can
+            // never hide a dash run. The editor's preview shows the
+            // result ("Saved as …"), as it does for every other
+            // character this normalization removes.
+            if (!Character.isISOControl(c) && !isInvisibleFormatChar(c)
+                    && !isNodeForbiddenChar(c)) {
                 sb.append(c);
             }
         }
@@ -450,12 +471,75 @@ public final class NodeSettings {
         if (stripPasses > 1) {
             return "";
         }
+        // v4.2.4 (audit L-9): a name the node reads as a URL
+        // ("http:" / "https:" at its start, case-sensitive like the
+        // node's rule) is not a name it accepts; like the smuggled
+        // dash run above, it yields the default name rather than a
+        // shortened remainder.
+        if (isUrlPrefixed(s)) {
+            return "";
+        }
         return s;
     }
 
     /** The display-name cap, in Unicode code points after normalizing. */
     public static int nameLimitCodePoints() {
         return MAX_NAME_CHARS;
+    }
+
+    /**
+     * The node's own name rule (v4.2.4, audit L-9), mirrored exactly
+     * from is_node_name_valid (client/cli/src/commands/run_cmd.rs):
+     * not empty; fewer than 64 characters, counted as Unicode scalar
+     * values (Rust's chars(), Java's code points); none of '\', '.'
+     * and '@'; and no leading "http:" or "https:" — matched
+     * case-sensitively, as the node's regex is, so "HTTP:" passes. A
+     * name that fails it makes the node refuse to start ("Invalid node
+     * name"), on every launch, until the name is changed.
+     */
+    public static boolean nodeAcceptsName(String name) {
+        if (name == null || name.isEmpty()) {
+            return false;
+        }
+        if (name.codePointCount(0, name.length()) > MAX_NAME_CHARS) {
+            return false;
+        }
+        if (name.indexOf('\\') >= 0 || name.indexOf('.') >= 0
+                || name.indexOf('@') >= 0) {
+            return false;
+        }
+        return !isUrlPrefixed(name);
+    }
+
+    private static boolean isUrlPrefixed(String s) {
+        return s.startsWith("http:") || s.startsWith("https:");
+    }
+
+    /** True for the characters the node refuses anywhere in a name. */
+    private static boolean isNodeForbiddenChar(char c) {
+        return c == '\\' || c == '.' || c == '@';
+    }
+
+    /**
+     * The name a launch passes as --name (v4.2.4, audit L-4 and L-9):
+     * the display name only while telemetry is on — the node puts its
+     * --name into the identify agent string every connected peer
+     * receives, not only into telemetry — and the generic default
+     * otherwise. A display name the node's own rule would refuse
+     * (a value stored before v4.2.4, say) is replaced by the default
+     * rather than passed: passed, it would stop the node.
+     */
+    public static String launchNodeNameFor(boolean telemetry, String raw) {
+        if (!telemetry) {
+            return DEFAULT_NODE_NAME;
+        }
+        String name = effectiveNodeNameForRaw(raw);
+        return nodeAcceptsName(name) ? name : DEFAULT_NODE_NAME;
+    }
+
+    /** {@link #launchNodeNameFor} for the saved settings. */
+    public static String launchNodeName(Context ctx) {
+        return launchNodeNameFor(telemetryEnabled(ctx), nodeNameRaw(ctx));
     }
 
     /**

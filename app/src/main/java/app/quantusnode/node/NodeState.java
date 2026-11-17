@@ -150,6 +150,22 @@ public final class NodeState {
      * whenever no miner belongs to the running node.
      */
     public volatile MiningLogic.MinerView minerView = null;
+    /**
+     * The most recent node process launched with mining reported
+     * that it could not open its miner endpoint ("Failed to start
+     * miner server", v4.2.4, audit L-7). The node ends itself right
+     * after that report, which takes its miner view with it, so the
+     * fact is kept here — past the exit, until the next launch —
+     * for the diagnostic summary's fixed "Miner endpoint" line.
+     */
+    public volatile boolean minerEndpointFailed = false;
+    /**
+     * "host:port" of the RPC endpoint the running node process
+     * reported and the poller polls (v4.2.4, audits M-1 and V4-7),
+     * shown in Node details; null before the node has reported it
+     * and once that process has exited.
+     */
+    public volatile String rpcEndpoint = null;
     /** Exit code of the last node process run, null if it never ran/exited. */
     public volatile Integer lastExitCode = null;
     /** Last human-readable note (startup error etc.), may be null. */

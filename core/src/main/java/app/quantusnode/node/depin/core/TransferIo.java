@@ -94,8 +94,8 @@ public final class TransferIo {
 
     /** Read a whole file, refusing anything over {@code cap}
      *  bytes. The length is checked BEFORE the content is read
-     *  (design section 4.3 step 1: the 512 MB package cap is
-     *  enforced before the whole input is in memory). */
+     *  (design section 4.3 step 1: the package cap — 16 MiB since
+     *  v4.2.4 — is enforced before the whole input is in memory). */
     public static byte[] readAll(File f, long cap) throws IOException {
         long len = f.length();
         if (len > cap) {
@@ -163,6 +163,64 @@ public final class TransferIo {
             }
         }
         if (parent != null) fsyncDir(parent);
+    }
+
+    /** {@link #copyToFileCapped}'s input ran past its cap. */
+    public static final class CapExceededException extends IOException {
+        public CapExceededException(String msg) {
+            super(msg);
+        }
+    }
+
+    /**
+     * Stream {@code in} into {@code target}, refusing more than
+     * {@code cap} bytes (v4.2.4, audit L-10): the copy goes through a
+     * unique temp file in the target's directory with a running byte
+     * count, is fsynced, and replaces the target by rename only when
+     * the whole input fit. Past the cap the copy stops at once (at
+     * most one read buffer beyond it), the temp file is removed and
+     * the target keeps its previous content. Only one buffer is ever
+     * held in memory — the point, for the app's import of a picked
+     * file, which used to buffer the whole pick in the main process.
+     * The caller closes {@code in}.
+     *
+     * @return the number of bytes copied
+     * @throws CapExceededException when the input exceeds the cap
+     */
+    public static long copyToFileCapped(InputStream in, File target,
+                                        long cap) throws IOException {
+        File parent = target.getAbsoluteFile().getParentFile();
+        if (parent != null) parent.mkdirs();
+        File tmp = new File(parent, target.getName() + "."
+                + Long.toHexString(System.nanoTime()) + "-"
+                + Thread.currentThread().getId() + ".tmp");
+        boolean renamed = false;
+        long total = 0;
+        try {
+            try (FileOutputStream out = new FileOutputStream(tmp)) {
+                byte[] buf = new byte[64 * 1024];
+                int n;
+                while ((n = in.read(buf)) >= 0) {
+                    total += n;
+                    if (total > cap) {
+                        throw new CapExceededException(
+                                "input exceeds cap: " + cap);
+                    }
+                    out.write(buf, 0, n);
+                }
+                out.getFD().sync();
+            }
+            if (!tmp.renameTo(target)) {
+                throw new IOException("rename failed: " + tmp + " -> " + target);
+            }
+            renamed = true;
+        } finally {
+            if (!renamed && tmp.exists()) {
+                tmp.delete();
+            }
+        }
+        if (parent != null) fsyncDir(parent);
+        return total;
     }
 
     /** Write a plain file and fsync it (for staged payload

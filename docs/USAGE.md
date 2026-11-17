@@ -4,7 +4,7 @@
 
 This app runs a **full node** for Quantus Network (QTC mainnet) on an Android phone. It syncs the chain, verifies every block itself, and relays data to peers. By default it runs as a non-validator; it can also mine, as an option that is off by default (see **Mining** below). It has **no wallet** and never touches seed phrases — the one secret it can hold is the mining rewards Inner Hash you paste in yourself.
 
-> Status: v4.2.3 released (2026-11-17), the current release — a maintenance release with rebuilt bundled binaries: the node's miner endpoint now listens on loopback only, so the port the mining confirmation mentions is reachable only from within this device; both binaries carry dependency security updates, and the bundled CA roots are refreshed (v4.2.2, released 2026-11-16, was the polish release for the remaining items of the v4.2.0 external audit). The signed APK is published on [GitHub Releases](https://github.com/ogaworld369/quantus-android-mining-node/releases) with a SHA-256 checksum. Earlier test builds were shared directly by the maintainer.
+> Status: v4.2.4 released (2026-11-17), the current release — the security fix release for the external audit of v4.2.3: the app now adopts the node's RPC address and identity from the node's own startup output and verifies them on every poll, the display name is passed to the node only while telemetry is on, mDNS and the metrics endpoint are off, and the handover confirmation number is keyed with the handover's own secret (v4.2.3, released 2026-11-17, was the maintenance release with rebuilt bundled binaries). The signed APK is published on [GitHub Releases](https://github.com/ogaworld369/quantus-android-mining-node/releases) with a SHA-256 checksum. Earlier test builds were shared directly by the maintainer.
 
 ## Requirements
 
@@ -42,15 +42,15 @@ The app has three main tabs along the bottom — Home, Connection, and Membershi
 ## Settings
 
 - **Appear in telemetry** (off by default) — when on, your node name and live status become publicly visible in the official telemetry at telemetry.quantus.com. Turn it on only if you want to be listed. Applies from the next node start (Stop → Start).
-- **Display name** — the name your node uses (also shown in telemetry if enabled), edited in a dialog. Leave blank to use the default name `quantus-android-node`. Applies from the next node start.
+- **Display name** — the name your node shows in telemetry, edited in a dialog. The node uses it only while **Appear in telemetry** is on (connected peers then see it too); with telemetry off, the node runs under the default name `quantus-android-node`. Leave blank to use the default name. Applies from the next node start.
 - **Language** — follow the device setting, or pick one of 9 languages (Japanese, English, Simplified Chinese, Spanish, Hindi, Arabic, Korean, Russian, French). Applies immediately.
 - **Record my activity (DePIN)** (off by default) — when on, the app keeps a signed record of the node's uptime and relay work on this device (a checkpoint every 10 minutes). Nothing is sent anywhere by itself; from Settings you can export the record as a proof bundle file and share it yourself. Turning it off stops the recording; the record stays on the device
 - **Lock settings** — locks the settings above (telemetry, display name, language, and activity recording) and the mining settings (the mining switch and the Inner Hash) so they cannot be changed by accident while the phone sits there running the node. It is a mis-tap guard only: there is no PIN, and starting or stopping the node is never locked. Turn **Lock settings** off when you want to change settings again.
 - **Mining** (off by default) — the node can also mine on this device, with the bundled official miner. It needs a rewards Inner Hash first; see **Mining (optional)** below.
 
-Settings never restart the node by themselves. If you change telemetry or the display name while the node is running, the changed item is marked in Settings as not yet applied, and Home shows a link to review the pending settings; the change takes effect at the next node start (Stop → Start).
+Settings never restart the node by themselves. If you change telemetry — or, while telemetry is on, the display name — while the node is running, the changed item is marked in Settings as not yet applied, and Home shows a link to review the pending settings; the change takes effect at the next node start (Stop → Start).
 
-**Share log** lives under **Node details → Diagnostics**: it shares the node log as text, and is what to attach when you report a problem. Before posting a log in a public place, check its contents first: it can include your node's public IP address and peer information. The share dialog opens with a summary of the session, and its masking (on by default) covers the display name, this device's own interface addresses and app-private paths; the outward address the node learns through its peers is not masked.
+**Share log** lives under **Node details → Diagnostics**: it shares the node log as text, and is what to attach when you report a problem. Before posting a log in a public place, check its contents first: it can include your node's public IP address and peer information. The share dialog opens with a summary of the session, and its masking (on by default) covers the display name, app-private paths and the IP addresses in the log: this device's own interface addresses, the outward address the node learns through its peers, and peers' addresses (loopback addresses stay readable).
 
 ## Storage
 
@@ -60,7 +60,7 @@ Its one action, **Delete the chain database and resync**, deletes only the chain
 
 ## Price
 
-Home shows the current QTC price, which the app fetches from **CoinGecko** (api.coingecko.com) about once an hour. Fetching is **on by default**; the switch is in the price sheet (tap the price on Home) and under **Settings → Information from outside**. A fetch sends only the price query — no node information, member number or records are ever sent — but CoinGecko can see this device's IP address, as any server you connect to can. With the switch off, nothing is fetched: the price row shows "Off" and the sheet shows a dash — even if a price was fetched before.
+Home shows the current QTC price, which the app fetches from **CoinGecko** (api.coingecko.com) about once an hour. Fetching is **on by default**; the switch is in the price sheet (tap the price on Home) and under **Settings → Information from outside**. A fetch sends only the price query and a User-Agent naming the app and its version (`QuantusNode/<version>`) — no node information, member number or records are ever sent — but CoinGecko can see this device's IP address, as any server you connect to can. With the switch off, nothing is fetched: the price row shows "Off" and the sheet shows a dash — even if a price was fetched before.
 
 ## Mining (optional)
 
@@ -95,6 +95,8 @@ Your DePIN identity and its record can move to a new phone. Open **Settings → 
 4. The new device then shows an 8-digit **confirmation number**. On the old device, tap **Enter the confirmation number: erase this device's key** and enter it — the old key is erased only when the number matches. Afterwards, delete the handover file wherever it still sits.
 
 Until step 4 is done, two copies of the identity exist. **Treat the handover file like a key**: it holds the identity seed encrypted with the transfer code, so anyone who has both the file and the code can take over the identity and its whole history. Keep the two apart where you can, and never post either in a public place. If the file never reached the new device, **Cancel the simple handover** on the old device lets recording resume there — but never cancel once the new device has imported it.
+
+Two things to know before a handover: both devices need v4.2.4 or later (an older version cannot read the new package), and a handover package is limited to 16 MiB — about 19,900 checkpoints. If your history grows past that, the export will say so rather than produce a file the new device would refuse.
 
 Under **Other actions**, the same page also offers the stricter step-by-step transfer: instead of the single confirmation number, the two devices exchange a staging notice, a confirmation permit, a receipt and a completion acknowledgement, one file at a time.
 

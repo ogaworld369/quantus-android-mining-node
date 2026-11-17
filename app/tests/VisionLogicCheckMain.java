@@ -1,4 +1,6 @@
 import app.quantusnode.node.DiagShare;
+import app.quantusnode.node.NodeLaunch;
+import app.quantusnode.node.NodeSettings;
 import app.quantusnode.node.PriceLogic;
 import app.quantusnode.node.UiLogic;
 import app.quantusnode.node.depin.DepinGateVerdict;
@@ -67,11 +69,18 @@ public final class VisionLogicCheckMain {
         statusMerge();
         presentedState();
         diagPriceLines();
+        diagLogStatistics();
+        diagAddressMasking();
+        nameRules();
+        launchName();
+        launchCommand();
+        rpcNoteLine();
         gateVerdict();
         userIntent();
         try {
             attemptLogRules();
             attemptLogH04();
+            attemptBudgetRound();
             tickBreakerRules();
         } catch (Exception e) {
             failed++;
@@ -940,6 +949,297 @@ public final class VisionLogicCheckMain {
     // legacy "ClassName: message" value to the class name,
     // so values written by older builds are safe too.
 
+    // ---------------- display name and launch (v4.2.4) ----
+
+    private static String repeatCh(String s, int n) {
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < n; i++) {
+            sb.append(s);
+        }
+        return sb.toString();
+    }
+
+    /** Audit L-9: the node's own is_node_name_valid
+     *  (client/cli/src/commands/run_cmd.rs) — not empty, fewer than
+     *  64 chars (Unicode scalar values), none of \ . @, no leading
+     *  "http:" / "https:" (case-sensitive). */
+    private static void nameRules() {
+        String n63 = repeatCh("a", 63);
+        String n64 = repeatCh("a", 64);
+        check("name rule: 63 characters pass", NodeSettings.nodeAcceptsName(n63));
+        check("name rule: 64 characters stop the node",
+                !NodeSettings.nodeAcceptsName(n64));
+        String emoji62 = repeatCh("a", 62) + "🥇";
+        check("name rule: characters are code points (a surrogate pair is one)",
+                NodeSettings.nodeAcceptsName(emoji62)
+                        && !NodeSettings.nodeAcceptsName(emoji62 + "b"));
+        check("name rule: each forbidden character stops the node",
+                !NodeSettings.nodeAcceptsName("alice.home")
+                        && !NodeSettings.nodeAcceptsName("me@phone")
+                        && !NodeSettings.nodeAcceptsName("back\\slash"));
+        check("name rule: the http: and https: prefixes stop the node",
+                !NodeSettings.nodeAcceptsName("http:visitme")
+                        && !NodeSettings.nodeAcceptsName("https:visitme")
+                        && !NodeSettings.nodeAcceptsName("http://visitme"));
+        check("name rule: the prefixes are case-sensitive, as the node's are",
+                NodeSettings.nodeAcceptsName("HTTP:visitme")
+                        && NodeSettings.nodeAcceptsName("Https:visitme"));
+        check("name rule: a prefix elsewhere, or a near miss, passes",
+                NodeSettings.nodeAcceptsName("xhttp:visit")
+                        && NodeSettings.nodeAcceptsName("httpx:visit")
+                        && NodeSettings.nodeAcceptsName("www")
+                        && NodeSettings.nodeAcceptsName("short name"));
+        check("name rule: empty stops the node",
+                !NodeSettings.nodeAcceptsName("")
+                        && !NodeSettings.nodeAcceptsName(null));
+        check("name rule: the default name passes",
+                NodeSettings.nodeAcceptsName(NodeSettings.DEFAULT_NODE_NAME));
+
+        check("name editor: the limit is the node's (63)",
+                NodeSettings.nameLimitCodePoints() == 63
+                        && UiLogic.nameSaveable(n63)
+                        && !UiLogic.nameSaveable(n64));
+        check("name editor: forbidden characters are dropped, and the preview"
+                        + " says so",
+                "alicehome".equals(NodeSettings.normalizeNodeName("alice.home"))
+                        && "mephone".equals(NodeSettings.normalizeNodeName("me@phone"))
+                        && "backslash".equals(
+                        NodeSettings.normalizeNodeName("back\\slash"))
+                        && "alicehome".equals(UiLogic.nameSavedPreview("alice.home"))
+                        && UiLogic.nameSaveable("alice.home"));
+        check("name editor: a URL-like name normalizes to the default",
+                "".equals(NodeSettings.normalizeNodeName("http://visit.me"))
+                        && "".equals(NodeSettings.normalizeNodeName("https:x"))
+                        && NodeSettings.DEFAULT_NODE_NAME.equals(
+                        UiLogic.nameSavedPreview("https:x")));
+        check("name editor: a dot cannot hide a smuggled dash run",
+                "".equals(NodeSettings.normalizeNodeName("- .-help")));
+        check("name editor: the saved name always passes the node's rules",
+                NodeSettings.nodeAcceptsName(
+                        UiLogic.nameSavedPreview("a.b@c\\d"))
+                        && NodeSettings.nodeAcceptsName(
+                        UiLogic.nameSavedPreview(" -http:x"))
+                        && NodeSettings.nodeAcceptsName(
+                        UiLogic.nameSavedPreview(n63 + ".")));
+    }
+
+    /** Audit L-4 (name only with telemetry) and L-9 (fallback). */
+    private static void launchName() {
+        check("launch name: with telemetry off the node gets the default",
+                NodeSettings.DEFAULT_NODE_NAME.equals(
+                        NodeSettings.launchNodeNameFor(false, "alice")));
+        check("launch name: with telemetry on it gets the display name",
+                "alice".equals(NodeSettings.launchNodeNameFor(true, "alice")));
+        check("launch name: unset is the default either way",
+                NodeSettings.DEFAULT_NODE_NAME.equals(
+                        NodeSettings.launchNodeNameFor(true, ""))
+                        && NodeSettings.DEFAULT_NODE_NAME.equals(
+                        NodeSettings.launchNodeNameFor(true, null)));
+        check("launch name: a stored name the node would refuse falls back"
+                        + " to the default",
+                NodeSettings.DEFAULT_NODE_NAME.equals(
+                        NodeSettings.launchNodeNameFor(true, repeatCh("a", 64))));
+        check("launch name: a stored name is normalized as the editor would",
+                "alicehome".equals(
+                        NodeSettings.launchNodeNameFor(true, "alice.home")));
+        check("pending: with telemetry off a name edit changes nothing the"
+                        + " node runs with",
+                UiLogic.settingsPending(true, Boolean.FALSE, false,
+                        NodeSettings.DEFAULT_NODE_NAME,
+                        NodeSettings.launchNodeNameFor(false, "bob")) == 0);
+        check("pending: turning telemetry on makes the name pending as well",
+                UiLogic.settingsPending(true, Boolean.FALSE, true,
+                        NodeSettings.DEFAULT_NODE_NAME,
+                        NodeSettings.launchNodeNameFor(true, "bob"))
+                        == (UiLogic.PENDING_TELEMETRY | UiLogic.PENDING_NAME));
+    }
+
+    /** Audit L-5, I-8, I-11, L-4: the node's fixed launch command. */
+    private static void launchCommand() {
+        java.util.List<String> off = NodeLaunch.nodeCommand("/n/libquantus_node.so",
+                false, "mainnet", "/files/node",
+                NodeSettings.DEFAULT_NODE_NAME, false);
+        check("launch: mDNS is off (--no-mdns)", off.contains("--no-mdns"));
+        check("launch: no Prometheus endpoint (--no-prometheus)",
+                off.contains("--no-prometheus"));
+        int ow = off.indexOf("--offchain-worker");
+        check("launch: offchain workers never run (--offchain-worker never)",
+                ow > 0 && ow + 1 < off.size() && "never".equals(off.get(ow + 1)));
+        int nm = off.indexOf("--name");
+        check("launch: the name argument is the launch name",
+                nm > 0 && NodeSettings.DEFAULT_NODE_NAME.equals(off.get(nm + 1)));
+        check("launch: telemetry off passes --no-telemetry",
+                off.contains("--no-telemetry"));
+        check("launch: RPC stays loopback-only and safe",
+                off.containsAll(java.util.Arrays.asList("--rpc-port", "9944",
+                        "--rpc-methods", "safe"))
+                        && !off.contains("--rpc-external")
+                        && !off.contains("--unsafe-rpc-external")
+                        && !off.contains("--prometheus-external"));
+        check("launch: the binary comes first, then the chain",
+                "/n/libquantus_node.so".equals(off.get(0))
+                        && "--chain".equals(off.get(1))
+                        && "mainnet".equals(off.get(2)));
+        java.util.List<String> on = NodeLaunch.nodeCommand("/n/libquantus_node.so",
+                true, "mainnet", "/files/node", "alice", true);
+        check("launch: telemetry on passes no --no-telemetry, and the name",
+                !on.contains("--no-telemetry")
+                        && "alice".equals(on.get(on.indexOf("--name") + 1)));
+        check("launch: via linker64 the linker comes first",
+                "/system/bin/linker64".equals(on.get(0))
+                        && "/n/libquantus_node.so".equals(on.get(1)));
+
+        // v4.2.4 (audits V4-3, V4-10): the node's RUST_LOG, pinned
+        // whole. NodeLogLines' anchoring reads only lines with
+        // sc-tracing's detailed header, which the node writes only
+        // while some target is above info; and with --no-prometheus
+        // the node's monitoring task would WARN on every imported
+        // block while mining (about 300 lines an hour).
+        check("launch: the node's log filter (RUST_LOG) is pinned",
+                ("info,sync=debug,sc_network_sync=debug,"
+                        + "quantus_node::prometheus=error")
+                        .equals(NodeLaunch.NODE_LOG_FILTER));
+        check("launch: the log filter keeps a target above info (the"
+                        + " detailed line header the anchoring reads)",
+                filterRaisesAboveInfo(NodeLaunch.NODE_LOG_FILTER));
+        check("launch: the log filter keeps the global level at info and"
+                        + " silences the Prometheus-missing WARN",
+                NodeLaunch.NODE_LOG_FILTER.startsWith("info,")
+                        && java.util.Arrays.asList(NodeLaunch.NODE_LOG_FILTER
+                        .split(",")).contains("quantus_node::prometheus=error"));
+    }
+
+    /** v4.2.4 (audit V4-7): Node details names the address the
+     *  poller uses — the one the node itself reported, which is not
+     *  always 127.0.0.1:9944 since M-1 — and a dash before that. */
+    private static void rpcNoteLine() {
+        check("node details: the RPC line shows the address the node"
+                        + " reported",
+                "RPC is local. · 127.0.0.1:41235".equals(UiLogic.rpcNoteLine(
+                        "RPC is local.", "127.0.0.1:41235")));
+        check("node details: a dash before the node has reported one",
+                "RPC is local. · —".equals(UiLogic.rpcNoteLine(
+                        "RPC is local.", null)));
+    }
+
+    /** True when a directive of the RUST_LOG {@code filter} sets a
+     *  target to debug or trace. */
+    private static boolean filterRaisesAboveInfo(String filter) {
+        for (String d : filter.split(",")) {
+            int eq = d.lastIndexOf('=');
+            String level = eq < 0 ? d : d.substring(eq + 1);
+            if ("debug".equals(level) || "trace".equals(level)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // ---------------- diag log statistics (v4.2.4, audit L-2) ----
+
+    // Node lines as the shipped node prints them (sc-tracing's
+    // detailed header: RUST_LOG raises the sync targets to debug);
+    // the WARN line is taken from the 2026-11-14 device export,
+    // whose summary said "WARN lines: 0" over many lines like it.
+    private static final String D_WARN = "2026-11-14 13:01:31.143  WARN"
+            + " tokio-runtime-worker wasm-runtime: Cannot create a runtime";
+    private static final String D_ERROR = "2026-11-14 13:02:00.001 ERROR"
+            + " tokio-runtime-worker quantus_node::service: ⛏️ Failed to"
+            + " start miner server on port 9833: Address in use";
+    private static final String D_INFO = "2026-11-14 13:01:28.469  INFO"
+            + " tokio-runtime-worker substrate: ⚙️  Syncing 0.0 bps";
+
+    private static void diagLogStatistics() {
+        String body = D_INFO + "\n" + D_WARN + "\n" + D_ERROR + "\n";
+        check("diag counts: a node WARN line in the shipped format counts",
+                DiagShare.countLevelLines(body, "WARN") == 1);
+        check("diag counts: a node ERROR line in the shipped format counts",
+                DiagShare.countLevelLines(body, "ERROR") == 1);
+        // Fragments a peer can inject after a line break: no
+        // header of the node's own, so no level.
+        String forged = "WARN forged fragment\n"
+                + " WARN tokio-runtime-worker sync: forged\n"
+                + "ERROR: forged\n"
+                + "2026-11-14 13:05:00 WARN forged, undetailed\n";
+        check("diag counts: fake WARN / ERROR fragments count for nothing",
+                DiagShare.countLevelLines(forged, "WARN") == 0
+                        && DiagShare.countLevelLines(forged, "ERROR") == 0);
+        check("diag counts: the word inside a message is not a level",
+                DiagShare.countLevelLines(D_INFO + " WARN ERROR\n", "WARN") == 0
+                        && DiagShare.countLevelLines(
+                        "[app] WARN miner: x\n", "WARN") == 0);
+        String withFragment = D_INFO + "\n"
+                + "2099-12-31 23:59:59 forged stamp after a break\n"
+                + D_WARN + "\n";
+        check("diag range: the excerpt's range comes from header lines only",
+                "2026-11-14 13:01:28".equals(
+                        DiagShare.firstLogTimestamp(withFragment))
+                        && "2026-11-14 13:01:31".equals(
+                        DiagShare.lastLogTimestamp(withFragment)));
+        String endsWithFragment = D_WARN + "\n"
+                + "2099-12-31 23:59:59 forged\n";
+        check("diag range: a forged trailing stamp does not extend the range",
+                "2026-11-14 13:01:31".equals(
+                        DiagShare.lastLogTimestamp(endsWithFragment)));
+        DiagShare.Facts f = new DiagShare.Facts();
+        String s = DiagShare.buildSummary(f, body + forged, false);
+        check("diag summary: WARN and ERROR lines are the header-shaped ones",
+                s.contains("WARN lines: 1\n") && s.contains("ERROR lines: 1\n"));
+    }
+
+    // ---------------- share masking: address literals (v4.2.4, audit I-1) ----
+
+    private static String mask(String text, List<String> ownIps) {
+        return DiagShare.maskSensitive(text, new ArrayList<String>(),
+                ownIps, new ArrayList<String>());
+    }
+
+    private static void diagAddressMasking() {
+        List<String> none = new ArrayList<>();
+        String discovered = "2026-11-14 13:05:00.100  INFO"
+                + " tokio-runtime-worker sub-libp2p: 🔍 Discovered new external"
+                + " address for our node: /ip4/203.0.113.7/tcp/30333/ws/p2p/QmPeer";
+        String m = mask(discovered, none);
+        check("diag mask: a public IPv4 the node reports for itself is masked",
+                m.contains("/ip4/<ip>/tcp/30333/ws/p2p/QmPeer")
+                        && !m.contains("203.0.113.7"));
+        String v6 = "… our node: /ip6/2001:db8:85a3::8a2e:370:7334/tcp/30333";
+        check("diag mask: a global IPv6 literal is masked",
+                mask(v6, none).equals("… our node: /ip6/<ip>/tcp/30333"));
+        check("diag mask: socket, sentence-end and zone forms",
+                mask("peer [2001:db8::1]:30333 and 198.51.100.4:30333.", none)
+                        .equals("peer [<ip>]:30333 and <ip>:30333.")
+                        && mask("at 203.0.113.9.", none).equals("at <ip>.")
+                        && mask("via fe80::1%wlan0 now", none)
+                        .equals("via <ip>%wlan0 now"));
+        check("diag mask: LAN addresses are masked too",
+                mask("10.0.0.5 192.168.1.5 172.16.4.4", none)
+                        .equals("<ip> <ip> <ip>"));
+        List<String> own = new ArrayList<>();
+        own.add("192.168.1.23");
+        check("diag mask: interface addresses remain masked",
+                mask("listening on 192.168.1.23:30333", own)
+                        .equals("listening on <ip>:30333"));
+        String rpc = "2026-11-02 16:30:53.325  INFO main sc_rpc_server:"
+                + " Running JSON-RPC server: addr=127.0.0.1:9944,[::1]:9944";
+        check("diag mask: loopback stays readable",
+                mask(rpc, none).equals(rpc)
+                        && mask("node at 127.0.0.1:9833 and ::1", none)
+                        .equals("node at 127.0.0.1:9833 and ::1")
+                        && mask("mapped ::ffff:127.0.0.1", none)
+                        .equals("mapped ::ffff:127.0.0.1"));
+        check("diag mask: the unspecified address stays (it names no host)",
+                mask("Metrics available at http://0.0.0.0:9900/metrics", none)
+                        .equals("Metrics available at http://0.0.0.0:9900/metrics"));
+        String plain = "2026-11-14 13:01:28.418 DEBUG tokio-runtime-worker"
+                + " sync::disconnected_peers: v1.0.5 at 12:34:56, best #16038"
+                + " (0xfc37…9ec2), ⬇ 3.4kiB/s, mac aa:bb:cc:dd:ee:ff,"
+                + " miner_service::quic deadbeef::cafe std::io::Error";
+        check("diag mask: versions, times, hashes, paths and MACs are"
+                        + " untouched",
+                mask(plain, none).equals(plain));
+    }
+
     private static void diagPriceLines() {
         DiagShare.Facts f = new DiagShare.Facts();
         String empty = DiagShare.buildSummary(f, "", false);
@@ -1151,6 +1451,51 @@ public final class VisionLogicCheckMain {
                 r.present && !r.enabled);
         checkEq("intent: a missing wall time reads 0",
                 0L, r.wallMs);
+    }
+
+    // ---------------- attempt budget (v4.2.4, audit V4-5) ----------------
+
+    /**
+     * Since v4.2.4 (audit M-1) one observation attempt is 7 calls:
+     * the identity check (system_localPeerId), then the 6 reads — the
+     * core suite's "m1 rpc: the identity is asked first in the round"
+     * pins the 7. The round's one in-window retry must fit the slot's
+     * budget in every case, also when the first attempt fails at its
+     * last call (with 12, a failure at the 6th or 7th call left the
+     * retry short and the slot became a gap).
+     */
+    private static void attemptBudgetRound() throws Exception {
+        final long slot = 3_000_100L;
+        File f = new File(Files.createTempDirectory("attemptlog-v45")
+                .toFile(), "rpc-attempts.jsonl");
+        RpcAttemptLog log = new RpcAttemptLog(f);
+        String[] attempt = {"system_localPeerId", "system_syncState",
+                "chain_getBlockHash", "chain_getFinalizedHead",
+                "chain_getHeader", "system_health", "system_syncState"};
+        int admitted = 0;
+        for (int a = 0; a < 2; a++) {
+            for (String method : attempt) {
+                try {
+                    log.consume(slot, method);
+                    admitted++;
+                } catch (RpcAttemptLog.AttemptLogException e) {
+                    // refused by the budget: counted below
+                }
+            }
+        }
+        checkEq("v4-5 budget: a first attempt failing at its 7th call"
+                + " leaves room for the whole 7-call retry", 14, admitted);
+        boolean refused = false;
+        try {
+            log.consume(slot, "system_syncState");
+        } catch (RpcAttemptLog.AttemptLogException e) {
+            refused = e.kind == RpcAttemptLog.KIND_BUDGET;
+        }
+        check("v4-5 budget: the slot's budget ends after two full attempts"
+                + " (14)", refused && RpcAttemptLog.MAX_ATTEMPTS_PER_SLOT == 14);
+        RpcAttemptLog reloaded = new RpcAttemptLog(f);
+        check("v4-5 budget: a slot holding 14 attempts reloads healthy",
+                !reloaded.isCorrupt() && reloaded.attemptsInSlot(slot) == 14);
     }
 
     // ---------------- attempt log (G-11) ----------------

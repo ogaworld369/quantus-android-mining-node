@@ -284,6 +284,11 @@ public final class UiLogic {
      * predicate the pre-redesign UI used for its restart note: no
      * launch snapshot (or no running node) means nothing is pending,
      * and returning a setting to its launched value clears its flag.
+     * {@code wantName} is the name a launch WOULD pass
+     * ({@link NodeSettings#launchNodeName}): since v4.2.4 (audit L-4)
+     * that is the default name while telemetry is off, so editing the
+     * display name then is not reported as pending — a restart would
+     * not change what the node runs with.
      */
     public static int settingsPending(boolean serviceRunning,
                                       Boolean launchedTelemetry,
@@ -319,19 +324,39 @@ public final class UiLogic {
     }
 
     /**
-     * The name as it will be saved, and as the node will receive
-     * it: the preview text. Identical to the launch's effective
-     * name by construction (versionCode 27, external audit of
-     * v0.2.0) — the editor stores the normalized value, and no
-     * second transformation happens at launch.
+     * Node details' RPC line (v4.2.4, audit V4-7): the local-only note
+     * and the address the poller uses — the one the running node
+     * reported in its startup output (since M-1 not always
+     * 127.0.0.1:9944), or a dash before it has reported one. The
+     * address is shown raw, not translated, by design.
+     */
+    public static String rpcNoteLine(String note, String endpoint) {
+        return note + " · " + (endpoint != null ? endpoint : "\u2014");
+    }
+
+    /**
+     * The name as it will be saved: the preview text — and, while
+     * telemetry is on, the name the node is launched with (with
+     * telemetry off the node runs under the default name; v4.2.4,
+     * audits L-4 and V4-7). Identical to the effective name by
+     * construction (versionCode 27, external audit of v0.2.0) — the
+     * editor stores the normalized value, and no second
+     * transformation happens at launch.
      */
     public static String nameSavedPreview(String raw) {
         return NodeSettings.effectiveNodeNameForRaw(raw);
     }
 
-    /** True when the normalized result fits the limit and may be saved. */
+    /**
+     * True when the normalized result may be saved: it is a name the
+     * node itself accepts (v4.2.4, audit L-9 — the node's length
+     * limit, characters and prefixes, {@link NodeSettings#nodeAcceptsName}).
+     * The normalization already drops the refused characters and turns
+     * a URL-like name into the default, so in practice the length is
+     * what can still fail — and the editor's limit message says so.
+     */
     public static boolean nameSaveable(String raw) {
-        return nameCodePoints(raw) <= NodeSettings.nameLimitCodePoints();
+        return NodeSettings.nodeAcceptsName(nameSavedPreview(raw));
     }
 
     // ------------------------------------------------------------------

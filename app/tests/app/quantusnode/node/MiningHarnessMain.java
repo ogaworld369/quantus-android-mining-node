@@ -76,6 +76,10 @@ public final class MiningHarnessMain {
         testNodeLines();
         testStats();
         testStatsAddress();
+        testLogAnchoring();
+        testEndpointFailedFacts();
+        testRpcStartupLines();
+        testSanitize();
         testRestartPolicy();
         testThermalGovernor();
         testThermalApply();
@@ -673,16 +677,28 @@ public final class MiningHarnessMain {
     static final String M_METRICS_OFF = "[2026-11-14T09:00:00Z WARN  metrics]"
             + " metrics::start_http_exporter called but 'http-exporter'"
             + " feature is disabled; ignoring";
-    // Lines as the bundled node (v1.0.5) prints them.
-    static final String N_ACCEPTED = "2026-11-14 18:00:07 🥇 Successfully mined"
-            + " and submitted a new block via external miner 1"
+    // Lines as the bundled node (v1.0.5) prints them under the
+    // app's launch: RUST_LOG raises the sync targets to debug, so
+    // sc-tracing writes its detailed header — millisecond
+    // timestamp, five-character level, padded thread name, target
+    // (v4.2.4: the shape of the 2026-11-14 device export).
+    static final String N_ACCEPTED = "2026-11-14 18:00:07.512  INFO"
+            + " tokio-runtime-worker quantus_node::service: 🥇 Successfully"
+            + " mined and submitted a new block via external miner 1"
             + " (mining time: 43s)";
-    static final String N_REJECTED = "2026-11-14 18:00:07 ⛏️ Failed to submit"
-            + " seal from miner 1, continuing to wait (job 27)";
-    static final String N_LISTEN =
-            "2026-11-14 18:00:01 ⛏️ Miner server listening on port 9833";
-    static final String N_ADDRESS = "2026-11-14 18:00:00 ⛏️ Rewards wormhole"
-            + " address: " + VALID_ADDRESS;
+    static final String N_REJECTED = "2026-11-14 18:00:07.611  WARN"
+            + " tokio-runtime-worker quantus_node::service: ⛏️ Failed to"
+            + " submit seal from miner 1, continuing to wait (job 27)";
+    static final String N_LISTEN = "2026-11-14 18:00:01.329  INFO"
+            + " tokio-runtime-worker quantus_node::miner_server: ⛏️ Miner"
+            + " server listening on port 9833";
+    static final String N_ADDRESS = "2026-11-14 18:00:00.101  INFO"
+            + "                 main quantus_node::command: ⛏️ Rewards"
+            + " wormhole address: " + VALID_ADDRESS;
+    static final String N_ENDPOINT_FAILED = "2026-11-14 18:00:01.330 ERROR"
+            + " tokio-runtime-worker quantus_node::service: ⛏️ Failed to"
+            + " start miner server on port 9833: Address already in use"
+            + " (os error 98). Refusing to fall back to local mining.";
 
     private static void testMinerLines() {
         check("miner line: a new job",
@@ -699,19 +715,19 @@ public final class MiningHarnessMain {
                 r != null && "CPU 2".equals(r.worker) && r.hashes == 301245L
                         && r.seconds == 12.01);
         MiningLogic.WorkerReport r0 = MiningLogic.parseWorkerReport(
-                "[x INFO  miner_service] CPU worker 0 finished (nonce range"
+                "[2026-11-14T09:00:30Z INFO  miner_service] CPU worker 0 finished (nonce range"
                         + " exhausted): 10 hashes in 0.00s (0.00 H/s)");
         check("miner line: a zero-second report still parses",
                 r0 != null && "CPU 0".equals(r0.worker) && r0.hashes == 10L
                         && r0.seconds == 0.0);
         check("miner line: 'worker started' is not a report",
-                MiningLogic.classifyMinerLine("[x INFO  miner_service]"
+                MiningLogic.classifyMinerLine("[2026-11-14T09:00:30Z INFO  miner_service]"
                         + " CPU worker 1 started (persistent)")
                         == MiningLogic.MinerEvent.NONE
-                        && MiningLogic.parseWorkerReport("[x INFO  miner_service]"
+                        && MiningLogic.parseWorkerReport("[2026-11-14T09:00:30Z INFO  miner_service]"
                         + " CPU worker 1 started (persistent)") == null);
         check("miner line: 'found solution' alone is not a submission",
-                MiningLogic.classifyMinerLine("[x INFO  miner_service]"
+                MiningLogic.classifyMinerLine("[2026-11-14T09:00:30Z INFO  miner_service]"
                         + " 🎯 CPU worker 1 found solution! Nonce: 12ab,"
                         + " Hash: 00ff (job 5)")
                         == MiningLogic.MinerEvent.NONE);
@@ -722,7 +738,7 @@ public final class MiningHarnessMain {
                 MiningLogic.classifyMinerLine(M_METRICS_OFF)
                         == MiningLogic.MinerEvent.METRICS_DISABLED_NOTE);
         check("miner line: anything else, empty and null are NONE",
-                MiningLogic.classifyMinerLine("[x INFO  miner_service::quic]"
+                MiningLogic.classifyMinerLine("[2026-11-14T09:00:30Z INFO  miner_service::quic]"
                         + " ⛏️ Waiting for mining jobs from node...")
                         == MiningLogic.MinerEvent.NONE
                         && MiningLogic.classifyMinerLine("")
@@ -793,13 +809,13 @@ public final class MiningHarnessMain {
                 VALID_ADDRESS.equals(s1.rewardsAddress));
         check("stats: the endpoint is known to listen", s1.endpointListening);
 
-        st.onMinerLine("[x INFO  miner_service] CPU worker 0 stopped (new block"
+        st.onMinerLine("[2026-11-14T09:00:30Z INFO  miner_service] CPU worker 0 stopped (new block"
                 + " received): 120000 hashes in 12.00s (10.00 KH/s)", 13000);
-        st.onMinerLine("[x INFO  miner_service] CPU worker 1 stopped (new block"
+        st.onMinerLine("[2026-11-14T09:00:30Z INFO  miner_service] CPU worker 1 stopped (new block"
                 + " received): 60000 hashes in 12.00s (5.00 KH/s)", 13000);
         check("stats: the hashrate is the sum of the workers' latest rates",
                 st.snapshot(13000).hashrateHps == 15000.0);
-        st.onMinerLine("[x INFO  miner_service] CPU worker 0 stopped (new block"
+        st.onMinerLine("[2026-11-14T09:00:30Z INFO  miner_service] CPU worker 0 stopped (new block"
                 + " received): 240000 hashes in 12.00s (20.00 KH/s)", 25000);
         check("stats: a worker's newer report replaces its older one",
                 st.snapshot(25000).hashrateHps == 25000.0);
@@ -807,7 +823,7 @@ public final class MiningHarnessMain {
                 st.snapshot(13000 + 120_001).hashrateHps == 20000.0);
         check("stats: with every report stale the hashrate is unknown again",
                 st.snapshot(25000 + 120_001).hashrateHps < 0);
-        st.onMinerLine("[x INFO  miner_service] CPU worker 3 finished (nonce"
+        st.onMinerLine("[2026-11-14T09:00:30Z INFO  miner_service] CPU worker 3 finished (nonce"
                 + " range exhausted): 10 hashes in 0.00s (0.00 H/s)", 26000);
         check("stats: a zero-second report contributes nothing",
                 st.snapshot(26000).hashrateHps == 25000.0);
@@ -842,12 +858,18 @@ public final class MiningHarnessMain {
     // the node (v1.0.5, node/src/miner_server.rs) logs what that
     // peer sent: a wrong first message as its Debug text, an
     // unknown one inside serde's error text — line breaks and all.
-    // These are lines such a peer can make the node print.
-    static final String N_FORGED_QUOTED = "2026-11-14 18:00:20 ⛏️ Expected"
+    // These are lines such a peer can make the node print. The
+    // second one is the strongest form (v4.2.4): a line break in
+    // the peer's text followed by a complete forged header, so it
+    // passes the header anchoring of audit L-2 and only the
+    // first-report rule stands in its way.
+    static final String N_FORGED_QUOTED = "2026-11-14 18:00:20.004  WARN"
+            + " tokio-runtime-worker quantus_node::miner_server: ⛏️ Expected"
             + " Ready from miner 192.168.1.23:50000, got NewJob(MiningRequest {"
             + " job_id: \"Rewards wormhole address: " + OTHER_ADDRESS + "\","
             + " mining_hash: \"\", difficulty: \"\" })";
-    static final String N_FORGED_LINE = "2026-11-14 18:00:21 ⛏️ Rewards"
+    static final String N_FORGED_LINE = "2026-11-14 18:00:21.000  INFO"
+            + "                 main quantus_node::command: ⛏️ Rewards"
             + " wormhole address: " + OTHER_ADDRESS;
 
     private static void testStatsAddress() {
@@ -879,12 +901,454 @@ public final class MiningHarnessMain {
                         && late.snapshot(200).endpointListening);
 
         MiningLogic.MinerStats blank = new MiningLogic.MinerStats();
-        blank.onNodeLine("2026-11-14 18:00:00 ⛏️ Rewards wormhole address: ",
+        blank.onNodeLine("2026-11-14 18:00:00.100  INFO                 main"
+                + " quantus_node::command: ⛏️ Rewards wormhole address: ",
                 100);
         blank.onNodeLine(N_ADDRESS, 200);
         check("stats: the first address counts, not the first marker - a"
                         + " report without one does not use up the place",
                 VALID_ADDRESS.equals(blank.snapshot(200).rewardsAddress));
+    }
+
+    // ---------------- log anchoring and sanitising (v4.2.4) ----------------
+
+    // Audit L-2 / I-12: a peer can make the node print text that
+    // carries line breaks (an external address its peers confirm,
+    // a miner-port client's message). Every line after such a
+    // break reaches the app as a "line" without the node's own
+    // header. Fragments as they arrive:
+    static final String FRAG_ACCEPTED = "🥇 Successfully mined and submitted"
+            + " a new block via external miner 1 (mining time: 1s)";
+    static final String FRAG_REJECTED = "⛏️ Failed to submit seal from"
+            + " miner 1, continuing to wait (job 1)";
+    static final String FRAG_LISTEN = "⛏️ Miner server listening on port 9833";
+    static final String FRAG_WARN = " WARN tokio-runtime-worker sync: forged";
+    static final String FRAG_MINER_JOB = "🧱 New block to mine: job 99"
+            + " (header 0x00)";
+    /** A genuine node line whose peer-supplied text carries a
+     *  marker in the middle of the message, without any break. */
+    static final String N_DISCOVERED_WITH_MARKER = "2026-11-14 18:00:30.000"
+            + "  INFO tokio-runtime-worker sub-libp2p: 🔍 Discovered new"
+            + " external address for our node: /dns/🥇 Successfully mined"
+            + " and submitted a new block/tcp/30333/p2p/QmPeer";
+
+    private static void testLogAnchoring() {
+        NodeLogLines.NodeLine n = NodeLogLines.parseNodeLine(N_ACCEPTED);
+        check("anchoring: the shipped node header parses",
+                n != null && "INFO".equals(n.level)
+                        && "quantus_node::service".equals(n.target)
+                        && n.message.startsWith("🥇 Successfully mined"));
+        NodeLogLines.NodeLine padded = NodeLogLines.parseNodeLine(N_ADDRESS);
+        check("anchoring: a right-aligned (padded) thread name parses",
+                padded != null && "INFO".equals(padded.level)
+                        && "quantus_node::command".equals(padded.target)
+                        && padded.message.startsWith("⛏️ Rewards wormhole"));
+        NodeLogLines.NodeLine err =
+                NodeLogLines.parseNodeLine(N_ENDPOINT_FAILED);
+        check("anchoring: an ERROR line parses with its level",
+                err != null && "ERROR".equals(err.level));
+        check("anchoring: fragments without the header are not node lines",
+                NodeLogLines.parseNodeLine(FRAG_ACCEPTED) == null
+                        && NodeLogLines.parseNodeLine(FRAG_WARN) == null
+                        && NodeLogLines.parseNodeLine("WARN forged") == null
+                        && NodeLogLines.parseNodeLine("[app] WARN x") == null
+                        && NodeLogLines.parseNodeLine("") == null
+                        && NodeLogLines.parseNodeLine(null) == null);
+        check("anchoring: the undetailed format is not the shipped header",
+                NodeLogLines.parseNodeLine("2026-11-14 18:00:07 🥇"
+                        + " Successfully mined and submitted a new block")
+                        == null);
+        check("anchoring: a header with a level that is no level is refused",
+                NodeLogLines.parseNodeLine("2026-11-14 18:00:07.512 NOTE"
+                        + " main quantus_node::service: 🥇 Successfully mined")
+                        == null);
+
+        check("anchoring: an accepted-block fragment classifies as nothing",
+                MiningLogic.classifyNodeLine(FRAG_ACCEPTED)
+                        == MiningLogic.NodeEvent.NONE);
+        check("anchoring: a rejected-seal fragment classifies as nothing",
+                MiningLogic.classifyNodeLine(FRAG_REJECTED)
+                        == MiningLogic.NodeEvent.NONE);
+        check("anchoring: a listening fragment classifies as nothing",
+                MiningLogic.classifyNodeLine(FRAG_LISTEN)
+                        == MiningLogic.NodeEvent.NONE);
+        check("anchoring: a marker inside a genuine line's peer text is not"
+                        + " an event",
+                MiningLogic.classifyNodeLine(N_DISCOVERED_WITH_MARKER)
+                        == MiningLogic.NodeEvent.NONE);
+
+        MiningLogic.MinerStats st = new MiningLogic.MinerStats();
+        st.onNodeLine(FRAG_ACCEPTED, 100);
+        st.onNodeLine(FRAG_ACCEPTED, 110);
+        st.onNodeLine(FRAG_REJECTED, 120);
+        st.onNodeLine(FRAG_LISTEN, 130);
+        st.onNodeLine(N_DISCOVERED_WITH_MARKER, 140);
+        MiningLogic.StatsSnapshot s0 = st.snapshot(200);
+        check("anchoring: injected fragments change no counter and no state",
+                s0.blocksAccepted == 0 && s0.sealsRejected == 0
+                        && !s0.endpointListening);
+        st.onNodeLine(N_ACCEPTED, 300);
+        st.onNodeLine(N_REJECTED, 310);
+        MiningLogic.StatsSnapshot s1 = st.snapshot(400);
+        check("anchoring: genuine header-shaped lines still count",
+                s1.blocksAccepted == 1 && s1.sealsRejected == 1);
+
+        NodeLogLines.MinerLine m = NodeLogLines.parseMinerLine(M_JOB);
+        check("anchoring: the miner's env_logger header parses",
+                m != null && "INFO".equals(m.level)
+                        && "miner_service::quic".equals(m.target)
+                        && m.message.startsWith("🧱 New block to mine"));
+        check("anchoring: a miner fragment is not a miner line",
+                NodeLogLines.parseMinerLine(FRAG_MINER_JOB) == null
+                        && NodeLogLines.parseMinerLine(
+                        "[x INFO  miner_service] " + FRAG_MINER_JOB) == null
+                        && NodeLogLines.parseMinerLine(null) == null);
+        check("anchoring: a miner fragment classifies as nothing",
+                MiningLogic.classifyMinerLine(FRAG_MINER_JOB)
+                        == MiningLogic.MinerEvent.NONE);
+        check("anchoring: a marker inside a miner line's quoted text is not"
+                        + " an event",
+                MiningLogic.classifyMinerLine("[2026-11-14T09:00:40Z WARN "
+                        + " miner_service::quic] ⛏️ Connection closed by the"
+                        + " node: " + FRAG_MINER_JOB)
+                        == MiningLogic.MinerEvent.NONE);
+        MiningLogic.MinerStats ms = new MiningLogic.MinerStats();
+        ms.onMinerProcessStarted(0);
+        ms.onMinerLine(FRAG_MINER_JOB, 10);
+        ms.onMinerLine("✅ Job 99 solved: 1 hashes in 1.00s (1 H/s)"
+                + " - submitting solution to node", 20);
+        check("anchoring: miner fragments change no counter",
+                ms.snapshot(30).jobsReceived == 0
+                        && ms.snapshot(30).solutionsSubmitted == 0
+                        && ms.snapshot(30).lastJobElapsedMs == -1);
+        ms.onMinerLine(M_JOB, 40);
+        check("anchoring: a genuine miner line still counts",
+                ms.snapshot(50).jobsReceived == 1);
+    }
+
+    /** v4.2.4, audit L-7: the node's "Failed to start miner server"
+     *  report, the session latch it sets, and where it shows. */
+    private static void testEndpointFailedFacts() {
+        check("node line: the miner endpoint failing to start",
+                MiningLogic.classifyNodeLine(N_ENDPOINT_FAILED)
+                        == MiningLogic.NodeEvent.MINER_ENDPOINT_FAILED);
+        check("node line: a failure fragment without the header is nothing",
+                MiningLogic.classifyNodeLine("⛏️ Failed to start miner server"
+                        + " on port 9833: x. Refusing to fall back to local"
+                        + " mining.") == MiningLogic.NodeEvent.NONE);
+        MiningLogic.MinerStats st = new MiningLogic.MinerStats();
+        check("stats: no endpoint failure before the node reports one",
+                !st.snapshot(0).endpointFailed);
+        st.onNodeLine(N_ENDPOINT_FAILED, 10);
+        check("stats: the endpoint failure latches",
+                st.snapshot(20).endpointFailed
+                        && !st.snapshot(20).endpointListening);
+        MiningLogic.NodeEvent lateListen = st.onNodeLine(N_LISTEN, 30);
+        st.onMinerProcessStarted(40);
+        check("stats: the latch holds for the rest of the node process",
+                st.snapshot(50).endpointFailed);
+        // v4.2.4 (audit V4-2): the node prints exactly one endpoint
+        // outcome per process, and it prints it first; the first
+        // outcome wins and a later line of the other kind is refused.
+        check("v4-2 stats: a listening line after the failure report is"
+                        + " refused and evidences nothing",
+                lateListen == MiningLogic.NodeEvent.NONE
+                        && !st.snapshot(50).endpointListening);
+        MiningLogic.MinerStats up = new MiningLogic.MinerStats();
+        check("v4-2 stats: the node's listening line is taken",
+                up.onNodeLine(N_LISTEN, 10)
+                        == MiningLogic.NodeEvent.ENDPOINT_LISTENING
+                        && up.snapshot(15).endpointListening);
+        MiningLogic.NodeEvent lateFail = up.onNodeLine(N_ENDPOINT_FAILED, 20);
+        check("v4-2 stats: a failure line after the listening line is"
+                        + " refused: nothing latches, nothing is evidenced",
+                lateFail == MiningLogic.NodeEvent.NONE
+                        && !up.snapshot(30).endpointFailed
+                        && up.snapshot(30).endpointListening);
+        MiningLogic.MinerStats twice = new MiningLogic.MinerStats();
+        twice.onNodeLine(N_ENDPOINT_FAILED, 10);
+        check("v4-2 stats: a repeated failure line still reads as the"
+                        + " failure (the latch is unchanged)",
+                twice.onNodeLine(N_ENDPOINT_FAILED, 20)
+                        == MiningLogic.NodeEvent.MINER_ENDPOINT_FAILED
+                        && twice.snapshot(30).endpointFailed);
+
+        final MiningLogic.SkipReason none = MiningLogic.SkipReason.NONE;
+        check("state: a failed endpoint shows as a miner that could not be"
+                        + " started (the existing sentence)",
+                is(MiningLogic.present(true, true, true, Boolean.TRUE, none,
+                        false, 3, snap(MiningLogic.Phase.ENDPOINT_FAILED,
+                                MiningLogic.FilesStatus.READY, null, -1), 0),
+                        MiningLogic.UiState.STOPPED,
+                        MiningLogic.UiReason.START_FAILED));
+
+        MiningLogic.ShareFacts bind = new MiningLogic.ShareFacts();
+        bind.enabledSetting = true;
+        bind.launchedMining = null;
+        bind.rewardsSaved = true;
+        bind.workerSetting = 2;
+        bind.miningChangedText = "n/a";
+        bind.rewardsChangedText = "n/a";
+        bind.uiState = MiningLogic.UiState.NODE_STOPPED;
+        bind.uiReason = MiningLogic.UiReason.NONE;
+        bind.minerEndpointFailed = true;
+        check("summary: a miner endpoint that failed to start is named",
+                Arrays.asList(
+                        "Mining: n/a (no launch in this session)",
+                        "Mining setting: on",
+                        "Mining setting changed: n/a",
+                        "Rewards inner hash: saved (value never shared)",
+                        "Rewards setting changed: n/a",
+                        "Miner state: node stopped",
+                        "Miner endpoint: failed to start (node log: \"Failed"
+                                + " to start miner server\")",
+                        "Miner CPU workers: n/a (setting: 2)")
+                        .equals(MiningLogic.summaryLines(bind)));
+        bind.minerEndpointFailed = false;
+        check("summary: without the failure there is no endpoint line",
+                MiningLogic.summaryLines(bind).size() == 7);
+    }
+
+    // ---------------- the node's own RPC endpoint (v4.2.4, audit M-1) ------
+
+    // The node's startup lines as the shipped node prints them
+    // (client/rpc-servers/src/lib.rs and utils.rs format_listen_addrs:
+    // the addresses joined by ",", a single one with a trailing ",";
+    // client/network/src/litep2p/mod.rs:391 for the identity).
+    static final String PEER_ID = "QmcqaT7GxeiXfZxHK8fVbXH5ZduwjLSuVVixFQsmqvMNfH";
+    static final String N_IDENTITY = "2026-11-02 16:30:53.306  INFO main"
+            + " sub-libp2p: Local node identity is: " + PEER_ID;
+    static final String N_RPC_BOTH = "2026-11-02 16:30:53.325  INFO"
+            + "                 main sc_rpc_server: Running JSON-RPC server:"
+            + " addr=127.0.0.1:9944,[::1]:9944";
+
+    static String rpcLine(String addrList) {
+        return "2026-11-02 16:30:53.325  INFO                 main"
+                + " sc_rpc_server: Running JSON-RPC server: addr=" + addrList;
+    }
+
+    private static void testRpcStartupLines() {
+        NodeLogLines.HostPort hp = NodeLogLines.parseRpcEndpoint(N_RPC_BOTH);
+        check("rpc line: IPv4 loopback first, [::1] second -> the IPv4 one",
+                hp != null && "127.0.0.1".equals(hp.host) && hp.port == 9944);
+        hp = NodeLogLines.parseRpcEndpoint(rpcLine("[::1]:9944,127.0.0.1:9944"));
+        check("rpc line: [::1] listed first is skipped for the IPv4 loopback",
+                hp != null && "127.0.0.1".equals(hp.host) && hp.port == 9944);
+        hp = NodeLogLines.parseRpcEndpoint(rpcLine("127.0.0.1:9944,"));
+        check("rpc line: a single address with its trailing comma",
+                hp != null && "127.0.0.1".equals(hp.host) && hp.port == 9944);
+        hp = NodeLogLines.parseRpcEndpoint(rpcLine("127.0.0.1:41235,[::1]:9944"));
+        check("rpc line: the random-port fallback is what gets adopted",
+                hp != null && hp.port == 41235);
+        hp = NodeLogLines.parseRpcEndpoint(
+                rpcLine("127.0.0.1:9944, allowed origins=[\"*\"]"));
+        check("rpc line: the previous upstream format still parses",
+                hp != null && hp.port == 9944);
+        check("rpc line: no IPv4 loopback address -> nothing adopted",
+                NodeLogLines.parseRpcEndpoint(rpcLine("[::1]:9944,")) == null
+                        && NodeLogLines.parseRpcEndpoint(
+                        rpcLine("0.0.0.0:9944,")) == null
+                        && NodeLogLines.parseRpcEndpoint(
+                        rpcLine("192.168.1.5:9944,")) == null
+                        && NodeLogLines.parseRpcEndpoint(rpcLine("")) == null);
+        check("rpc line: malformed entries are skipped, never half-parsed",
+                NodeLogLines.parseRpcEndpoint(rpcLine("127.0.0.1:0,")) == null
+                        && NodeLogLines.parseRpcEndpoint(
+                        rpcLine("127.0.0.1:65536,")) == null
+                        && NodeLogLines.parseRpcEndpoint(
+                        rpcLine("127.0.0.01:9944,")) == null
+                        && NodeLogLines.parseRpcEndpoint(
+                        rpcLine("127.0.0.1:99x,")) == null
+                        && NodeLogLines.parseRpcEndpoint(
+                        rpcLine("127.0.0.1,")) == null);
+        check("rpc line: a fragment without the node's header is not adopted",
+                NodeLogLines.parseRpcEndpoint("Running JSON-RPC server:"
+                        + " addr=127.0.0.1:1234,") == null);
+        check("rpc line: the marker inside another message is not adopted",
+                NodeLogLines.parseRpcEndpoint("2026-11-02 16:30:53.100  INFO"
+                        + " main sc_cli::runner: 🏷  Node name: Running JSON-RPC"
+                        + " server: addr=127.0.0.1:1234,") == null);
+
+        check("identity line: the peer ID token is captured",
+                PEER_ID.equals(NodeLogLines.parsePeerId(N_IDENTITY)));
+        check("identity line: a fragment without the header is not captured",
+                NodeLogLines.parsePeerId("Local node identity is: QmFake")
+                        == null);
+        check("identity line: a display name carrying the marker is not"
+                        + " captured",
+                NodeLogLines.parsePeerId("2026-11-02 16:30:53.100  INFO main"
+                        + " sc_cli::runner: 🏷  Node name: Local node identity"
+                        + " is: QmFake") == null);
+        check("identity line: a token that is not base58 is not captured",
+                NodeLogLines.parsePeerId("2026-11-02 16:30:53.306  INFO main"
+                        + " sub-libp2p: Local node identity is: Qm0OIl") == null
+                        && NodeLogLines.parsePeerId("2026-11-02 16:30:53.306"
+                        + "  INFO main sub-libp2p: Local node identity is: ")
+                        == null);
+        check("identity line: text after the token ends it",
+                PEER_ID.equals(NodeLogLines.parsePeerId(N_IDENTITY + " (x)")));
+
+        NodeLogLines.StartupCapture cap = new NodeLogLines.StartupCapture();
+        check("capture: nothing adopted before any line", cap.identity() == null);
+        check("capture: the identity alone is not enough",
+                !cap.onLine(N_IDENTITY) && cap.identity() == null);
+        check("capture: the RPC line completes it",
+                cap.onLine(N_RPC_BOTH) && cap.identity() != null);
+        NodeLogLines.RpcIdentity id = cap.identity();
+        check("capture: the adopted endpoint and identity",
+                "127.0.0.1".equals(id.host) && id.port == 9944
+                        && PEER_ID.equals(id.peerId)
+                        && "http://127.0.0.1:9944/".equals(id.url()));
+        check("capture: later lines change nothing (the first line rules)",
+                !cap.onLine(rpcLine("127.0.0.1:1234,"))
+                        && !cap.onLine(N_IDENTITY.replace(PEER_ID,
+                        "QmOtherOtherOtherOtherOtherOtherOtherOtherOth"))
+                        && cap.identity().port == 9944
+                        && PEER_ID.equals(cap.identity().peerId));
+        NodeLogLines.StartupCapture noV4 = new NodeLogLines.StartupCapture();
+        noV4.onLine(rpcLine("[::1]:9944,"));
+        noV4.onLine(rpcLine("127.0.0.1:9944,"));
+        noV4.onLine(N_IDENTITY);
+        check("capture: a first RPC line without an IPv4 loopback closes the"
+                        + " endpoint - a later one is not adopted",
+                noV4.identity() == null);
+        NodeLogLines.StartupCapture frag = new NodeLogLines.StartupCapture();
+        frag.onLine("Running JSON-RPC server: addr=127.0.0.1:1234,");
+        frag.onLine("Local node identity is: QmFake");
+        frag.onLine(N_RPC_BOTH);
+        frag.onLine(N_IDENTITY);
+        check("capture: fragments neither adopt nor use up the first line",
+                frag.identity() != null && frag.identity().port == 9944
+                        && PEER_ID.equals(frag.identity().peerId));
+
+        // v4.2.4 (audit V4-10): failing closed is right, failing
+        // silently is not — one WARN when the first RPC line named no
+        // address, and one when the process has run about 60 s without
+        // both facts.
+        NodeLogLines.StartupCapture warnRpc = new NodeLogLines.StartupCapture();
+        warnRpc.onLine(N_IDENTITY);
+        check("v4-10 capture: no RPC-line warning before the RPC line",
+                warnRpc.takeRpcLineWarning() == null);
+        warnRpc.onLine(rpcLine("[::1]:9944,"));
+        String w1 = warnRpc.takeRpcLineWarning();
+        check("v4-10 capture: a first RPC line without an IPv4 loopback"
+                        + " address is reported, once",
+                w1 != null && w1.startsWith("WARN rpc: ")
+                        && warnRpc.takeRpcLineWarning() == null);
+        check("v4-10 capture: the warning is fixed text (nothing of the line"
+                        + " is copied)",
+                w1 != null && !w1.contains("[::1]") && !w1.contains("9944"));
+        check("v4-10 capture: a usable RPC line is not reported",
+                cap.takeRpcLineWarning() == null
+                        && frag.takeRpcLineWarning() == null);
+
+        NodeLogLines.StartupCapture silent = new NodeLogLines.StartupCapture();
+        silent.onLine("2026-11-02 16:30:53 Running JSON-RPC server:"
+                + " addr=127.0.0.1:9944,");
+        check("v4-10 capture: nothing is reported before the process has run"
+                        + " 60 s",
+                silent.takeLateWarning(59_999L) == null);
+        String w2 = silent.takeLateWarning(60_000L);
+        check("v4-10 capture: at 60 s without both facts one warning names"
+                        + " what is missing, once",
+                w2 != null && w2.startsWith("WARN rpc: ")
+                        && w2.contains("RPC address")
+                        && w2.contains("peer identity")
+                        && silent.takeLateWarning(120_000L) == null);
+        check("v4-10 capture: and says that no line carried the node's"
+                        + " detailed header",
+                w2 != null && w2.contains("detailed"));
+        NodeLogLines.StartupCapture half = new NodeLogLines.StartupCapture();
+        half.onLine(N_IDENTITY);
+        String w3 = half.takeLateWarning(61_000L);
+        check("v4-10 capture: with only the identity reported, the warning"
+                        + " names the RPC address alone",
+                w3 != null && w3.contains("RPC address")
+                        && !w3.contains("peer identity")
+                        && !w3.contains("detailed"));
+        check("v4-10 capture: a complete capture is never reported late",
+                cap.takeLateWarning(600_000L) == null);
+
+        check("peer gate: the node's own identity is a match",
+                NodeLogLines.checkPeerId(PEER_ID, PEER_ID)
+                        == NodeLogLines.PeerCheck.MATCH);
+        check("peer gate: another identity is a mismatch - nothing adopted",
+                NodeLogLines.checkPeerId(PEER_ID, "QmImpostor")
+                        == NodeLogLines.PeerCheck.MISMATCH
+                        && NodeLogLines.checkPeerId(PEER_ID, PEER_ID + " ")
+                        == NodeLogLines.PeerCheck.MISMATCH);
+        check("peer gate: no usable answer is no answer - nothing adopted",
+                NodeLogLines.checkPeerId(PEER_ID, null)
+                        == NodeLogLines.PeerCheck.NO_ANSWER
+                        && NodeLogLines.checkPeerId(PEER_ID, 7L)
+                        == NodeLogLines.PeerCheck.NO_ANSWER
+                        && NodeLogLines.checkPeerId(null, PEER_ID)
+                        == NodeLogLines.PeerCheck.NO_ANSWER);
+
+        NodeLogLines.RateLimit rl = new NodeLogLines.RateLimit(600_000L);
+        check("rate limit: the first mismatch is logged", rl.allow(1_000L));
+        check("rate limit: the next ones within the interval are not",
+                !rl.allow(2_000L) && !rl.allow(600_999L));
+        check("rate limit: after the interval one more is",
+                rl.allow(601_000L) && !rl.allow(601_001L));
+    }
+
+    private static void testSanitize() {
+        check("sanitise: C0 controls other than tab are removed",
+                "abcde".equals(NodeLogLines.sanitize("a\u0000b\u0007c\u001bd\re")));
+        check("sanitise: tab stays",
+                "a\tb".equals(NodeLogLines.sanitize("a\tb")));
+        check("sanitise: DEL and the C1 controls are removed",
+                "abcd".equals(NodeLogLines.sanitize("a\u007fb\u0085c\u009fd")));
+        check("sanitise: the bidi embedding, override and isolate controls"
+                        + " are removed",
+                "xyz123456".equals(NodeLogLines.sanitize("x‪y‫z"
+                        + "‬1‭2‮3⁦4⁧5⁨6⁩")));
+        // v4.2.4 (audit V4-8): the line and paragraph separators (many
+        // renderers start a new line at them, so one line could read
+        // as two) and the bidi marks go too; the joiners stay.
+        check("v4-8 sanitise: the line and paragraph separators"
+                        + " (U+2028, U+2029) are removed",
+                "abc".equals(NodeLogLines.sanitize("a b c")));
+        check("v4-8 sanitise: the bidi marks (U+200E, U+200F, U+061C) are"
+                        + " removed",
+                "abcd".equals(NodeLogLines.sanitize(
+                        "a‎b‏c؜d")));
+        check("v4-8 sanitise: the zero-width joiner and non-joiner stay",
+                "a‍b‌c".equals(NodeLogLines.sanitize(
+                        "a‍b‌c")));
+        check("v4-8 intake: a forged second line behind a line separator"
+                        + " stays part of the one stored line",
+                (N_ACCEPTED + "2026-11-14 18:00:00.000 ERROR x y: z").equals(
+                        NodeLogLines.intake(N_ACCEPTED
+                                + " 2026-11-14 18:00:00.000 ERROR x y: z",
+                                false, null)));
+        String plain = N_ACCEPTED + " 漢字 ‍ emoji ⛏️";
+        check("sanitise: ordinary text, emoji, joiners and CJK are untouched",
+                plain.equals(NodeLogLines.sanitize(plain)));
+        check("sanitise: null stays null", NodeLogLines.sanitize(null) == null);
+
+        MiningLogic.SecretScrubber s = MiningLogic.SecretScrubber.of(VALID, TOKEN);
+        String split = "rewards " + VALID.substring(0, 20) + "\u0007"
+                + VALID.substring(20) + " end";
+        String out = NodeLogLines.intake(split, false, s);
+        check("intake: a secret split by a control character is still"
+                        + " scrubbed (sanitise first, then scrub)",
+                !out.contains(VALID_CORE) && !out.contains("e4be02a913727c01c1a1")
+                        && out.startsWith("rewards ") && out.endsWith(" end")
+                        && out.indexOf('\u0007') < 0);
+        String bidiToken = "token " + TOKEN.substring(0, 30) + "‮"
+                + TOKEN.substring(30);
+        String out2 = NodeLogLines.intake(bidiToken, false, s);
+        check("intake: a token split by a bidi control is still scrubbed",
+                !out2.contains(TOKEN) && out2.indexOf('‮') < 0);
+        check("intake: without a scrubber the line is only sanitised",
+                "ab".equals(NodeLogLines.intake("a‮b", false, null)));
+        String cut = "tail " + VALID_CORE.substring(0, 12) + "\u0000"
+                + VALID_CORE.substring(12, 30);
+        String out3 = NodeLogLines.intake(cut, true, s);
+        check("intake: a cut line still loses a secret's beginning at its end",
+                !out3.contains(VALID_CORE.substring(0, 12)));
     }
 
     // ---------------- restart policy ----------------
@@ -1594,8 +2058,9 @@ public final class MiningHarnessMain {
                 + "2026-11-14 18:00:09 note about " + VALID_ADDRESS + " again\n"
                 + "2026-11-14 18:00:10 peer qzmTAz3UUw1WGUuVh8nbFmPwcftomduwy6twq6NDR6y9qqtEs\n";
         check("share: the reported rewards address is masked everywhere",
-                ("2026-11-14 18:00:00 ⛏️ Rewards wormhole address:"
-                        + " <rewards-address>\n"
+                ("2026-11-14 18:00:00.101  INFO                 main"
+                        + " quantus_node::command: ⛏️ Rewards wormhole"
+                        + " address: <rewards-address>\n"
                         + "2026-11-14 18:00:09 note about <rewards-address>"
                         + " again\n"
                         + "2026-11-14 18:00:10 peer qzmTAz3UUw1WGUuVh8nbFmPwc"
@@ -2016,8 +2481,6 @@ public final class MiningHarnessMain {
         final File fp;
         final File log;
         final File marker;
-        final java.util.concurrent.atomic.AtomicBoolean nodeUp =
-                new java.util.concurrent.atomic.AtomicBoolean(true);
         final java.util.concurrent.atomic.AtomicInteger workers =
                 new java.util.concurrent.atomic.AtomicInteger(4);
         final java.util.concurrent.atomic.AtomicInteger linkerStarts =
@@ -2036,6 +2499,16 @@ public final class MiningHarnessMain {
         final MinerSupervisor.Env env;
 
         Rig(String name, String script) throws IOException {
+            this(name, script, true);
+        }
+
+        /**
+         * @param listening whether the node has already printed its
+         *        own "Miner server listening" line (v4.2.4, audit
+         *        L-7: the one fact the supervisor starts a miner on)
+         */
+        Rig(String name, String script, boolean listening)
+                throws IOException {
             dir = tempDir("sup-" + name);
             bin = new File(dir, "libquantus_miner.so");
             write(bin, script);
@@ -2056,7 +2529,6 @@ public final class MiningHarnessMain {
             cfg.procRoot = proc;
             cfg.quickExitMs = 400;
             cfg.pollMs = 20;
-            cfg.nodeWaitMaxMs = 60_000;
             cfg.stopWaitMs = 600;
             cfg.restartDelaysMs = new long[] {60, 60, 60};
             cfg.stableRunMs = 5000;
@@ -2098,11 +2570,6 @@ public final class MiningHarnessMain {
                 }
 
                 @Override
-                public boolean nodeUp() {
-                    return nodeUp.get();
-                }
-
-                @Override
                 public int cpuWorkers() {
                     return workers.get();
                 }
@@ -2121,6 +2588,14 @@ public final class MiningHarnessMain {
                     return selfPid;
                 }
             };
+            if (listening) {
+                listen();
+            }
+        }
+
+        /** The node's own, header-anchored "listening" line. */
+        void listen() {
+            stats.onNodeLine(N_LISTEN, env.elapsedMs());
         }
 
         MinerSupervisor supervisor(MiningLogic.SecretScrubber scrubber) {
@@ -2203,7 +2678,7 @@ public final class MiningHarnessMain {
         }
         testSupervisorWaitsThenRuns();
         testSupervisorWaitsForFiles();
-        testSupervisorNodeWaitFallbacks();
+        testSupervisorEndpointGate();
         testSupervisorStop();
         testSupervisorStubbornStop();
         testSupervisorFailingMiner();
@@ -2212,6 +2687,7 @@ public final class MiningHarnessMain {
         testSupervisorCannotSpawn();
         testSupervisorBinaryMissing();
         testSupervisorScrubsOutput();
+        testSupervisorSanitizesOutput();
         testSupervisorManualRestart();
         testSupervisorExporterWarning();
         testSupervisorReplacesLeftover();
@@ -2227,7 +2703,6 @@ public final class MiningHarnessMain {
         // process of the session is adopted by the next supervisor:
         // the miner never starts, and the snapshot names the heat.
         final Rig rig = new Rig("thermal", S_HAPPY);
-        rig.nodeUp.set(true);
         final MiningLogic.ThermalGovernor gov =
                 new MiningLogic.ThermalGovernor();
         gov.onStatus(MiningLogic.THERMAL_SEVERE, 2, 0);
@@ -2641,12 +3116,11 @@ public final class MiningHarnessMain {
     }
 
     private static void testSupervisorWaitsThenRuns() throws Exception {
-        final Rig rig = new Rig("run", S_HAPPY);
-        rig.nodeUp.set(false);
+        final Rig rig = new Rig("run", S_HAPPY, false);
         final MinerSupervisor s = rig.supervisor(
                 MiningLogic.SecretScrubber.of(VALID, null));
         s.start();
-        check("supervisor: with the node not up yet it waits for the node",
+        check("supervisor: before the node's endpoint listens it waits",
                 eventually(new Cond() {
                     @Override
                     public boolean ok() {
@@ -2654,11 +3128,12 @@ public final class MiningHarnessMain {
                     }
                 }, 5000));
         Thread.sleep(250);
-        check("supervisor: no miner is started while the node is not up",
+        check("supervisor: the node's RPC answering alone starts no miner"
+                        + " (v4.2.4, audit L-7)",
                 rig.runs() == 0
                         && phase(rig, s) == MiningLogic.Phase.WAITING_NODE);
-        rig.nodeUp.set(true);
-        check("supervisor: once the node is up the miner runs",
+        rig.listen();
+        check("supervisor: once the node's endpoint listens the miner runs",
                 eventually(new Cond() {
                     @Override
                     public boolean ok() throws Exception {
@@ -2772,14 +3247,31 @@ public final class MiningHarnessMain {
         check("supervisor: (cleanup) stops", s.awaitTermination(8000));
     }
 
-    private static void testSupervisorNodeWaitFallbacks() throws Exception {
-        final Rig a = new Rig("fallback-time", S_HAPPY);
-        a.nodeUp.set(false);
-        a.cfg.nodeWaitMaxMs = 300;
+    /**
+     * v4.2.4, audit L-7: the miner starts on the node's own
+     * header-anchored "Miner server listening" line and on nothing
+     * else — not on the RPC answering, not on a wait running out —
+     * and a node that reports "Failed to start miner server" gets
+     * no miner for the rest of its process.
+     */
+    private static void testSupervisorEndpointGate() throws Exception {
+        final Rig a = new Rig("gate-wait", S_HAPPY, false);
         final MinerSupervisor sa = a.supervisor(
                 MiningLogic.SecretScrubber.of(VALID, null));
         sa.start();
-        check("supervisor: a node that never reports up is not waited on forever",
+        Thread.sleep(700);
+        check("supervisor: without the listening line it keeps waiting -"
+                        + " no wait cap starts a miner",
+                a.runs() == 0
+                        && phase(a, sa) == MiningLogic.Phase.WAITING_NODE);
+        a.stats.onNodeLine(FRAG_LISTEN, a.now());
+        Thread.sleep(250);
+        check("supervisor: a listening fragment without the node's header"
+                        + " starts nothing",
+                a.runs() == 0
+                        && phase(a, sa) == MiningLogic.Phase.WAITING_NODE);
+        a.listen();
+        check("supervisor: the node's own listening line starts the miner",
                 eventually(new Cond() {
                     @Override
                     public boolean ok() throws Exception {
@@ -2790,24 +3282,65 @@ public final class MiningHarnessMain {
         sa.requestStop("test over");
         check("supervisor: (cleanup) stops", sa.awaitTermination(8000));
 
-        final Rig b = new Rig("fallback-line", S_HAPPY);
-        b.nodeUp.set(false);
+        final Rig b = new Rig("gate-failed", S_HAPPY, false);
         final MinerSupervisor sb = b.supervisor(
                 MiningLogic.SecretScrubber.of(VALID, null));
         sb.start();
-        Thread.sleep(150);
-        boolean heldBack = b.runs() == 0;
-        b.stats.onNodeLine(N_LISTEN, b.now());
-        check("supervisor: the node's 'listening' line is enough to start",
-                heldBack && eventually(new Cond() {
+        Thread.sleep(100);
+        b.stats.onNodeLine(N_ENDPOINT_FAILED, b.now());
+        check("supervisor: a failed miner endpoint latches its own phase",
+                eventually(new Cond() {
                     @Override
-                    public boolean ok() throws Exception {
-                        return phase(b, sb) == MiningLogic.Phase.RUNNING
-                                && b.runs() == 1;
+                    public boolean ok() {
+                        return phase(b, sb)
+                                == MiningLogic.Phase.ENDPOINT_FAILED;
                     }
-                }, 8000));
+                }, 5000));
+        b.listen();
+        sb.requestRestart();
+        Thread.sleep(400);
+        check("supervisor: after the failure no miner starts for this node"
+                        + " process, not on a later listening line nor on a"
+                        + " manual restart",
+                b.runs() == 0
+                        && phase(b, sb) == MiningLogic.Phase.ENDPOINT_FAILED);
+        check("supervisor: the failure is named in the app log",
+                b.appLogContains("could not open its miner endpoint"));
         sb.requestStop("test over");
         check("supervisor: (cleanup) stops", sb.awaitTermination(8000));
+
+        final Rig c = new Rig("gate-failed-late", S_HAPPY);
+        final MinerSupervisor sc = c.supervisor(
+                MiningLogic.SecretScrubber.of(VALID, null));
+        sc.start();
+        check("supervisor: (setup) running", eventually(new Cond() {
+            @Override
+            public boolean ok() throws Exception {
+                return phase(c, sc) == MiningLogic.Phase.RUNNING
+                        && c.runs() == 1;
+            }
+        }, 8000));
+        // v4.2.4 (audit V4-2): the node's real outcome comes first
+        // (here: listening), so a failure line while a miner runs can
+        // only be forged — a local app through the miner port, or
+        // peers. It latches nothing: the restart starts the next miner.
+        c.stats.onNodeLine(N_ENDPOINT_FAILED, c.now());
+        sc.requestRestart();
+        check("supervisor: a failure line after the node's listening line"
+                        + " latches nothing; the restart starts the next"
+                        + " miner",
+                eventually(new Cond() {
+                    @Override
+                    public boolean ok() throws Exception {
+                        return phase(c, sc) == MiningLogic.Phase.RUNNING
+                                && c.runs() == 2;
+                    }
+                }, 8000));
+        check("supervisor: and the session is not marked failed",
+                !c.stats.snapshot(c.now()).endpointFailed
+                        && phase(c, sc) != MiningLogic.Phase.ENDPOINT_FAILED);
+        sc.requestStop("test over");
+        check("supervisor: (cleanup) stops", sc.awaitTermination(8000));
     }
 
     private static void testSupervisorStop() throws Exception {
@@ -2848,8 +3381,7 @@ public final class MiningHarnessMain {
                         && s.snapshot(rig.now()).consecutiveFailures == 0
                         && s.snapshot(rig.now()).lastExitCode == null);
 
-        final Rig early = new Rig("stop-early", S_HAPPY);
-        early.nodeUp.set(false);
+        final Rig early = new Rig("stop-early", S_HAPPY, false);
         final MinerSupervisor se = early.supervisor(
                 MiningLogic.SecretScrubber.of(VALID, null));
         se.start();
@@ -3070,6 +3602,51 @@ public final class MiningHarnessMain {
             }
         }
         check("supervisor: nor the app log", !appLeak);
+        s.requestStop("test over");
+        check("supervisor: (cleanup) stops", s.awaitTermination(8000));
+    }
+
+    /** Prints one line with an ANSI escape, a bell, a right-to-left
+     *  override (U+202E) and a left-to-right isolate (U+2066) in it,
+     *  plus a tab (v4.2.4, audit L-2 item 2). */
+    static final String S_CONTROL = "#!/bin/sh\n"
+            + "echo run >> \"$0.runs\"\n"
+            + "printf 'ctl A\\033[31mB\\aC\\342\\200\\256D\\342\\201\\246E\\tF end\\n'\n"
+            + "echo \"plain line\"\n"
+            + "exec sleep 30\n";
+
+    private static void testSupervisorSanitizesOutput() throws Exception {
+        final Rig rig = new Rig("control", S_CONTROL);
+        final MinerSupervisor s = rig.supervisor(
+                MiningLogic.SecretScrubber.of(VALID, null));
+        s.start();
+        check("supervisor: (setup) the miner has printed its lines",
+                eventually(new Cond() {
+                    @Override
+                    public boolean ok() throws Exception {
+                        return readAll(rig.log).contains("plain line\n");
+                    }
+                }, 8000));
+        String logText = readAll(rig.log);
+        check("supervisor: control and bidi characters never reach the"
+                        + " miner log (the tab is kept)",
+                logText.contains("ctl A[31mBCDE\tF end\n")
+                        && logText.indexOf('\u001b') < 0
+                        && logText.indexOf('\u0007') < 0
+                        && logText.indexOf('‮') < 0
+                        && logText.indexOf('⁦') < 0);
+        boolean tailDirty = false;
+        boolean tailHasLine = false;
+        for (String l : s.snapshot(rig.now()).logTail) {
+            if (l.indexOf('\u001b') >= 0 || l.indexOf('‮') >= 0
+                    || l.indexOf('⁦') >= 0 || l.indexOf('\u0007') >= 0) {
+                tailDirty = true;
+            }
+            if (l.equals("ctl A[31mBCDE\tF end")) {
+                tailHasLine = true;
+            }
+        }
+        check("supervisor: nor the on-screen tail", tailHasLine && !tailDirty);
         s.requestStop("test over");
         check("supervisor: (cleanup) stops", s.awaitTermination(8000));
     }

@@ -148,7 +148,8 @@ public final class StringsTable {
     /** Format: %1$s = the name as it will be saved (after sanitizing). */
     public static final String SETTINGS_NAME_SAVED_PREVIEW = "settings_name_saved_preview";
     public static final String SETTINGS_NAME_LOCKED = "settings_name_locked";
-    /** Format: %1$s = current code-point count, %2$s = the limit (64). */
+    /** Format: %1$s = current code-point count, %2$s = the limit (63:
+     *  the node refuses 64 or more; v4.2.4, audits L-9 and V4-7). */
     public static final String CHARACTER_COUNTER_FORMAT = "character_counter_format";
     public static final String BUTTON_SAVE = "button_save";
     public static final String A11Y_BACK = "a11y_back";

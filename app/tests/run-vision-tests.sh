@@ -25,7 +25,9 @@ trap 'rm -rf "$OUT"' EXIT
   "$NODE_SRC/I18n.java" \
   "$NODE_SRC/NodeState.java" \
   "$NODE_SRC/NodeSettings.java" \
+  "$NODE_SRC/NodeLaunch.java" \
   "$NODE_SRC/MiningLogic.java" \
+  "$NODE_SRC/NodeLogLines.java" \
   "$NODE_SRC/UiLogic.java" \
   "$NODE_SRC/PriceLogic.java" \
   "$NODE_SRC/DiagShare.java" \

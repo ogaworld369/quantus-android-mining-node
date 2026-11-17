@@ -18,7 +18,7 @@ import java.util.Set;
 
 /**
  * The RPC attempt budget log (integration design section 2.3):
- * the persistent record that makes "at most 12 RPC attempts per
+ * the persistent record that makes "at most 14 RPC attempts per
  * 600 s slot" hold across service stops and process death.
  *
  * A checkpoint journal alone cannot carry this budget: attempts
@@ -78,8 +78,19 @@ import java.util.Set;
  */
 public final class RpcAttemptLog {
 
-    /** Hard cap on recorded attempts in any one slot. */
-    public static final int MAX_ATTEMPTS_PER_SLOT = 12;
+    /**
+     * Hard cap on recorded attempts in any one slot: two attempts
+     * of an observation round (the first and its one in-window
+     * retry), 7 calls each — the identity check
+     * (system_localPeerId), then the 6 reads. It was 12, two 6-call
+     * attempts, until v4.2.4 (audit M-1) put the identity check at
+     * the head of every attempt; with 12 a first attempt that failed
+     * at its 6th or 7th call left the retry short of the budget and
+     * the slot became a gap (v4.2.4, audit V4-5; integration design
+     * section 2.3 updated to match). Logs written under the old cap
+     * load unchanged (they hold at most 12 rows per slot).
+     */
+    public static final int MAX_ATTEMPTS_PER_SLOT = 14;
 
     /** Hard cap on the log file's size at load (final check
      *  round 3): two retained slots of at most
@@ -195,7 +206,7 @@ public final class RpcAttemptLog {
             // multi-megabyte "line" was materialised whole
             // before validation could reject it. The whole
             // file is now read under a hard cap (a legitimate
-            // log holds at most two slots × 12 short rows —
+            // log holds at most two slots × 14 short rows —
             // a few KB; 1 MiB is headroom, not a target) and
             // split here; an over-cap file fails closed like
             // any other violation.

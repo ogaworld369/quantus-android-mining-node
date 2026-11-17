@@ -58,6 +58,9 @@ public final class HarnessMain {
         testJson();
         testJsonStrictRaw();
         testRpcAgainstStub();
+        testNodeRpcEndpointRecord();
+        testRpcGatedByRecord();
+        testRecordBoundToNodeProcess();
         testRpcValidation();
         testRound4RpcResultShapes();
         testRpcStrictParsing();
@@ -1923,6 +1926,410 @@ public final class HarnessMain {
         }
         check("r4/rpc: a null local peer id fails as an RPC failure",
                 peerClean);
+    }
+
+    // ---------------- the verified-endpoint record (v4.2.4, audit M-1) ----
+
+    private static final String M1_PEER =
+            "QmcqaT7GxeiXfZxHK8fVbXH5ZduwjLSuVVixFQsmqvMNfH";
+    /** Since V4-1 the record also names the node process: its pid
+     *  and its start time (field 22 of /proc/&lt;pid&gt;/stat). */
+    private static final String M1_RECORD = "{\"host\":\"127.0.0.1\","
+            + "\"peerId\":\"" + M1_PEER + "\",\"pid\":4242,\"port\":41235,"
+            + "\"procStartTicks\":777,"
+            + "\"sessionStartMillis\":1794000000000}";
+
+    private static File tempDir(String name) {
+        File dir = new File(System.getProperty("java.io.tmpdir"),
+                "depin-" + name + "-" + System.nanoTime());
+        //noinspection ResultOfMethodCallIgnored
+        dir.mkdirs();
+        return dir;
+    }
+
+    private static boolean recordRefused(String json) {
+        try {
+            NodeRpcEndpoint.parse(json);
+            return false;
+        } catch (IllegalArgumentException e) {
+            return true;
+        }
+    }
+
+    private static void testNodeRpcEndpointRecord() throws Exception {
+        NodeRpcEndpoint ep = new NodeRpcEndpoint("127.0.0.1", 41235,
+                M1_PEER, 1794000000000L, 4242, 777);
+        check("m1 record: written as the six fixed keys, canonical",
+                M1_RECORD.equals(ep.toJson()));
+        NodeRpcEndpoint back = NodeRpcEndpoint.parse(M1_RECORD);
+        check("m1 record: read back field for field",
+                "127.0.0.1".equals(back.host) && back.port == 41235
+                        && M1_PEER.equals(back.peerId)
+                        && back.sessionStartMillis == 1794000000000L
+                        && back.pid == 4242 && back.procStartTicks == 777
+                        && "http://127.0.0.1:41235/".equals(back.url()));
+        check("v4-1 record: a record without the node process is refused",
+                recordRefused("{\"host\":\"127.0.0.1\",\"peerId\":\""
+                        + M1_PEER + "\",\"port\":41235,"
+                        + "\"sessionStartMillis\":1794000000000}"));
+        check("v4-1 record: a pid outside 1..2^31-1 is refused",
+                recordRefused(M1_RECORD.replace("\"pid\":4242", "\"pid\":0"))
+                        && recordRefused(M1_RECORD.replace("\"pid\":4242",
+                        "\"pid\":-7"))
+                        && recordRefused(M1_RECORD.replace("\"pid\":4242",
+                        "\"pid\":2147483648"))
+                        && recordRefused(M1_RECORD.replace("\"pid\":4242",
+                        "\"pid\":\"4242\"")));
+        check("v4-1 record: a negative or fractional process start time"
+                        + " is refused",
+                recordRefused(M1_RECORD.replace("\"procStartTicks\":777",
+                        "\"procStartTicks\":-1"))
+                        && recordRefused(M1_RECORD.replace(
+                        "\"procStartTicks\":777", "\"procStartTicks\":7.5")));
+        check("m1 record: a missing or an extra key is refused",
+                recordRefused("{\"host\":\"127.0.0.1\",\"port\":9944,"
+                        + "\"sessionStartMillis\":1}")
+                        && recordRefused(M1_RECORD.replace("}",
+                        ",\"extra\":1}")));
+        check("m1 record: only an IPv4 loopback host in canonical form",
+                recordRefused(M1_RECORD.replace("127.0.0.1", "0.0.0.0"))
+                        && recordRefused(M1_RECORD.replace("127.0.0.1",
+                        "192.168.1.5"))
+                        && recordRefused(M1_RECORD.replace("127.0.0.1", "::1"))
+                        && recordRefused(M1_RECORD.replace("127.0.0.1",
+                        "127.0.0.01"))
+                        && recordRefused(M1_RECORD.replace("127.0.0.1",
+                        "localhost")));
+        check("m1 record: a port outside 1..65535 or not an integer",
+                recordRefused(M1_RECORD.replace("41235", "0"))
+                        && recordRefused(M1_RECORD.replace("41235", "65536"))
+                        && recordRefused(M1_RECORD.replace("41235",
+                        "\"41235\""))
+                        && recordRefused(M1_RECORD.replace("41235", "4.5")));
+        check("m1 record: a peer id that is empty or not base58",
+                recordRefused(M1_RECORD.replace(M1_PEER, ""))
+                        && recordRefused(M1_RECORD.replace(M1_PEER, "Qm0OIl"))
+                        && recordRefused(M1_RECORD.replace(M1_PEER,
+                        "Qm x")));
+        check("m1 record: a negative or fractional session start",
+                recordRefused(M1_RECORD.replace("1794000000000", "-1"))
+                        && recordRefused(M1_RECORD.replace("1794000000000",
+                        "1.5")));
+        File filesDir = tempDir("m1-record");
+        File rec = NodeRpcEndpoint.recordFile(filesDir);
+        check("m1 record: lives at files/node/rpc-endpoint.json",
+                rec.equals(new File(new File(filesDir, "node"),
+                        "rpc-endpoint.json")));
+        check("m1 record: no file reads as no record",
+                NodeRpcEndpoint.read(rec) == null);
+        rec.getParentFile().mkdirs();
+        java.nio.file.Files.write(rec.toPath(),
+                M1_RECORD.getBytes(StandardCharsets.UTF_8));
+        NodeRpcEndpoint fromFile = NodeRpcEndpoint.read(rec);
+        check("m1 record: a written record reads back",
+                fromFile != null && fromFile.port == 41235);
+        java.nio.file.Files.write(rec.toPath(), ("{\"host\":"
+                + "\"127.0.0.1\",\"pad\":\"" + "x".repeat(8000) + "\"}")
+                .getBytes(StandardCharsets.UTF_8));
+        boolean bigRefused = false;
+        try {
+            NodeRpcEndpoint.read(rec);
+        } catch (java.io.IOException | IllegalArgumentException e) {
+            bigRefused = true;
+        }
+        check("m1 record: an oversized file is refused, not parsed",
+                bigRefused);
+    }
+
+    /** A canned node that answers every observation method, with
+     *  {@code peerId} as its system_localPeerId, and records the
+     *  methods it was asked for, in order. */
+    private static RpcClient.Transport m1Node(final String peerId,
+                                              final List<String> seen) {
+        final String bestHash = "0x" + "ab".repeat(32);
+        final String finHash = "0x" + "cd".repeat(32);
+        return cannedTransport(request -> {
+            Map<String, Object> req = Json.parseObject(request);
+            seen.add((String) req.get("method"));
+            if (request.contains("system_localPeerId")) {
+                return resultJson("\"" + peerId + "\"");
+            }
+            if (request.contains("system_syncState")) {
+                return resultJson("{\"currentBlock\":1000,"
+                        + "\"highestBlock\":1000,\"startingBlock\":900}");
+            }
+            if (request.contains("chain_getBlockHash")) {
+                return resultJson("\"" + bestHash + "\"");
+            }
+            if (request.contains("chain_getFinalizedHead")) {
+                return resultJson("\"" + finHash + "\"");
+            }
+            if (request.contains("chain_getHeader")) {
+                return resultJson("{\"number\":\"0x3e0\"}");
+            }
+            return resultJson("{\"peers\":7,\"isSyncing\":false}");
+        });
+    }
+
+    private static void testRpcGatedByRecord() throws Exception {
+        final NodeRpcEndpoint ep = NodeRpcEndpoint.parse(M1_RECORD);
+        List<String> seen = new ArrayList<>();
+        RpcClient ok = new RpcClient(m1Node(M1_PEER, seen), () -> ep);
+        RpcClient.NodeObservation round = ok.fetchObservation();
+        check("m1 rpc: the node's own identity -> the observation is returned",
+                round.observation.bestBlockNumber == 1000L
+                        && M1_PEER.equals(round.localPeerId));
+        check("m1 rpc: the identity is asked first in the round",
+                !seen.isEmpty() && "system_localPeerId".equals(seen.get(0))
+                        && seen.size() == 7);
+
+        List<String> seenBad = new ArrayList<>();
+        RpcClient impostor = new RpcClient(
+                m1Node("QmImpostorImpostorImpostorImpostorImpostorIm",
+                        seenBad), () -> ep);
+        RpcClient.NodeObservation got = null;
+        boolean refused = false;
+        try {
+            got = impostor.fetchObservation();
+        } catch (RpcClient.RpcException e) {
+            refused = true;
+        }
+        check("m1 rpc: another identity -> the round fails, nothing adopted",
+                refused && got == null
+                        && seenBad.equals(Arrays.asList("system_localPeerId")));
+        boolean peerRefused = false;
+        try {
+            impostor.fetchLocalPeerId();
+        } catch (RpcClient.RpcException e) {
+            peerRefused = true;
+        }
+        check("m1 rpc: the gated peer-id read refuses another identity too",
+                peerRefused && M1_PEER.equals(ok.fetchLocalPeerId()));
+
+        List<String> seenNone = new ArrayList<>();
+        RpcClient noRecord = new RpcClient(m1Node(M1_PEER, seenNone),
+                () -> null);
+        boolean closed = false;
+        try {
+            noRecord.fetchObservation();
+        } catch (RpcClient.RpcException e) {
+            closed = true;
+        }
+        check("m1 rpc: no record -> fails closed before any request",
+                closed && seenNone.isEmpty());
+
+        File filesDir = tempDir("m1-rpc");
+        RpcClient fromDisk = RpcClient.forNodeRecord(
+                NodeRpcEndpoint.recordFile(filesDir), V41_BIN,
+                () -> V41_BOOT);
+        boolean diskClosed = false;
+        try {
+            fromDisk.fetchObservation();
+        } catch (RpcClient.RpcException e) {
+            diskClosed = e.getMessage().contains("not recorded");
+        }
+        check("m1 rpc: the production client with no record file fails"
+                        + " closed", diskClosed);
+        File rec = NodeRpcEndpoint.recordFile(filesDir);
+        rec.getParentFile().mkdirs();
+        java.nio.file.Files.write(rec.toPath(),
+                "{\"host\":\"10.0.0.1\"}".getBytes(StandardCharsets.UTF_8));
+        boolean badClosed = false;
+        try {
+            fromDisk.fetchObservation();
+        } catch (RpcClient.RpcException e) {
+            badClosed = true;
+        }
+        check("m1 rpc: a malformed record fails closed as well", badClosed);
+
+        final List<String> charged = new ArrayList<>();
+        RpcClient gated = new RpcClient(m1Node(M1_PEER, new ArrayList<>()),
+                () -> ep);
+        gated.setAttemptGate(charged::add);
+        gated.fetchObservation();
+        check("m1 rpc: the identity call is charged to the round's budget",
+                charged.size() == 7
+                        && "system_localPeerId".equals(charged.get(0)));
+    }
+
+    // ------- the record bound to the node process's life (v4.2.4, audit V4-1) -------
+
+    /** This app's node executable, as the stand-in /proc names it. */
+    private static final String V41_BIN =
+            "/data/app/~~Zq3x==/app.quantusnode.node-Yk9w==/lib/arm64/"
+                    + NodeProcess.LIBRARY;
+    /** The current boot's wall-clock start in the V4-1 tests. */
+    private static final long V41_BOOT = 1793999000000L;
+
+    private static byte[] utf8(String s) {
+        return s.getBytes(StandardCharsets.UTF_8);
+    }
+
+    /** A stand-in /proc/&lt;pid&gt;: {@code stat} carries
+     *  {@code startTicks} as field 22, after a comm holding spaces
+     *  and parentheses (the kernel allows both); {@code cmdline} is
+     *  written as given (NUL-separated). */
+    private static void fakeProc(File procRoot, long pid, long startTicks,
+                                 String cmdline) throws Exception {
+        File dir = new File(procRoot, Long.toString(pid));
+        dir.mkdirs();
+        java.nio.file.Files.write(new File(dir, "stat").toPath(), utf8(pid
+                + " (node (x) y) S 1 " + pid + " " + pid
+                + " 0 -1 4194560 100 0 0 0 5 3 0 0 20 0 12 0 " + startTicks
+                + " 123456 789 18446744073709551615\n"));
+        java.nio.file.Files.write(new File(dir, "cmdline").toPath(),
+                utf8(cmdline));
+    }
+
+    private static void deleteTree(File f) {
+        File[] kids = f.listFiles();
+        if (kids != null) {
+            for (File k : kids) {
+                deleteTree(k);
+            }
+        }
+        //noinspection ResultOfMethodCallIgnored
+        f.delete();
+    }
+
+    /** One round through the production record source over a
+     *  stand-in /proc: the refusal's message when the round failed
+     *  before any request went out, else null (the record was used,
+     *  or the failure came later). */
+    private static String v41Refusal(File rec, File procRoot, long bootWall) {
+        List<String> seen = new ArrayList<>();
+        RpcClient c = new RpcClient(m1Node(M1_PEER, seen),
+                RpcClient.recordSource(rec, procRoot, V41_BIN,
+                        () -> bootWall));
+        try {
+            c.fetchObservation();
+            return null;
+        } catch (RpcClient.RpcException e) {
+            return seen.isEmpty() ? e.getMessage() : null;
+        } catch (RpcClient.InconsistentObservation e) {
+            return null;
+        }
+    }
+
+    private static void testRecordBoundToNodeProcess() throws Exception {
+        // The strict identity rule, moved here from NodeService
+        // (isOwnNodeProcessStrict delegates to it): argv[0] is this
+        // app's node executable, or argv[0] is the system linker and
+        // argv[1] is that executable — full paths, never a substring.
+        check("v4-1 process: argv[0] is the node executable",
+                NodeProcess.isNodeCmdline(utf8(V41_BIN + "\0--chain\0"),
+                        V41_BIN)
+                        && NodeProcess.isNodeCmdline(utf8(V41_BIN), V41_BIN));
+        check("v4-1 process: the linker launch form names the executable"
+                        + " as argv[1]",
+                NodeProcess.isNodeCmdline(utf8("/system/bin/linker64\0"
+                        + V41_BIN + "\0--chain\0"), V41_BIN));
+        check("v4-1 process: anything else is not this app's node",
+                !NodeProcess.isNodeCmdline(utf8(""), V41_BIN)
+                        && !NodeProcess.isNodeCmdline(utf8(V41_BIN + "x\0"),
+                        V41_BIN)
+                        && !NodeProcess.isNodeCmdline(utf8("/data/local/tmp/"
+                        + NodeProcess.LIBRARY + "\0"), V41_BIN)
+                        && !NodeProcess.isNodeCmdline(utf8("/system/bin/sh\0"
+                        + V41_BIN + "\0"), V41_BIN)
+                        && !NodeProcess.isNodeCmdline(utf8("/system/bin/"
+                        + "linker64\0/system/bin/linker64\0" + V41_BIN),
+                        V41_BIN)
+                        && !NodeProcess.isNodeCmdline(utf8("app.quantusnode"
+                        + ".node:depin\0"), V41_BIN));
+        check("v4-1 process: no expected executable matches nothing",
+                !NodeProcess.isNodeCmdline(utf8(V41_BIN), null)
+                        && !NodeProcess.isNodeCmdline(utf8(""), ""));
+        check("v4-1 process: the executable path is nativeLibraryDir plus"
+                        + " the node library",
+                NodeProcess.binaryPath("/data/app/x/lib/arm64").equals(
+                        "/data/app/x/lib/arm64/libquantus_node.so"));
+
+        File procRoot = tempDir("v41-proc");
+        fakeProc(procRoot, 99, 31337, "x");
+        check("v4-1 process: the start time is field 22 of stat, read after"
+                        + " the last ')'",
+                NodeProcess.startTicks(procRoot, 99) == 31337L);
+        File truncated = new File(procRoot, "100");
+        truncated.mkdirs();
+        java.nio.file.Files.write(new File(truncated, "stat").toPath(),
+                utf8("100 (x) S 1 2 3\n"));
+        check("v4-1 process: no such process, a bad pid or a short stat"
+                        + " reads as -1",
+                NodeProcess.startTicks(procRoot, 98) == -1
+                        && NodeProcess.startTicks(procRoot, 0) == -1
+                        && NodeProcess.startTicks(procRoot, -5) == -1
+                        && NodeProcess.startTicks(procRoot, 100) == -1);
+        long me = ProcessHandle.current().pid();
+        long t1 = NodeProcess.startTicks(NodeProcess.PROC, me);
+        check("v4-1 process: this JVM's own start time reads from the real"
+                        + " /proc, the same twice",
+                t1 > 0 && t1 == NodeProcess.startTicks(new File("/proc"), me));
+        check("v4-1 process: this JVM is not the node",
+                !NodeProcess.runsNode(NodeProcess.PROC, me, V41_BIN));
+
+        File filesDir = tempDir("v41-record");
+        File rec = NodeRpcEndpoint.recordFile(filesDir);
+        rec.getParentFile().mkdirs();
+        long sessionStart = V41_BOOT + 60_000L;
+        java.nio.file.Files.write(rec.toPath(), utf8(new NodeRpcEndpoint(
+                "127.0.0.1", 41235, M1_PEER, sessionStart, 4242, 777)
+                .toJson()));
+        String nodeArgv = V41_BIN + "\0--chain\0mainnet\0";
+
+        fakeProc(procRoot, 4242, 777, nodeArgv);
+        check("v4-1 process: a live node at the recorded pid runs the node",
+                NodeProcess.runsNode(procRoot, 4242, V41_BIN));
+        List<String> seen = new ArrayList<>();
+        RpcClient live = new RpcClient(m1Node(M1_PEER, seen),
+                RpcClient.recordSource(rec, procRoot, V41_BIN,
+                        () -> V41_BOOT));
+        RpcClient.NodeObservation round = live.fetchObservation();
+        check("v4-1 rpc: the record of a live node process is used",
+                round != null && seen.size() == 7
+                        && M1_PEER.equals(round.localPeerId));
+
+        deleteTree(new File(procRoot, "4242"));
+        String gone = v41Refusal(rec, procRoot, V41_BOOT);
+        check("v4-1 rpc: a record whose process is gone fails closed, before"
+                        + " any request",
+                gone != null && gone.contains("stale"));
+
+        fakeProc(procRoot, 4242, 778, nodeArgv);
+        check("v4-1 rpc: the pid held by a later process (another start"
+                        + " time) fails closed",
+                v41Refusal(rec, procRoot, V41_BOOT) != null);
+        fakeProc(procRoot, 4242, 777, "/system/bin/app_process64\0x\0");
+        check("v4-1 rpc: the pid running another program fails closed",
+                v41Refusal(rec, procRoot, V41_BOOT) != null);
+        fakeProc(procRoot, 4242, 777, "/data/local/tmp/"
+                + NodeProcess.LIBRARY + "\0");
+        check("v4-1 rpc: a node library outside this app's directory fails"
+                        + " closed",
+                v41Refusal(rec, procRoot, V41_BOOT) != null);
+        fakeProc(procRoot, 4242, 777, "/system/bin/linker64\0" + V41_BIN
+                + "\0--chain\0");
+        check("v4-1 rpc: the linker launch form is this app's node",
+                v41Refusal(rec, procRoot, V41_BOOT) == null);
+
+        fakeProc(procRoot, 4242, 777, nodeArgv);
+        long margin = NodeRpcEndpoint.BOOT_MARGIN_MS;
+        String beforeBoot = v41Refusal(rec, procRoot,
+                sessionStart + margin + 1);
+        check("v4-1 rpc: a record from before the current boot fails closed,"
+                        + " even with a live node at its pid",
+                beforeBoot != null && beforeBoot.contains("stale"));
+        check("v4-1 rpc: a session start within the margin before the boot"
+                        + " is still the current boot's (clock corrections)",
+                v41Refusal(rec, procRoot, sessionStart + margin) == null);
+
+        java.nio.file.Files.delete(rec.toPath());
+        String none = v41Refusal(rec, procRoot, V41_BOOT);
+        check("v4-1 rpc: with no record the round still fails closed as"
+                        + " before",
+                none != null && none.contains("not recorded"));
+        deleteTree(procRoot);
+        deleteTree(filesDir);
     }
 
     private static void testRpcValidation() throws Exception {

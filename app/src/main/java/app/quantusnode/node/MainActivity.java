@@ -288,6 +288,9 @@ public class MainActivity extends Activity {
     private TextView detGapValue;
     private TextView detPeersValue;
     private TextView detSessionValue;
+    /** Node details' RPC line (v4.2.4, audit V4-7: it names the
+     *  address the node reported, refreshed with the details). */
+    private TextView rpcNoteView;
     private TextView cumUptimeValue;
     private TextView cumBlocksValue;
     private TextView cumPeersValue;
@@ -627,6 +630,10 @@ public class MainActivity extends Activity {
         // The price fetch identifies itself with this version
         // (PriceStore, v4.2.2 B-9).
         PriceStore.initUserAgent(this);
+        // v4.2.4 (audit V4-1): an endpoint record no running node
+        // stands behind goes before the first refresh, whose DePIN
+        // reconcile can relaunch the observer that reads it.
+        NodeService.clearStaleRpcEndpointRecord(this);
         // Transfer picker hand-offs survive recreation: the
         // document picker's result is delivered to the RECREATED
         // activity, and the pending kind / save source are plain
@@ -2355,9 +2362,12 @@ public class MainActivity extends Activity {
         root.addView(detailsStoppedBox, matchLpTop(16));
 
         // Network / RPC line (raw endpoint — not translated, by design).
-        TextView rpc = text(I18n.get(this, StringsTable.RPC_LOCAL_NOTE)
-                + " · 127.0.0.1:9944", 14, Tokens.FAINT, false);
-        root.addView(rpc, matchLpTop(24));
+        // v4.2.4 (audit V4-7): the address the running node reported,
+        // set by refreshDetails — not a fixed 127.0.0.1:9944.
+        rpcNoteView = text(UiLogic.rpcNoteLine(
+                I18n.get(this, StringsTable.RPC_LOCAL_NOTE), null),
+                14, Tokens.FAINT, false);
+        root.addView(rpcNoteView, matchLpTop(24));
 
         // Diagnostics (expandable).
         diagSection = new LinearLayout(this);
@@ -4027,6 +4037,9 @@ public class MainActivity extends Activity {
         f.uiState = p.state;
         f.uiReason = p.reason;
         f.miner = snap;
+        // v4.2.4 (audit L-7): kept by the service past the node exit
+        // the failure causes, until the next launch.
+        f.minerEndpointFailed = st.minerEndpointFailed;
         m.summaryLines = MiningLogic.summaryLines(f);
         boolean[] truncated = new boolean[1];
         String tail = BoundedLogFile.readTail(
@@ -4250,7 +4263,7 @@ public class MainActivity extends Activity {
         NodeState st = NodeState.get();
         int pending = UiLogic.settingsPending(st.serviceRunning,
                 st.launchedTelemetry, NodeSettings.telemetryEnabled(this),
-                st.launchedNodeName, NodeSettings.effectiveNodeName(this));
+                st.launchedNodeName, NodeSettings.launchNodeName(this));
         // Telemetry and the display name both live on the node
         // page now; a pending mining change goes to the mining
         // page (the hub replaced the one long scroll in the
@@ -4801,7 +4814,10 @@ public class MainActivity extends Activity {
         counter.setContentDescription(String.format(Locale.US,
                 StringsTable.quantity(tag, StringsTable.DISPLAY_NAME_COUNT_A11Y, count),
                 UiLogic.grouped(count), UiLogic.grouped(limit)));
-        boolean saveable = count <= limit;
+        // v4.2.4 (audit L-9): the same rule the save button applies
+        // — the node's own, on the normalized name (the length is the
+        // part the normalization cannot fix, and the message names it).
+        boolean saveable = UiLogic.nameSaveable(value);
         error.setVisibility(saveable ? View.GONE : View.VISIBLE);
         save.setEnabled(saveable);
         String saved = UiLogic.nameSavedPreview(value);
@@ -5184,7 +5200,7 @@ public class MainActivity extends Activity {
         // with the running presentations only.
         int pending = UiLogic.settingsPending(st.serviceRunning,
                 st.launchedTelemetry, NodeSettings.telemetryEnabled(this),
-                st.launchedNodeName, NodeSettings.effectiveNodeName(this));
+                st.launchedNodeName, NodeSettings.launchNodeName(this));
         // v4.0.0: a mining change waiting for a node restart counts
         // too. It is NONE whenever mining is not in use, which leaves
         // this exactly the v3.0.1 condition.
@@ -5949,6 +5965,12 @@ public class MainActivity extends Activity {
             cumPeersValue.setText(
                     UiLogic.grouped(TrackStore.maxPeers(this)));
         }
+        // v4.2.4 (audit V4-7): the address the poller uses, as the
+        // running node reported it; a dash before that and when
+        // stopped.
+        setTextIfChanged(rpcNoteView, UiLogic.rpcNoteLine(
+                I18n.get(this, StringsTable.RPC_LOCAL_NOTE),
+                stopped ? null : st.rpcEndpoint));
 
         // Diagnostics text: the service's own records, verbatim.
         StringBuilder sb = new StringBuilder();
@@ -6015,7 +6037,7 @@ public class MainActivity extends Activity {
 
         int pending = UiLogic.settingsPending(st.serviceRunning,
                 st.launchedTelemetry, NodeSettings.telemetryEnabled(this),
-                st.launchedNodeName, NodeSettings.effectiveNodeName(this));
+                st.launchedNodeName, NodeSettings.launchNodeName(this));
         boolean telPending = (pending & UiLogic.PENDING_TELEMETRY) != 0;
         boolean namePending = (pending & UiLogic.PENDING_NAME) != 0;
         telemetryPendingView.setVisibility(telPending ? View.VISIBLE : View.GONE);
@@ -6819,6 +6841,24 @@ public class MainActivity extends Activity {
         });
     }
 
+    /**
+     * Show a dialog whose window is FLAG_SECURE (v4.2.4, audit L-8):
+     * no screenshot, screen recording or recents thumbnail captures
+     * what it displays. Used for the dialogs that show the transfer
+     * code — the one secret guarding the identity seed inside an
+     * exported package — and the confirmation number, and for the
+     * code entry. Until v4.2.3 only the inner-hash editor had this.
+     */
+    private AlertDialog showSecure(AlertDialog.Builder builder) {
+        AlertDialog dialog = builder.create();
+        if (dialog.getWindow() != null) {
+            dialog.getWindow().addFlags(
+                    WindowManager.LayoutParams.FLAG_SECURE);
+        }
+        dialog.show();
+        return dialog;
+    }
+
     /** A finished export's reply (strict and one-shot share
      *  the shape): the transfer code is shown once, on this
      *  screen only, as when the export ran in-process; then
@@ -6831,7 +6871,9 @@ public class MainActivity extends Activity {
     private void onConfirmOneshotReply(Bundle data) {
         String code = data.getString(DepinIpc.KEY_T_COMMIT_CODE);
         if (code != null) {
-            new AlertDialog.Builder(this)
+            // v4.2.4 (audit L-8): FLAG_SECURE, like every dialog that
+            // shows transfer material.
+            showSecure(new AlertDialog.Builder(this)
                     .setTitle(I18n.get(this,
                             StringsTable
                                     .DEPIN_TRANSFER_COMMIT_CODE_TITLE))
@@ -6839,8 +6881,7 @@ public class MainActivity extends Activity {
                             StringsTable
                                     .DEPIN_TRANSFER_COMMIT_CODE_BODY,
                             code))
-                    .setPositiveButton(I18n.get(this, StringsTable.BUTTON_OK), null)
-                    .show();
+                    .setPositiveButton(I18n.get(this, StringsTable.BUTTON_OK), null));
         }
         attemptDeletePickedPackage();
     }
@@ -6850,12 +6891,12 @@ public class MainActivity extends Activity {
     private void onExportReplyAgain(Bundle data) {
         final String code = data.getString(
                 DepinIpc.KEY_T_CODE_DISPLAY);
-        new AlertDialog.Builder(this)
+        // v4.2.4 (audit L-8): the transfer code on a FLAG_SECURE window.
+        showSecure(new AlertDialog.Builder(this)
                 .setMessage(code + "\n\n" + I18n.get(this,
                         StringsTable
                                 .DEPIN_TRANSFER_EXPORTED_AGAIN_NOTE))
-                .setPositiveButton(I18n.get(this, StringsTable.BUTTON_OK), null)
-                .show();
+                .setPositiveButton(I18n.get(this, StringsTable.BUTTON_OK), null));
         saveStagedOutput(data);
     }
 
@@ -6889,10 +6930,10 @@ public class MainActivity extends Activity {
     private void onExportReply(Bundle data) {
         final String code = data.getString(
                 DepinIpc.KEY_T_CODE_DISPLAY);
-        new AlertDialog.Builder(this)
+        // v4.2.4 (audit L-8): the transfer code on a FLAG_SECURE window.
+        showSecure(new AlertDialog.Builder(this)
                 .setMessage(code)
-                .setPositiveButton(I18n.get(this, StringsTable.BUTTON_OK), null)
-                .show();
+                .setPositiveButton(I18n.get(this, StringsTable.BUTTON_OK), null));
         saveStagedOutput(data);
     }
 
@@ -7535,28 +7576,26 @@ public class MainActivity extends Activity {
         applyTransferButtonStates();
         depinWorkExecutor.execute(() -> {
             try {
-                byte[] raw;
+                // v4.2.4 (audit L-10): stream the pick into the input
+                // slot under the transfer cap (16 MiB), one buffer at
+                // a time. Until v4.2.3 the whole pick was buffered
+                // here first, in the process that also hosts the
+                // node's service, so a large file exhausted its heap
+                // long before the (then 512 MB) cap. Past the cap the
+                // copy stops at once and the slot keeps its previous
+                // content.
                 try (java.io.InputStream in =
                              getContentResolver().openInputStream(uri)) {
-                    java.io.ByteArrayOutputStream bos =
-                            new java.io.ByteArrayOutputStream();
-                    byte[] buf = new byte[64 * 1024];
-                    int n;
-                    long total = 0;
-                    while ((n = in.read(buf)) > 0) {
-                        total += n;
-                        if (total > app.quantusnode.node.depin.core
-                                .TransferPackage.MAX_PACKAGE_BYTES) {
-                            throw new IllegalStateException(
-                                    "file exceeds the transfer size limit");
-                        }
-                        bos.write(buf, 0, n);
-                    }
-                    raw = bos.toByteArray();
+                    app.quantusnode.node.depin.core.TransferIo
+                            .copyToFileCapped(in,
+                                    DepinFiles.transferInputFile(this),
+                                    app.quantusnode.node.depin.core
+                                            .TransferPackage.MAX_PACKAGE_BYTES);
+                } catch (app.quantusnode.node.depin.core.TransferIo
+                        .CapExceededException e) {
+                    throw new IllegalStateException(
+                            "file exceeds the transfer size limit");
                 }
-                app.quantusnode.node.depin.core.TransferIo
-                        .writeFileSync(
-                                DepinFiles.transferInputFile(this), raw);
             } catch (Throwable t) {
                 final String msg = t.getClass().getSimpleName()
                         + ": " + t.getMessage();
@@ -7629,7 +7668,20 @@ public class MainActivity extends Activity {
     private void handlePickedPackage() {
         final EditText input = new EditText(this);
         input.setSingleLine(true);
-        new AlertDialog.Builder(this)
+        // v4.2.4 (audit L-8): the inner-hash editor's protections for
+        // the transfer code, the one secret guarding the identity seed
+        // inside a package: no suggestions and no keyboard learning
+        // (a learned, possibly cloud-synced dictionary would keep it),
+        // no autofill capture, no full-screen extract editor, and a
+        // FLAG_SECURE window; the typed text does not stay in the view.
+        input.setInputType(InputType.TYPE_CLASS_TEXT
+                | InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD
+                | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+        input.setImeOptions(EditorInfo.IME_ACTION_DONE
+                | EditorInfo.IME_FLAG_NO_EXTRACT_UI
+                | EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING);
+        input.setImportantForAutofill(View.IMPORTANT_FOR_AUTOFILL_NO);
+        AlertDialog dialog = showSecure(new AlertDialog.Builder(this)
                 .setTitle(I18n.get(this,
                         StringsTable.DEPIN_TRANSFER_CODE_PROMPT))
                 .setView(input)
@@ -7641,8 +7693,10 @@ public class MainActivity extends Activity {
                             transferOp(DepinIpc.T_OP_STAGE_PACKAGE,
                                     params, this::onStageReply);
                         })
-                .setNegativeButton(I18n.get(this, StringsTable.BUTTON_CANCEL), null)
-                .show();
+                .setNegativeButton(I18n.get(this, StringsTable.BUTTON_CANCEL), null));
+        // The positive button's listener has read the code by the
+        // time the dialog is dismissed.
+        dialog.setOnDismissListener(d -> input.setText(""));
     }
 
     /** A finished stage's reply, shared by the fresh intake and
@@ -7684,12 +7738,16 @@ public class MainActivity extends Activity {
         applyTransferButtonStates();
         depinWorkExecutor.execute(() -> {
             try {
-                byte[] raw = app.quantusnode.node.depin.core.TransferIo
-                        .readAll(ref.packageFile,
-                                app.quantusnode.node.depin.core
-                                        .TransferPackage.MAX_PACKAGE_BYTES);
-                app.quantusnode.node.depin.core.TransferIo.writeFileSync(
-                        DepinFiles.transferInputFile(this), raw);
+                // v4.2.4 (audit L-10): streamed, like the pick above,
+                // so the main process never holds the package.
+                try (java.io.InputStream in =
+                             new java.io.FileInputStream(ref.packageFile)) {
+                    app.quantusnode.node.depin.core.TransferIo
+                            .copyToFileCapped(in,
+                                    DepinFiles.transferInputFile(this),
+                                    app.quantusnode.node.depin.core
+                                            .TransferPackage.MAX_PACKAGE_BYTES);
+                }
             } catch (Throwable t) {
                 final String msg = t.getClass().getSimpleName()
                         + ": " + t.getMessage();

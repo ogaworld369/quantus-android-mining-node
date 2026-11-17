@@ -1,8 +1,12 @@
 package app.quantusnode.node.depin;
 
 import android.content.Context;
+import android.os.SystemClock;
 
 import app.quantusnode.node.depin.core.JournalStore;
+import app.quantusnode.node.depin.core.NodeProcess;
+import app.quantusnode.node.depin.core.NodeRpcEndpoint;
+import app.quantusnode.node.depin.core.RpcClient;
 
 import java.io.File;
 
@@ -35,6 +39,25 @@ public final class DepinFiles {
         // that point, with the file name attached.
         dir.mkdirs();
         return dir;
+    }
+
+    /**
+     * The RPC client for the on-device node (v4.2.4, audits M-1 and
+     * V4-1), the one way the :depin process reaches it: the client
+     * follows the verified-endpoint record the main process keeps in
+     * the node's directory, and trusts it only while the node process
+     * it names is alive — this app's node executable (in
+     * nativeLibraryDir) at the recorded pid, with the recorded start
+     * time, in the current boot (see RpcClient.forNodeRecord).
+     */
+    public static RpcClient nodeRpcClient(Context context) {
+        Context app = context.getApplicationContext();
+        return RpcClient.forNodeRecord(
+                NodeRpcEndpoint.recordFile(app.getFilesDir()),
+                NodeProcess.binaryPath(
+                        app.getApplicationInfo().nativeLibraryDir),
+                () -> System.currentTimeMillis()
+                        - SystemClock.elapsedRealtime());
     }
 
     /** The checkpoint journal (the core store owns its format). */

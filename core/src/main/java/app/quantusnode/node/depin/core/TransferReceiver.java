@@ -353,9 +353,20 @@ public final class TransferReceiver {
      * ten-minute slots beyond the largest real journal
      * this protocol has moved (the production handover
      * was ~0.25 MB in total).
+     *
+     * v4.2.4 (audit L-10): the intake cap itself dropped to
+     * 16 MiB, below this rescue's own 128 MiB, which left
+     * the rescue's size check unreachable and its stated
+     * reason ("a package the intake cap allows to reach
+     * 512 MB") untrue. The rescue cap now IS the intake cap:
+     * the probe's second copy is bounded by the cap every
+     * re-presented package already passed at intake, the
+     * rescue never refuses a package the intake accepted,
+     * and the named refusal stays in place for any caller
+     * that hands it a larger figure.
      */
     static final long COMMIT_KEY_RESCUE_MAX_PACKAGE_BYTES =
-            128L * 1024 * 1024;
+            TransferPackage.MAX_PACKAGE_BYTES;
 
     static TransferStore.StagingRecord rescueCommitKeyIfAbsent(
             File stagingRoot, String transferCode,
@@ -420,8 +431,9 @@ public final class TransferReceiver {
             throws Exception {
         long len = packageFile.length();
         if (len > TransferPackage.MAX_PACKAGE_BYTES) {
-            throw new IllegalArgumentException(
-                    "package exceeds the 512 MB cap before reading");
+            throw new IllegalArgumentException("package exceeds the "
+                    + TransferPackage.MAX_PACKAGE_MIB + " MiB transfer cap"
+                    + " before reading (" + len + " bytes)");
         }
         TransferState state = state();
         if (!state.adopt()) state = state();
@@ -2022,9 +2034,11 @@ public final class TransferReceiver {
                 TransferState.stringOr(activeB, "device_id", null))) {
             File liveJournalFile = TransferStore.journalFile(storeRoot);
             if (liveJournalFile.exists()) {
+                // This device's own journal: the live-file cap, not
+                // the 16 MiB transfer input cap (v4.2.4, audit L-10).
                 JournalFile.Parsed live = JournalFile.parse(
                         TransferIo.readAll(liveJournalFile,
-                                TransferPackage.MAX_PACKAGE_BYTES),
+                                TransferStore.MAX_LIVE_FILE_BYTES),
                         deviceId);
                 stagedParsed = JournalFile.parse(
                         TransferIo.readAll(
@@ -2093,21 +2107,42 @@ public final class TransferReceiver {
         // user re-presents the file with its transfer code
         // (stagePackage re-derives the key on re-presentation)
         // and then confirms.
-        String commitKeyB64 = sr.derivedCommitKeyB64(wrapKey);
-        if (commitKeyB64 == null) {
-            throw new HoldException(
-                    "this intake predates confirmation numbers: "
-                            + "import the same file once more "
-                            + "(with its transfer code) and then "
-                            + "confirm");
-        }
+        // v4.2.4 (audit L-1): which key depends on the package.
+        // A package marked "commit_v": 2 (every package since
+        // v4.2.4) is keyed by the confirm secret this staging
+        // holds wrapped — every staging has it, so the M3 rule
+        // concerns only the v1 key below. A package without the
+        // mark comes from an older sender and keeps the v1
+        // number, derived from the transfer code, exactly as
+        // before. The record's commit_code is what every display
+        // reads (the confirm reply and the later re-display), so
+        // both follow the same rule.
         Map<String, Object> mfMap =
                 TransferState.child(rec, "manifest");
+        final byte[] commitKey;
+        if (TransferCommitCode.commitVersionOf(mfMap) == 2) {
+            byte[] secret = unwrapSecret(sr);
+            try {
+                commitKey = TransferCommitCode
+                        .deriveKeyFromConfirmSecret(secret);
+            } finally {
+                java.util.Arrays.fill(secret, (byte) 0);
+            }
+        } else {
+            String commitKeyB64 = sr.derivedCommitKeyB64(wrapKey);
+            if (commitKeyB64 == null) {
+                throw new HoldException(
+                        "this intake predates confirmation numbers: "
+                                + "import the same file once more "
+                                + "(with its transfer code) and then "
+                                + "confirm");
+            }
+            commitKey = TransferCodec.b64DecodeStrict(
+                    commitKeyB64, "commit key");
+        }
         if (mfMap != null) {
             rec.put("commit_code", TransferCommitCode.codeFor(
-                    TransferCodec.b64DecodeStrict(
-                            commitKeyB64, "commit key"),
-                    TransferCommitCode.manifestHash(mfMap)));
+                    commitKey, TransferCommitCode.manifestHash(mfMap)));
         }
         // Trial start: the attempt-ledger update IS the start
         // commit point, as in the strict mode.
@@ -2840,10 +2875,14 @@ public final class TransferReceiver {
     }
 
     /** SHA-256 of a file's full content, hex (the placement
-     *  hash form used by manifests and plans). */
+     *  hash form used by manifests and plans). Its inputs are this
+     *  installation's own placement files, so the read is bounded
+     *  by the live-file cap, not the transfer input cap (v4.2.4,
+     *  audit L-10 — see TransferStore.MAX_LIVE_FILE_BYTES; the
+     *  promotion's backup reads below follow the same rule). */
     private static String hashOfFile(File f) throws IOException {
         return Hex.encode(DepinCore.sha256(TransferIo.readAll(
-                f, TransferPackage.MAX_PACKAGE_BYTES)));
+                f, TransferStore.MAX_LIVE_FILE_BYTES)));
     }
 
     private File liveFileFor(String key) {
@@ -3000,7 +3039,7 @@ public final class TransferReceiver {
                 } else if (dest.exists()) {
                     String destSha = Hex.encode(DepinCore.sha256(
                             TransferIo.readAll(dest,
-                                    TransferPackage.MAX_PACKAGE_BYTES)));
+                                    TransferStore.MAX_LIVE_FILE_BYTES)));
                     if (!destSha.equals(oldFiles.get(key))) {
                         throw new InconsistencyException(
                                 "live file " + key + " changed after "
@@ -3035,7 +3074,7 @@ public final class TransferReceiver {
             if (promoteDone.contains(key)) continue;
             String liveSha = dest.exists()
                     ? Hex.encode(DepinCore.sha256(TransferIo.readAll(
-                            dest, TransferPackage.MAX_PACKAGE_BYTES)))
+                            dest, TransferStore.MAX_LIVE_FILE_BYTES)))
                     : null;
             if (expect.equals(liveSha)) {
                 // Promoted but unrecorded: adopt the movement —
@@ -3060,7 +3099,7 @@ public final class TransferReceiver {
                         backup.getParentFile().mkdirs();
                         TransferIo.writeFileSync(backup,
                                 TransferIo.readAll(dest,
-                                        TransferPackage.MAX_PACKAGE_BYTES));
+                                        TransferStore.MAX_LIVE_FILE_BYTES));
                         appendPromotion("backup_done", trialId, key);
                         backupDone.add(key);
                     } else {
@@ -3517,7 +3556,7 @@ public final class TransferReceiver {
                 if (live.exists()) {
                     String liveSha = Hex.encode(DepinCore.sha256(
                             TransferIo.readAll(live,
-                                    TransferPackage.MAX_PACKAGE_BYTES)));
+                                    TransferStore.MAX_LIVE_FILE_BYTES)));
                     if (liveSha.equals(TransferState.stringOr(
                             fe, "expect_sha256", null))) {
                         stagedDest.getParentFile().mkdirs();

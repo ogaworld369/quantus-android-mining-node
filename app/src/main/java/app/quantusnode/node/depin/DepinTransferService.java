@@ -333,7 +333,6 @@ public final class DepinTransferService extends Service {
                     TransferSender.ExportResult r =
                             DepinTransferRuntime.sender(this)
                                     .exportPackage(seed);
-                    DepinTransferRuntime.lastExport = r;
                     data.putString(DepinIpc.KEY_T_CODE_DISPLAY,
                             r.transferCodeDisplay);
                     data.putString(DepinIpc.KEY_T_PACKAGE_PATH,
@@ -356,7 +355,6 @@ public final class DepinTransferService extends Service {
                     TransferSender.ExportResult r =
                             DepinTransferRuntime.sender(this)
                                     .exportPackageOneshot(seed);
-                    DepinTransferRuntime.lastExport = r;
                     data.putString(DepinIpc.KEY_T_CODE_DISPLAY,
                             r.transferCodeDisplay);
                     data.putString(DepinIpc.KEY_T_PACKAGE_PATH,
@@ -384,7 +382,6 @@ public final class DepinTransferService extends Service {
                     TransferSender.ExportResult r =
                             DepinTransferRuntime.sender(this)
                                     .exportPackageOneshotAgain(seed);
-                    DepinTransferRuntime.lastExport = r;
                     data.putString(DepinIpc.KEY_T_CODE_DISPLAY,
                             r.transferCodeDisplay);
                     data.putString(DepinIpc.KEY_T_PACKAGE_PATH,

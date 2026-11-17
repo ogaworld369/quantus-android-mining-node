@@ -1,8 +1,8 @@
 diff --git a/node/src/miner_server.rs b/node/src/miner_server.rs
-index d8003eb..6fd5e83 100644
+index d8003eb..c9b4b1b 100644
 --- a/node/src/miner_server.rs
 +++ b/node/src/miner_server.rs
-@@ -590,7 +590,13 @@ fn create_server_endpoint(
+@@ -590,7 +590,14 @@ fn create_server_endpoint(
  	quinn_config.transport_config(Arc::new(transport_config));
  
  	// Create endpoint
@@ -11,8 +11,9 @@ index d8003eb..6fd5e83 100644
 +	// Upstream binds 0.0.0.0, which exposes this endpoint to the whole
 +	// LAN; the only miner the Android build ever serves is the one
 +	// bundled in the same app, connecting from the same device. The
-+	// auth token and the TLS certificate pin stay in place as the
-+	// second and third layers for that local connection.
++	// auth token stays in place and is what authenticates a client to
++	// this node; the TLS certificate pin works the other way round: it
++	// lets the miner authenticate this node before it sends the token.
 +	let addr = format!("127.0.0.1:{}", port).parse().unwrap();
  	let endpoint = quinn::Endpoint::server(quinn_config, addr)
  		.map_err(|e| format!("Failed to create server endpoint: {}", e))?;

@@ -141,6 +141,19 @@ public final class TransferStore {
         return new File(storeRoot, LIVE_MANIFEST_NAME);
     }
 
+    /**
+     * Read cap for this installation's OWN live journal, archives and
+     * their promotion backups (v4.2.4, audit L-10). The receiver read
+     * these with {@link TransferPackage#MAX_PACKAGE_BYTES} as a
+     * generic "large enough" bound; when the package cap dropped to
+     * 16 MiB they keep the previous 512 MiB, so a receiving device
+     * whose own history is longer than one package can carry still
+     * confirms and promotes. (What actually bounds these files is the
+     * journal store's own design cap, 256 MiB for journal plus
+     * archives.)
+     */
+    public static final long MAX_LIVE_FILE_BYTES = 512L * 1024 * 1024;
+
     // ---------------- staging record ----------------
 
     /** The explicit value {@link StagingRecord#wrappedSeedB64}

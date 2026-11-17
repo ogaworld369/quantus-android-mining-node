@@ -202,7 +202,13 @@ public class DepinObserverService extends Service {
         // executor (see ensureInitialized) — after the foreground
         // transition. onCreate only wires the cheap pieces: the
         // RPC client with its attempt gate, and the IPC endpoint.
-        rpc = new RpcClient(RpcClient.DEFAULT_ENDPOINT);
+        // v4.2.4 (audit M-1): the client follows the node's
+        // verified-endpoint record — the address and identity the
+        // node itself reported — instead of a fixed URL another
+        // app could hold; with no record every round fails closed.
+        // Audit V4-1: and only while the node process that wrote
+        // the record is alive.
+        rpc = DepinFiles.nodeRpcClient(this);
         rpc.setAttemptGate(method -> {
             // Section 2.3: an attempt is recorded as consumed
             // BEFORE the request is issued, charged to the slot
@@ -1633,12 +1639,11 @@ public class DepinObserverService extends Service {
             if (round == null) {
                 return; // failure already surfaced by fetchRound
             }
-            if (CompanionStatus.nodePeerId == null) {
-                try {
-                    CompanionStatus.nodePeerId = rpc.fetchLocalPeerId();
-                } catch (RpcClient.RpcException ignored) {
-                    // Informational only; retried on a later tick.
-                }
+            // v4.2.4 (audit M-1): the round itself verified the
+            // node's identity before its first read, so the peer ID
+            // comes with it — no separate (budget-charged) call.
+            if (round.localPeerId != null) {
+                CompanionStatus.nodePeerId = round.localPeerId;
             }
         } finally {
             rpc.endRound();

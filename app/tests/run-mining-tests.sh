@@ -24,6 +24,7 @@ trap 'rm -rf "$OUT"' EXIT
 "$JAVA_HOME/bin/javac" -encoding UTF-8 -Xlint:-options \
   -source 17 -target 17 -d "$OUT" \
   "$SRC/MiningLogic.java" \
+  "$SRC/NodeLogLines.java" \
   "$SRC/BoundedLogFile.java" \
   "$SRC/MinerSupervisor.java" \
   "$SRC/StorageLogic.java" \

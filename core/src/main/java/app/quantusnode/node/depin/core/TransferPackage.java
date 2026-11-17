@@ -55,9 +55,24 @@ public final class TransferPackage {
     public static final String ABANDON_FORMAT =
             "quantus-depin-transfer-abandon";
 
-    /** Package input cap (design section 3.5): 512 MB, checked
-     *  before the input is read whole. */
-    public static final long MAX_PACKAGE_BYTES = 512L * 1024 * 1024;
+    /**
+     * Transfer input cap (design section 3.5), checked before an
+     * input is read whole: 16 MiB since v4.2.4 (audit L-10; 512 MB
+     * before). Intake holds a package several times over in memory
+     * (the bytes, the decoded text, the Base64 payload, its
+     * re-encoding, the decrypted payload), so the heap — not 512 MB —
+     * was the real limit, and a large file picked by the user could
+     * exhaust it. Real packages are far below this: about 840 bytes
+     * per checkpoint (the production handover of 287 checkpoints was
+     * 240,781 bytes), so 16 MiB carries some 19,900 checkpoints —
+     * about 138 days of continuous ten-minute recording. A history
+     * longer than that no longer fits one package; the sender refuses
+     * to write such a package ({@link #requireWithinCap}) rather than
+     * freeze its identity into a file no receiver accepts.
+     */
+    public static final long MAX_PACKAGE_BYTES = 16L * 1024 * 1024;
+    /** {@link #MAX_PACKAGE_BYTES} in MiB, for messages. */
+    public static final long MAX_PACKAGE_MIB = MAX_PACKAGE_BYTES / (1024 * 1024);
     /** Manifest cap (design section 3.4): 4 MiB. */
     public static final long MAX_MANIFEST_BYTES = 4L * 1024 * 1024;
     /** Design sections 3.4 / 4.3: migration staging cap (1 GB). */
@@ -72,11 +87,35 @@ public final class TransferPackage {
             "checkpoint_count", "archives", "anchor_bundle_hash",
             "anchor_created_at_unix", "anchor_params",
             "created_at_unix", "sender_app");
+    /** The one OPTIONAL manifest key (v4.2.4, audit L-1): "commit_v",
+     *  present (as the integer 2) in every package since v4.2.4 and
+     *  absent in older ones. Any other key outside MANIFEST_KEYS is
+     *  still refused. */
+    private static final String MANIFEST_OPTIONAL_COMMIT_V =
+            TransferCommitCode.MANIFEST_COMMIT_VERSION;
     private static final Set<String> ARCHIVE_KEYS = keySet(
             "id", "version", "count", "tail_checkpoint_hash", "sha256");
     private static final Set<String> ANCHOR_PARAM_KEYS = keySet(
             "hash", "signature", "iterations_per_checkpoint",
             "checkpoint_interval_sec");
+
+    /**
+     * The sender's side of the cap (v4.2.4, audit L-10): a package
+     * larger than any receiver accepts is not written. Called on the
+     * finished package bytes, BEFORE the export's vault material and
+     * S1 record exist, so the export fails clean and the identity is
+     * not frozen into a file nobody can import.
+     *
+     * @throws IllegalStateException when {@code packageBytes} exceeds
+     *         {@link #MAX_PACKAGE_BYTES}
+     */
+    public static void requireWithinCap(long packageBytes) {
+        if (packageBytes > MAX_PACKAGE_BYTES) {
+            throw new IllegalStateException("hold: the package would be "
+                    + packageBytes + " bytes, over the " + MAX_PACKAGE_MIB
+                    + " MiB transfer cap; nothing was exported");
+        }
+    }
 
     // ---------------- strict schema helpers ----------------
 
@@ -149,6 +188,9 @@ public final class TransferPackage {
         public Map<String, Object> anchorParams;
         public long createdAtUnix;
         public String senderApp;
+        /** The confirmation-number derivation (v4.2.4, audit L-1):
+         *  2 with "commit_v": 2 in the manifest, 1 without. */
+        public int commitVersion = 1;
         /** The parsed manifest object, retained so its JCS
          *  bytes (signature input / AAD) are recomputed from
          *  the values, never from transport bytes. */
@@ -175,9 +217,22 @@ public final class TransferPackage {
     }
 
     public static Manifest validateManifest(Map<String, Object> m) {
-        requireExactKeys(m, MANIFEST_KEYS, "manifest");
+        // v4.2.4 (audit L-1): the exact key set, plus the one
+        // optional "commit_v", whose only accepted value is 2.
+        Map<String, Object> required = m;
+        if (m.containsKey(MANIFEST_OPTIONAL_COMMIT_V)) {
+            Object v = m.get(MANIFEST_OPTIONAL_COMMIT_V);
+            if (!(v instanceof Long) || (Long) v != 2L) {
+                throw new IllegalArgumentException(
+                        "manifest: commit_v must be the integer 2");
+            }
+            required = new java.util.LinkedHashMap<>(m);
+            required.remove(MANIFEST_OPTIONAL_COMMIT_V);
+        }
+        requireExactKeys(required, MANIFEST_KEYS, "manifest");
         Manifest out = new Manifest();
         out.raw = m;
+        out.commitVersion = TransferCommitCode.commitVersionOf(m);
         out.deviceId = requireString(m, "device_id", "manifest");
         out.pubkey = TransferCodec.hexBytes(
                 requireString(m, "pubkey", "manifest"), 32, "manifest.pubkey");

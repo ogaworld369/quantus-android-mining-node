@@ -64,9 +64,10 @@ public final class DepinTransferRuntime {
 
     private static final SecureRandom RANDOM = new SecureRandom();
 
-    /** The most recent export in this process (sender role),
-     *  for the UI's one-time display of the transfer code. */
-    public static volatile TransferSender.ExportResult lastExport;
+    // v4.2.4 (audit I-2): the static "lastExport" that stood here
+    // was written on every export and read nowhere; it kept the raw
+    // transfer code reachable for the life of the :depin process.
+    // The code now lives only in the export's own reply to the UI.
 
     public static File storeRoot(Context context) {
         return DepinFiles.depinDir(context);
@@ -282,10 +283,19 @@ public final class DepinTransferRuntime {
 
     // ---------------- machines ----------------
 
-    private static long finalizedNow() throws Exception {
+    /**
+     * The finalized height the transfer protocols issue and expire
+     * permits against. v4.2.4 (audit M-1): read through the node's
+     * verified-endpoint record, so the round's first call checks the
+     * node's identity before any height is adopted; with no record
+     * (node stopped, or not started far enough) this throws, and the
+     * protocols' existing "no fresh finalized value" holds apply — no
+     * permit is issued, no expiry is latched. Audit V4-1: a record
+     * whose node process is gone counts as no record.
+     */
+    private static long finalizedNow(Context context) throws Exception {
         RpcClient.NodeObservation o =
-                new RpcClient(RpcClient.DEFAULT_ENDPOINT)
-                        .fetchObservation();
+                DepinFiles.nodeRpcClient(context).fetchObservation();
         if (o.observation.finalizedBlockNumber == null) {
             throw new IllegalStateException(
                     "node observation has no finalized block");
@@ -491,19 +501,21 @@ public final class DepinTransferRuntime {
     }
 
     public static TransferSender sender(Context context) throws Exception {
+        final Context app = context.getApplicationContext();
         return new TransferSender(storeRoot(context), vault(context),
                 RANDOM, "quantus-android-node", freezeControl(context),
-                DepinTransferRuntime::finalizedNow, SENDER_CLOCK,
+                () -> finalizedNow(app), SENDER_CLOCK,
                 PERMIT_VALIDITY_SEC, PERMIT_VALIDITY_BLOCKS,
                 PERMIT_SAFETY_MARGIN_BLOCKS);
     }
 
     public static TransferReceiver receiver(Context context)
             throws Exception {
+        final Context appContext = context.getApplicationContext();
         TransferReceiver r = new TransferReceiver(storeRoot(context),
                 vault(context),
                 new AndroidSeedVault(context).wrapKeyForTransfer(),
-                DepinTransferRuntime::finalizedNow, RECEIVER_CLOCK,
+                () -> finalizedNow(appContext), RECEIVER_CLOCK,
                 new AndroidTimeSource(context));
         // C-2: when a promotion displaces the shadow identity's
         // live placement, the observer (its only writer) is

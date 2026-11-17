@@ -10,7 +10,7 @@ The design concept is to make the node's pulse visible: live block/peer visualiz
 
 | | |
 |---|---|
-| Current release | **v4.2.3** (versionCode 69), published 2026-11-17 — [release page](https://github.com/ogaworld369/quantus-android-mining-node/releases/tag/v4.2.3) |
+| Current release | **v4.2.4** (versionCode 70), published 2026-11-17 — [release page](https://github.com/ogaworld369/quantus-android-mining-node/releases/tag/v4.2.4) |
 | First public release | v0.1.0, published 2026-11-04 |
 | Download | Signed APK from [GitHub Releases](https://github.com/ogaworld369/quantus-android-mining-node/releases) |
 | Requirements | Android 12 or later, arm64 device |
@@ -24,6 +24,13 @@ The design concept is to make the node's pulse visible: live block/peer visualiz
 - **It is** a full node for Quantus mainnet: it syncs, verifies every block itself, and relays data to peers. With mining switched on (v4.0.0, opt-in and off by default), the same node also validates and mines for the user's own rewards address.
 - **It is not** a wallet. It never handles wallet seed phrases and cannot spend funds. The one mining value it can hold is the rewards inner hash the user pastes in — a preimage that is published in block headers when mining and controls no assets by itself (see "Security first" below).
 - **New in v3.0 — activity recording (DePIN), built in.** Opt-in and off by default. With it on, the app keeps a signed record of the node's uptime and relay work, which you can export as a proof bundle file whenever you choose.
+
+## What's in v4.2.4
+
+- **The security fix release for the external audit of v4.2.3** (no critical or high findings; one medium, eleven low, twelve informational — every item fixed, or accepted with the reason recorded in [SECURITY.md](SECURITY.md)). An audit of the changes themselves found no critical or high findings (one medium, three low), and every verified finding was fixed in this release. No feature changes, no new permissions, and the bundled binaries are unchanged.
+- **The app now verifies it is talking to its own node.** The node silently moves its RPC to a random port when the usual one is taken, so the app adopts the address and peer identity from the node's own startup output, checks the identity on every poll, and keeps a record of them that stays valid only while that node process lives — the activity recording and the identity transfer read through the same check. Statistics and diagnostics derived from the node's log now count only lines in the node's own format, and shared diagnostics mask every non-loopback address.
+- **Less of the node is visible by default.** The display name is passed to the node only while telemetry is on (peers otherwise see the default name), mDNS no longer advertises the node on the local network, and the metrics endpoint and offchain workers are off.
+- **The handover confirmation number is derived from the handover's own secret**, not from the transfer code; handover packages are capped at 16 MiB and imports stream instead of buffering the whole file. Both devices need v4.2.4 for a handover. Details: [CHANGELOG.md](CHANGELOG.md).
 
 ## What's in v4.2.3
 
@@ -83,7 +90,7 @@ Details and the full version history: [CHANGELOG.md](CHANGELOG.md).
 
 ## Download
 
-Get the signed APK from [GitHub Releases](https://github.com/ogaworld369/quantus-android-mining-node/releases). The current release is [v4.2.3](https://github.com/ogaworld369/quantus-android-mining-node/releases/tag/v4.2.3); its APK size and SHA-256 are listed on the release page (and in the release records in [docs/RELEASE.md](docs/RELEASE.md)), so you can verify your download. v4.2.3 installs over v4.2.2 keeping settings and records.
+Get the signed APK from [GitHub Releases](https://github.com/ogaworld369/quantus-android-mining-node/releases). The current release is [v4.2.4](https://github.com/ogaworld369/quantus-android-mining-node/releases/tag/v4.2.4); its APK size and SHA-256 are listed on the release page (and in the release records in [docs/RELEASE.md](docs/RELEASE.md)), so you can verify your download. v4.2.4 installs over v4.2.3 keeping settings and records.
 
 ## Usage
 
@@ -91,7 +98,7 @@ New to the app? Start with the Usage Guide — available in all 9 languages the 
 
 ## Status
 
-- Publicly released since 2026-11-04; the current release is v4.2.3 (above). Per-version details live in the [CHANGELOG](CHANGELOG.md), not here.
+- Publicly released since 2026-11-04; the current release is v4.2.4 (above). Per-version details live in the [CHANGELOG](CHANGELOG.md), not here.
 - Still being watched on the reference device: the remaining on-device checks — where the pruned database size plateaus, and battery/heat over long uptimes.
 - Release gates: [docs/RELEASE.md](docs/RELEASE.md). Design: [docs/DESIGN.md](docs/DESIGN.md).
 
@@ -109,7 +116,13 @@ New to the app? Start with the Usage Guide — available in all 9 languages the 
 ## What we know so far
 
 - Upstream: `quantus-node` v1.0.5 (Quantus-Network/chain), Substrate-based, QPoW / Poseidon2, ML-DSA signatures.
-- The node cross-builds for `aarch64-linux-android`. Three small patches are needed, all in [patches/](patches/): one makes explicit pruning values take effect (next bullet), one stops DNS resolution from panicking when the node runs as a plain process outside an Android app runtime (vendored `ndk-context` / `hickory-resolver` with a fallback), and one makes the Wasm runtime create instances on demand instead of reserving its whole memory pool up front. The build recipe is fixed in [docs/BUILD-android.md](docs/BUILD-android.md). Release-profile binary: ~53 MB stripped (debug: ~123 MB).
+- The node cross-builds for `aarch64-linux-android`. Four small patches are needed, all in [patches/](patches/):
+  - one makes explicit pruning values take effect (next bullet);
+  - one stops DNS resolution from panicking when the node runs as a plain process outside an Android app runtime (vendored `ndk-context` / `hickory-resolver` with a fallback);
+  - one makes the Wasm runtime create instances on demand instead of reserving its whole memory pool up front;
+  - one binds the node's miner endpoint to loopback (`127.0.0.1`) instead of all interfaces (since v4.2.3).
+
+  The build recipe is fixed in [docs/BUILD-android.md](docs/BUILD-android.md). Release-profile binary: ~53 MB stripped (debug: ~123 MB).
 - Upstream forces archive storage on all nodes; a minimal patch (respect explicit numeric pruning) enables a phone-sized database. Details in the design doc.
 - Official minimum specs list 100 GB storage (validator-oriented); a pruned non-validator node is far smaller in practice. Measured on a Pixel 9a after a full sync (2026-11-05): 1.30 GB in total (96 MB app + 1.20 GB of node data). Where it plateaus over months is still being watched.
 

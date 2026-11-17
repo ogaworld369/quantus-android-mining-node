@@ -895,37 +895,50 @@ public final class MiningLogic {
         METRICS_DISABLED_NOTE
     }
 
+    // The texts each event's message starts with (after the
+    // pictograph the miner puts in front of some of them).
     private static final String M_JOB = "New block to mine: job ";
+    private static final String M_SOLVED_START = "Job ";
     private static final String M_SOLVED = " solved: ";
     private static final String M_SUBMITTING = "submitting solution to node";
-    private static final String M_HASHES_IN = " hashes in ";
     private static final String M_METRICS = "Metrics available at http://";
-    private static final String M_METRICS_OFF =
-            "'http-exporter' feature is disabled";
+    private static final String M_METRICS_OFF = "metrics::start_http_exporter"
+            + " called but 'http-exporter' feature is disabled";
     /** miner-service log_worker_completion: "{type} worker {id}
-     *  {outcome}: {count} hashes in {secs:.2}s ({rate})". */
+     *  {outcome}: {count} hashes in {secs:.2}s ({rate})", matched
+     *  at the start of the message. */
     private static final Pattern WORKER_REPORT = Pattern.compile(
-            "\\b(CPU|GPU) worker (\\d{1,4}) [^:]{0,80}: (\\d{1,18}) hashes in"
+            "(CPU|GPU) worker (\\d{1,4}) [^:]{0,80}: (\\d{1,18}) hashes in"
                     + " (\\d{1,9}(?:\\.\\d{1,3})?)s");
 
-    /** Classify one line of miner output; unknown text is NONE. */
+    /**
+     * Classify one line of miner output; unknown text is NONE. Only a
+     * line with the miner's own header counts, and only by the text
+     * its message starts with (v4.2.4, audit L-2 / I-12): an impostor
+     * on the miner port can make the miner log a close reason with
+     * line breaks in it, and neither the fragments after a break nor
+     * a marker inside such a message is the miner's statement.
+     */
     public static MinerEvent classifyMinerLine(String line) {
-        if (line == null || line.isEmpty()) {
+        NodeLogLines.MinerLine m = NodeLogLines.parseMinerLine(line);
+        if (m == null) {
             return MinerEvent.NONE;
         }
-        if (line.contains(M_JOB)) {
+        String msg = m.message;
+        if (NodeLogLines.messageStartsWith(msg, M_JOB)) {
             return MinerEvent.JOB_RECEIVED;
         }
-        if (line.contains(M_SOLVED) && line.contains(M_SUBMITTING)) {
+        if (NodeLogLines.messageStartsWith(msg, M_SOLVED_START)
+                && msg.contains(M_SOLVED) && msg.contains(M_SUBMITTING)) {
             return MinerEvent.SOLUTION_SUBMITTED;
         }
-        if (parseWorkerReport(line) != null) {
+        if (workerReportIn(msg) != null) {
             return MinerEvent.WORKER_REPORT;
         }
-        if (line.contains(M_METRICS_OFF)) {
+        if (NodeLogLines.messageStartsWith(msg, M_METRICS_OFF)) {
             return MinerEvent.METRICS_DISABLED_NOTE;
         }
-        if (line.contains(M_METRICS)) {
+        if (NodeLogLines.messageStartsWith(msg, M_METRICS)) {
             return MinerEvent.METRICS_ANNOUNCED;
         }
         return MinerEvent.NONE;
@@ -946,13 +959,15 @@ public final class MiningLogic {
     }
 
     /** The numbers of a worker report line, or null when the line
-     *  is not one. */
+     *  is not one (a line without the miner's header never is). */
     public static WorkerReport parseWorkerReport(String line) {
-        if (line == null || !line.contains(M_HASHES_IN)) {
-            return null;
-        }
-        Matcher m = WORKER_REPORT.matcher(line);
-        if (!m.find()) {
+        NodeLogLines.MinerLine ml = NodeLogLines.parseMinerLine(line);
+        return ml == null ? null : workerReportIn(ml.message);
+    }
+
+    private static WorkerReport workerReportIn(String message) {
+        Matcher m = WORKER_REPORT.matcher(message);
+        if (!m.lookingAt()) {
             return null;
         }
         try {
@@ -974,7 +989,9 @@ public final class MiningLogic {
         /** "⛏️ Miner server listening on port N" */
         ENDPOINT_LISTENING,
         /** "⛏️ Rewards wormhole address: <ss58>" */
-        REWARDS_ADDRESS
+        REWARDS_ADDRESS,
+        /** "⛏️ Failed to start miner server on port N: …" */
+        MINER_ENDPOINT_FAILED
     }
 
     private static final String N_ACCEPTED =
@@ -982,23 +999,43 @@ public final class MiningLogic {
     private static final String N_REJECTED = "Failed to submit seal from miner";
     private static final String N_LISTENING = "Miner server listening on port";
     private static final String N_ADDRESS = "Rewards wormhole address: ";
+    /** node/src/service.rs (v1.0.5): logged at ERROR when the miner
+     *  endpoint cannot bind, right before the essential mining task
+     *  ends and takes the node down with it (audit L-7). */
+    private static final String N_ENDPOINT_FAILED =
+            "Failed to start miner server on port ";
 
-    /** Classify one line of node output; unknown text is NONE. */
+    /**
+     * Classify one line of node output; unknown text is NONE. Only a
+     * line with the node's own header counts, and only by the text
+     * its message starts with (v4.2.4, audit L-2): a peer can make
+     * the node log an address carrying line breaks and arbitrary
+     * text, and until v4.2.3 a marker anywhere in any line counted,
+     * so a peer could inflate "blocks accepted" and "seals
+     * rejected". A fragment after such a break has no header and is
+     * NONE; a marker inside a header-shaped line's peer text does
+     * not stand at the start of its message and is NONE too.
+     */
     public static NodeEvent classifyNodeLine(String line) {
-        if (line == null || line.isEmpty()) {
+        NodeLogLines.NodeLine n = NodeLogLines.parseNodeLine(line);
+        if (n == null) {
             return NodeEvent.NONE;
         }
-        if (line.contains(N_ACCEPTED)) {
+        String msg = n.message;
+        if (NodeLogLines.messageStartsWith(msg, N_ACCEPTED)) {
             return NodeEvent.BLOCK_ACCEPTED;
         }
-        if (line.contains(N_REJECTED)) {
+        if (NodeLogLines.messageStartsWith(msg, N_REJECTED)) {
             return NodeEvent.SEAL_REJECTED;
         }
-        if (line.contains(N_LISTENING)) {
+        if (NodeLogLines.messageStartsWith(msg, N_LISTENING)) {
             return NodeEvent.ENDPOINT_LISTENING;
         }
-        if (line.contains(N_ADDRESS)) {
+        if (NodeLogLines.messageStartsWith(msg, N_ADDRESS)) {
             return NodeEvent.REWARDS_ADDRESS;
+        }
+        if (NodeLogLines.messageStartsWith(msg, N_ENDPOINT_FAILED)) {
+            return NodeEvent.MINER_ENDPOINT_FAILED;
         }
         return NodeEvent.NONE;
     }
@@ -1086,12 +1123,28 @@ public final class MiningLogic {
         public final boolean endpointListening;
         /** The running miner announced a live metrics endpoint. */
         public final boolean metricsExporterActive;
+        /** The node reported that its miner endpoint failed to
+         *  start (v4.2.4, audit L-7). */
+        public final boolean endpointFailed;
 
         StatsSnapshot(long jobsReceived, long solutionsSubmitted,
                       long blocksAccepted, long sealsRejected,
                       long lastJobElapsedMs, double hashrateHps,
                       String rewardsAddress, boolean endpointListening,
                       boolean metricsExporterActive) {
+            this(jobsReceived, solutionsSubmitted, blocksAccepted,
+                    sealsRejected, lastJobElapsedMs, hashrateHps,
+                    rewardsAddress, endpointListening,
+                    metricsExporterActive, false);
+        }
+
+        StatsSnapshot(long jobsReceived, long solutionsSubmitted,
+                      long blocksAccepted, long sealsRejected,
+                      long lastJobElapsedMs, double hashrateHps,
+                      String rewardsAddress, boolean endpointListening,
+                      boolean metricsExporterActive,
+                      boolean endpointFailed) {
+            this.endpointFailed = endpointFailed;
             this.jobsReceived = jobsReceived;
             this.solutionsSubmitted = solutionsSubmitted;
             this.blocksAccepted = blocksAccepted;
@@ -1126,8 +1179,17 @@ public final class MiningLogic {
      * port chose (see {@link #parseRewardsAddress}) — the address
      * on screen is what the user checks the destination against,
      * so such a line must not be able to change it. The two counts
-     * read from the node's lines have no such anchor and can be
-     * inflated the same way; the UI calls them estimates.
+     * read from the node's lines have no such anchor; since v4.2.4
+     * (audit L-2) only header-anchored lines feed them, which removes
+     * the cheap forgeries, and the UI still calls them estimates.
+     *
+     * The miner endpoint's two outcomes are facts of the node
+     * process as well (v4.2.4, audit L-7): "listening" is the one
+     * fact the supervisor starts a miner on, and "failed to start"
+     * latches for the rest of the process — the node ends its
+     * mining task (and itself) right after printing it. Only the
+     * first outcome counts (v4.2.4, audit V4-2): a line of the other
+     * kind after it is not the node's own report.
      */
     public static final class MinerStats {
         private static final int MAX_WORKERS = 64;
@@ -1139,6 +1201,7 @@ public final class MiningLogic {
         private long lastJobElapsedMs = -1;
         private String rewardsAddress;
         private boolean endpointListening;
+        private boolean endpointFailed;
         private boolean sawExporterDisabledNote;
         private boolean metricsExporterActive;
         /** worker -> {hashes per second, report time}. */
@@ -1184,16 +1247,38 @@ public final class MiningLogic {
             }
         }
 
-        public synchronized void onNodeLine(String line, long nowElapsedMs) {
-            switch (classifyNodeLine(line)) {
+        /** Take one node line into the statistics; returns what the
+         *  line evidenced, so the caller need not classify it twice. */
+        public synchronized NodeEvent onNodeLine(String line,
+                                                 long nowElapsedMs) {
+            NodeEvent event = classifyNodeLine(line);
+            switch (event) {
                 case BLOCK_ACCEPTED:
                     blocksAccepted++;
                     break;
                 case SEAL_REJECTED:
                     sealsRejected++;
                     break;
+                // v4.2.4 (audit V4-2): the first outcome wins. The node
+                // prints exactly one of the two per process, about 4 ms
+                // after its RPC line and before any peer or miner-port
+                // client can make it print anything, so a later line of
+                // the other kind can only be forged — and a forged
+                // failure would otherwise latch the session (no miner
+                // for the rest of the node process) and the summary's
+                // diagnosis. A refused line evidences nothing (NONE),
+                // so the caller does not act on it either.
                 case ENDPOINT_LISTENING:
+                    if (endpointFailed) {
+                        return NodeEvent.NONE;
+                    }
                     endpointListening = true;
+                    break;
+                case MINER_ENDPOINT_FAILED:
+                    if (endpointListening) {
+                        return NodeEvent.NONE;
+                    }
+                    endpointFailed = true;
                     break;
                 case REWARDS_ADDRESS:
                     // The first report only, and none once the
@@ -1208,6 +1293,7 @@ public final class MiningLogic {
                 default:
                     break;
             }
+            return event;
         }
 
         public synchronized StatsSnapshot snapshot(long nowElapsedMs) {
@@ -1222,7 +1308,7 @@ public final class MiningLogic {
             return new StatsSnapshot(jobsReceived, solutionsSubmitted,
                     blocksAccepted, sealsRejected, lastJobElapsedMs,
                     any ? sum : -1.0, rewardsAddress, endpointListening,
-                    metricsExporterActive);
+                    metricsExporterActive, endpointFailed);
         }
     }
 
@@ -1562,7 +1648,11 @@ public final class MiningLogic {
         /** The miner binary is not there. */
         BINARY_MISSING,
         /** The miner could not be spawned, directly or via linker64. */
-        START_FAILED
+        START_FAILED,
+        /** The node reported that it could not open its miner
+         *  endpoint (v4.2.4, audit L-7); no miner is started for the
+         *  rest of that node process. */
+        ENDPOINT_FAILED
     }
 
     /** An immutable view of the supervisor for the UI and the share. */
@@ -1799,6 +1889,13 @@ public final class MiningLogic {
             case BINARY_MISSING:
                 return p(UiState.STOPPED, UiReason.BINARY_MISSING);
             case START_FAILED:
+                return p(UiState.STOPPED, UiReason.START_FAILED);
+            case ENDPOINT_FAILED:
+                // v4.2.4 (audit L-7): the node could not open its
+                // miner endpoint, so no miner can be started for this
+                // node process. The existing sentence ("The miner
+                // could not be started.") says exactly that; the
+                // diagnostic summary names the cause.
                 return p(UiState.STOPPED, UiReason.START_FAILED);
             case STARTING:
             case IDLE:
@@ -2197,6 +2294,10 @@ public final class MiningLogic {
         public UiState uiState = UiState.OFF;
         public UiReason uiReason = UiReason.NONE;
         public MinerSnapshot miner;
+        /** The most recent node process reported that its miner
+         *  endpoint failed to start (v4.2.4, audit L-7); kept by the
+         *  service past the node's exit, which the failure causes. */
+        public boolean minerEndpointFailed;
     }
 
     /**
@@ -2232,6 +2333,13 @@ public final class MiningLogic {
                 ? "saved (value never shared)" : "not saved"));
         out.add("Rewards setting changed: " + orNa(f.rewardsChangedText));
         out.add("Miner state: " + stateWord(f.uiState, f.uiReason));
+        if (f.minerEndpointFailed) {
+            // v4.2.4 (audit L-7): fixed text, present only when the
+            // node reported the failure — the summary is otherwise
+            // unchanged, byte for byte.
+            out.add("Miner endpoint: failed to start (node log: \"Failed"
+                    + " to start miner server\")");
+        }
         String setting = normalizeWorkerSetting(f.workerSetting) == WORKERS_AUTO
                 ? "auto"
                 : String.valueOf(normalizeWorkerSetting(f.workerSetting));

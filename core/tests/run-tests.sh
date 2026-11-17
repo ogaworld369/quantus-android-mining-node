@@ -24,6 +24,8 @@ bash "$CORE/check-depin-deps.sh" core
   "$CORE_DIR/Ed25519.java" \
   "$CORE_DIR/DepinCore.java" \
   "$CORE_DIR/RpcClient.java" \
+  "$CORE_DIR/NodeRpcEndpoint.java" \
+  "$CORE_DIR/NodeProcess.java" \
   "$CORE_DIR/ObservationPlausibility.java" \
   "$CORE_DIR/SegmentPolicy.java" \
   "$CORE_DIR/ServiceGeneration.java" \

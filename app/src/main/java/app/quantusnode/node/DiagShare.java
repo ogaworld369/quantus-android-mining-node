@@ -39,9 +39,11 @@ import java.util.TimeZone;
  *    "off" against the "Telemetry: off" line is the standing
  *    example), never hide anything;
  *  - the log statistics the summary reports (timestamp range of
- *    the shared excerpt, WARN / ERROR line counts) and the network
- *    transport label the service stamps into the log when the
- *    connection type changes.
+ *    the shared excerpt, WARN / ERROR line counts) — taken, since
+ *    v4.2.4 (audit L-2), only from lines that carry the shipped
+ *    node's own header, so text a peer injected after a line break
+ *    cannot move them — and the network transport label the
+ *    service stamps into the log when the connection type changes.
  */
 public final class DiagShare {
 
@@ -465,38 +467,19 @@ public final class DiagShare {
     // ------------------------------------------------------------------
 
     /**
-     * The timestamp prefix of a node log line ("2026-11-06 21:09:31"),
-     * or null when the line does not start with one. The app's own
-     * "[app]" lines carry no timestamp and never match — the range
-     * therefore describes the node's lines, which is what a reader
-     * dates the excerpt by.
+     * The timestamp of a node log line, to the second
+     * ("2026-11-06 21:09:31"), or null when the line does not carry
+     * the node's own header. The app's own "[app]" lines carry no
+     * timestamp and never match — the range therefore describes the
+     * node's lines, which is what a reader dates the excerpt by.
+     * Since v4.2.4 (audit L-2) a stamp counts only on a line with the
+     * shipped node's full header ({@link NodeLogLines#parseNodeLine}):
+     * a fragment a peer injected after a line break cannot move the
+     * range by starting with a date.
      */
     static String lineTimestamp(String line) {
-        if (line == null || line.length() < 19) {
+        if (NodeLogLines.parseNodeLine(line) == null) {
             return null;
-        }
-        for (int i = 0; i < 19; i++) {
-            char c = line.charAt(i);
-            boolean ok;
-            switch (i) {
-                case 4:
-                case 7:
-                    ok = c == '-';
-                    break;
-                case 10:
-                    ok = c == ' ';
-                    break;
-                case 13:
-                case 16:
-                    ok = c == ':';
-                    break;
-                default:
-                    ok = c >= '0' && c <= '9';
-                    break;
-            }
-            if (!ok) {
-                return null;
-            }
         }
         return line.substring(0, 19);
     }
@@ -544,14 +527,17 @@ public final class DiagShare {
     }
 
     /**
-     * Lines whose level token stands where a log level stands:
-     * at the very start of the line, or — on one of the node's
-     * timestamped lines — in the slot right after the 19-char
-     * timestamp ("2026-11-06 21:01:00 WARN ..."). The position is
-     * the point: the same word appearing later in a line's text —
-     * a display name carrying "ERROR", a message mentioning a
-     * warning — is content, not a level, and must not inflate the
-     * summary's counts.
+     * Node lines whose level is {@code token} ("WARN", "ERROR"): the
+     * level slot of the shipped node's header, and nothing else
+     * (v4.2.4, audit L-2). Until v4.2.3 a level word also counted at
+     * the very start of any line and a few columns after a bare
+     * timestamp — which let a fragment a peer injected after a line
+     * break ("WARN …") inflate the count, while the node's real
+     * WARN lines, whose level stands in column 25 of the detailed
+     * header, were never counted at all (the 2026-11-14 device
+     * export reports "WARN lines: 0" over dozens of them). The same
+     * word anywhere in a message — a display name carrying "ERROR",
+     * a message mentioning a warning — is content, not a level.
      */
     public static int countLevelLines(String text, String token) {
         if (text == null || token == null || token.isEmpty()) {
@@ -562,7 +548,9 @@ public final class DiagShare {
         while (from < text.length()) {
             int nl = text.indexOf('\n', from);
             int end = nl < 0 ? text.length() : nl;
-            if (lineHasAnchoredToken(text, from, end, token)) {
+            NodeLogLines.NodeLine n =
+                    NodeLogLines.parseNodeLine(text.substring(from, end));
+            if (n != null && token.equals(n.level)) {
                 count++;
             }
             if (nl < 0) {
@@ -571,46 +559,6 @@ public final class DiagShare {
             from = nl + 1;
         }
         return count;
-    }
-
-    private static boolean lineHasAnchoredToken(String text, int start,
-                                                int end, String token) {
-        if (tokenWordAt(text, start, end, start, token)) {
-            return true;
-        }
-        // The level slot of a timestamped line: the timestamp is
-        // 19 chars, so the level begins at 20, give or take the
-        // spacing variants of the node's log format.
-        if (end - start > 20
-                && lineTimestamp(text.substring(start, end)) != null) {
-            for (int pos = start + 20; pos <= start + 24
-                    && pos + token.length() <= end; pos++) {
-                if (tokenWordAt(text, start, end, pos, token)) {
-                    return true;
-                }
-            }
-        }
-        return false;
-    }
-
-    /** The token at exactly {@code pos}, as a word (no letters around it). */
-    private static boolean tokenWordAt(String text, int lineStart,
-                                       int lineEnd, int pos, String token) {
-        int tlen = token.length();
-        if (pos + tlen > lineEnd
-                || !text.regionMatches(pos, token, 0, tlen)) {
-            return false;
-        }
-        boolean beforeOk = pos == lineStart
-                || !isAsciiLetter(text.charAt(pos - 1));
-        int after = pos + tlen;
-        boolean afterOk = after == lineEnd
-                || !isAsciiLetter(text.charAt(after));
-        return beforeOk && afterOk;
-    }
-
-    private static boolean isAsciiLetter(char c) {
-        return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z');
     }
 
     // ------------------------------------------------------------------
@@ -680,6 +628,12 @@ public final class DiagShare {
                 }
             }
         }
+        // v4.2.4 (audit I-1): every other address literal too —
+        // the node logs addresses the device has without them
+        // being interface addresses (the NAT-external address its
+        // peers confirm, "Discovered new external address for our
+        // node: /ip4/…"), and peers' addresses besides.
+        out = maskAddressLiterals(out);
         if (nodeNames != null) {
             // Longest first: a longer name containing a shorter
             // one must be masked whole, not clipped by it.
@@ -700,6 +654,245 @@ public final class DiagShare {
             }
         }
         return out;
+    }
+
+    /**
+     * Every IPv4 and IPv6 address literal in the text, replaced by
+     * {@link #IP_MASK} — except loopback (127.0.0.0/8, ::1 and its
+     * IPv4-mapped form), which stays readable because it is where
+     * the app talks to its own node, and the unspecified address
+     * (0.0.0.0, ::), which names no host (v4.2.4, audit I-1). Until
+     * v4.2.3 only the device's own interface addresses were masked,
+     * while the share dialog promised the device's IP addresses: the
+     * node also logs the external address its peers report back for
+     * it, and the masking now covers that and every other address.
+     *
+     * A literal counts only standing alone: not glued to the end of
+     * an identifier or a longer number (so "miner_service::quic",
+     * "std::io", "v1.0.5" are never read as addresses), and not
+     * followed by an identifier character. An IPv4 literal may carry
+     * a ":port" or end a sentence with "."; an IPv6 one may be
+     * bracketed or carry a "%zone" (the zone itself is kept). The
+     * parsing is strict — exactly four octets, or eight 16-bit groups
+     * with at most one "::" — so times ("13:01:28.418"), versions
+     * and MAC addresses are left alone. Returns the argument itself
+     * when nothing was masked.
+     */
+    static String maskAddressLiterals(String text) {
+        if (text == null) {
+            return null;
+        }
+        StringBuilder out = null;
+        int emitted = 0;
+        int n = text.length();
+        int i = 0;
+        while (i < n) {
+            char c = text.charAt(i);
+            if (!isAddressChar(c)
+                    || (i > 0 && isAddressNeighbour(text.charAt(i - 1)))) {
+                i++;
+                continue;
+            }
+            int end = i;
+            while (end < n && isAddressChar(text.charAt(end))) {
+                end++;
+            }
+            int len = addressLiteralLength(text, i, end);
+            if (len > 0) {
+                int after = i + len;
+                boolean glued = after < n && isIdentifierChar(text.charAt(after));
+                if (!glued) {
+                    byte[] addr = parseAddress(text.substring(i, after));
+                    if (addr != null && !keepsReadable(addr)) {
+                        if (out == null) {
+                            out = new StringBuilder(text.length());
+                        }
+                        out.append(text, emitted, i).append(IP_MASK);
+                        emitted = after;
+                    }
+                }
+            }
+            i = end;
+        }
+        if (out == null) {
+            return text;
+        }
+        out.append(text, emitted, n);
+        return out.toString();
+    }
+
+    private static boolean isAddressChar(char c) {
+        return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')
+                || (c >= 'A' && c <= 'F') || c == ':' || c == '.';
+    }
+
+    /** A character that, standing right before a run, makes the run
+     *  part of something longer (an identifier, a number, a path). */
+    private static boolean isAddressNeighbour(char c) {
+        return isIdentifierChar(c) || c == '.' || c == ':';
+    }
+
+    private static boolean isIdentifierChar(char c) {
+        return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z')
+                || (c >= 'A' && c <= 'Z') || c == '_';
+    }
+
+    /**
+     * The length of the address literal at the start of the run
+     * {@code text[start, end)}, or 0: the whole run when it is an
+     * IPv6 literal (trailing sentence dots aside), else four IPv4
+     * octets at its start followed by the run's end or a ":port".
+     */
+    private static int addressLiteralLength(String text, int start, int end) {
+        int e = end;
+        while (e > start && text.charAt(e - 1) == '.') {
+            e--; // a sentence ends after the address
+        }
+        if (e <= start) {
+            return 0;
+        }
+        String run = text.substring(start, e);
+        if (run.indexOf(':') >= 0 && parseIpv6(run) != null) {
+            return run.length();
+        }
+        int v4 = ipv4PrefixLength(run);
+        if (v4 > 0 && (v4 == run.length() || run.charAt(v4) == ':')) {
+            return v4;
+        }
+        return 0;
+    }
+
+    /** Characters of four dot-separated octets (0..255, 1–3 digits)
+     *  at the start of {@code s}, or 0. */
+    private static int ipv4PrefixLength(String s) {
+        int pos = 0;
+        for (int octet = 0; octet < 4; octet++) {
+            if (octet > 0) {
+                if (pos >= s.length() || s.charAt(pos) != '.') {
+                    return 0;
+                }
+                pos++;
+            }
+            int digits = 0;
+            int value = 0;
+            while (pos < s.length() && digits < 4
+                    && s.charAt(pos) >= '0' && s.charAt(pos) <= '9') {
+                value = value * 10 + (s.charAt(pos) - '0');
+                pos++;
+                digits++;
+            }
+            if (digits == 0 || digits > 3 || value > 255) {
+                return 0;
+            }
+        }
+        return pos;
+    }
+
+    private static byte[] parseAddress(String s) {
+        if (s.indexOf(':') >= 0) {
+            return parseIpv6(s);
+        }
+        if (ipv4PrefixLength(s) != s.length()) {
+            return null;
+        }
+        String[] parts = s.split("\\.");
+        byte[] b = new byte[4];
+        for (int i = 0; i < 4; i++) {
+            b[i] = (byte) Integer.parseInt(parts[i]);
+        }
+        return b;
+    }
+
+    /** A strict IPv6 literal (eight 16-bit groups, at most one "::",
+     *  an optional dotted IPv4 tail), as 16 bytes; null otherwise. */
+    private static byte[] parseIpv6(String s) {
+        int dc = s.indexOf("::");
+        if (dc >= 0 && s.indexOf("::", dc + 1) >= 0) {
+            return null;
+        }
+        String head = dc >= 0 ? s.substring(0, dc) : s;
+        String tail = dc >= 0 ? s.substring(dc + 2) : "";
+        java.util.List<Integer> h = new java.util.ArrayList<>();
+        java.util.List<Integer> t = new java.util.ArrayList<>();
+        if (!ipv6Groups(head, h, dc < 0) || !ipv6Groups(tail, t, true)) {
+            return null;
+        }
+        int total = h.size() + t.size();
+        if (dc < 0 ? total != 8 : total > 7) {
+            return null;
+        }
+        byte[] b = new byte[16];
+        int g = 0;
+        for (int v : h) {
+            b[g * 2] = (byte) (v >> 8);
+            b[g * 2 + 1] = (byte) v;
+            g++;
+        }
+        g = 8 - t.size();
+        for (int v : t) {
+            b[g * 2] = (byte) (v >> 8);
+            b[g * 2 + 1] = (byte) v;
+            g++;
+        }
+        return b;
+    }
+
+    /** Parse colon-separated 16-bit groups into {@code out}; the last
+     *  part may be a dotted IPv4 (two groups) when {@code last}. */
+    private static boolean ipv6Groups(String part, java.util.List<Integer> out,
+                                      boolean last) {
+        if (part.isEmpty()) {
+            return true;
+        }
+        String[] groups = part.split(":", -1);
+        for (int i = 0; i < groups.length; i++) {
+            String g = groups[i];
+            if (last && i == groups.length - 1 && g.indexOf('.') >= 0) {
+                if (ipv4PrefixLength(g) != g.length()) {
+                    return false;
+                }
+                String[] o = g.split("\\.");
+                out.add((Integer.parseInt(o[0]) << 8) | Integer.parseInt(o[1]));
+                out.add((Integer.parseInt(o[2]) << 8) | Integer.parseInt(o[3]));
+                return true;
+            }
+            if (g.isEmpty() || g.length() > 4) {
+                return false;
+            }
+            int v = 0;
+            for (int k = 0; k < g.length(); k++) {
+                int d = Character.digit(g.charAt(k), 16);
+                if (d < 0) {
+                    return false;
+                }
+                v = v * 16 + d;
+            }
+            out.add(v);
+        }
+        return true;
+    }
+
+    /** Loopback (127/8, ::1, ::ffff:127.x) and unspecified (0.0.0.0,
+     *  ::) stay readable; every other address is masked. */
+    private static boolean keepsReadable(byte[] a) {
+        if (a.length == 4) {
+            return (a[0] & 0xff) == 127 || isAllZero(a, 0, 4);
+        }
+        if (isAllZero(a, 0, 15) && (a[15] == 1 || a[15] == 0)) {
+            return true; // ::1, ::
+        }
+        boolean v4Mapped = isAllZero(a, 0, 10)
+                && (a[10] & 0xff) == 0xff && (a[11] & 0xff) == 0xff;
+        return v4Mapped && ((a[12] & 0xff) == 127 || isAllZero(a, 12, 16));
+    }
+
+    private static boolean isAllZero(byte[] a, int from, int to) {
+        for (int i = from; i < to; i++) {
+            if (a[i] != 0) {
+                return false;
+            }
+        }
+        return true;
     }
 
     /**

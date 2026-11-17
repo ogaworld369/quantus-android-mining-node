@@ -36,6 +36,14 @@ import java.nio.charset.StandardCharsets;
  * number the receiver displayed, which the sender recomputes
  * and compares. The person carries 8 digits; the transfer
  * code itself never travels back.
+ *
+ * v4.2.4 (audit L-1): the key above is the v1 derivation, and
+ * it made the number a fast offline test for the transfer code.
+ * Packages are now marked "commit_v": 2 in their manifest and
+ * keyed by {@link #deriveKeyFromConfirmSecret} instead — the
+ * number's arithmetic is unchanged, only its key. A package
+ * without the mark (from an older sender) keeps the v1 number,
+ * so handovers already in flight between builds still verify.
  */
 public final class TransferCommitCode {
     private TransferCommitCode() {}
@@ -44,6 +52,49 @@ public final class TransferCommitCode {
     public static byte[] deriveKey(String transferCode) {
         return DepinCore.sha256(
                 transferCode.getBytes(StandardCharsets.UTF_8));
+    }
+
+    /** The v2 derivation's domain label (v4.2.4, audit L-1). */
+    private static final byte[] V2_LABEL =
+            "easy-commit/v2".getBytes(StandardCharsets.UTF_8);
+
+    /**
+     * The v2 HMAC key (v4.2.4, audit L-1): SHA-256("easy-commit/v2"
+     * || confirm_secret), from the 128-bit secret both sides already
+     * hold — the sender in its vault entry for the generation, the
+     * receiver wrapped in its staging record. The v1 key, a plain
+     * SHA-256 of the transfer code, made the 8-digit number a fast
+     * offline test for the code: anyone holding a package and its
+     * number could check a candidate code with one hash and one HMAC
+     * instead of the 600,000-iteration PBKDF2 that guards the
+     * package. Without the confirm secret — which only an opened
+     * package yields — the v2 number says nothing about the code.
+     */
+    public static byte[] deriveKeyFromConfirmSecret(byte[] confirmSecret) {
+        byte[] msg = new byte[V2_LABEL.length + confirmSecret.length];
+        System.arraycopy(V2_LABEL, 0, msg, 0, V2_LABEL.length);
+        System.arraycopy(confirmSecret, 0, msg, V2_LABEL.length,
+                confirmSecret.length);
+        try {
+            return DepinCore.sha256(msg);
+        } finally {
+            java.util.Arrays.fill(msg, (byte) 0);
+        }
+    }
+
+    /** The manifest field that marks a v2 package (v4.2.4). */
+    public static final String MANIFEST_COMMIT_VERSION = "commit_v";
+
+    /**
+     * Which derivation a package's number uses: 2 when its manifest
+     * carries "commit_v": 2 (every package since v4.2.4), 1 when the
+     * field is absent (a package from an older sender, whose number
+     * is still derived from the transfer code).
+     */
+    public static int commitVersionOf(java.util.Map<String, Object> manifest) {
+        Object v = manifest == null ? null
+                : manifest.get(MANIFEST_COMMIT_VERSION);
+        return (v instanceof Long && (Long) v == 2L) ? 2 : 1;
     }
 
     /** The 8-digit confirmation number for a derived key and

@@ -13,10 +13,16 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * JSON-RPC client for the on-device Quantus node's loopback RPC
- * (HTTP POST http://127.0.0.1:9944/), the same surface the Node app
- * itself polls. Only methods that pass the node's `--rpc-methods
- * safe` gate are used (bridge design memo section 2): system_health,
+ * JSON-RPC client for the on-device Quantus node's loopback RPC, the
+ * same surface the Node app itself polls. Since v4.2.4 (audit M-1)
+ * the address is not fixed: the node silently rebinds to a random
+ * port when 127.0.0.1:9944 is taken, so every round reads the
+ * verified-endpoint record ({@link NodeRpcEndpoint}, written by the
+ * Node app from the node's own startup output), calls only the
+ * recorded address, and adopts nothing until that address answers
+ * system_localPeerId with the recorded identity; with no record the
+ * round fails closed. Only methods that pass the node's
+ * `--rpc-methods safe` gate are used (bridge design memo section 2): system_health,
  * system_syncState, system_localPeerId, chain_getBlockHash,
  * chain_getFinalizedHead, chain_getHeader. Peer lists
  * (system_peers) are unsafe-gated and deliberately NOT attempted:
@@ -92,7 +98,6 @@ import java.util.Map;
  * behaviour is exactly as before.
  */
 public final class RpcClient {
-    public static final String DEFAULT_ENDPOINT = "http://127.0.0.1:9944/";
     private static final int CONNECT_TIMEOUT_MS = 3000;
     private static final int READ_TIMEOUT_MS = 5000;
     private static final int MAX_RESPONSE_BYTES = 256 * 1024;
@@ -117,18 +122,15 @@ public final class RpcClient {
     /** Sanity bound for the reported peer count at intake. */
     static final int MAX_PEERS = 100_000;
 
-    private final String endpoint;
     private final Transport transport;
+    /** Non-null for every client the app builds
+     *  ({@link #forNodeRecord}); null only for the harness's
+     *  ungated transport seams. */
+    private final EndpointSource endpointSource;
     private AttemptGate attemptGate;
     private final long observationDeadlineMs;
     private int nextId = 1;
     private long roundStartNanos = 0;
-
-    public RpcClient(String endpoint) {
-        this.endpoint = endpoint;
-        this.transport = null; // HTTP transport (default path below)
-        this.observationDeadlineMs = OBSERVATION_DEADLINE_MS;
-    }
 
     /** Test seam: the JVM harness injects a canned transport so the
      *  full request/response logic is exercised without sockets
@@ -156,11 +158,86 @@ public final class RpcClient {
         this(transport, OBSERVATION_DEADLINE_MS);
     }
 
+    /**
+     * Where a gated client's endpoint comes from (v4.2.4, audit
+     * M-1): the current verified-endpoint record, or null when the
+     * node has not reported one (not running, or not started far
+     * enough). Throwing means the record exists but cannot be
+     * trusted; both fail the round closed.
+     */
+    interface EndpointSource {
+        NodeRpcEndpoint current() throws RpcException;
+    }
+
+    /**
+     * The production client (v4.2.4, audit M-1): every round reads
+     * the verified-endpoint record the Node app keeps at
+     * {@code recordFile}, sends its calls to the recorded address
+     * only, and adopts nothing unless that address answers
+     * system_localPeerId with the recorded identity. Without a
+     * readable record every round fails closed — no observation is
+     * signed and no transfer height is read — with the same
+     * RpcException a stopped node produces. Since V4-1 the record is
+     * also trusted only while the node process it names is alive:
+     * {@code nodeBinaryPath} is this app's node executable
+     * ({@link NodeProcess#binaryPath}), and {@code bootWallMillis}
+     * gives the current boot's wall-clock start (now minus the time
+     * since boot) at each round.
+     */
+    public static RpcClient forNodeRecord(final java.io.File recordFile,
+                                          final String nodeBinaryPath,
+                                          final java.util.function.LongSupplier
+                                                  bootWallMillis) {
+        return new RpcClient(null, recordSource(recordFile, NodeProcess.PROC,
+                nodeBinaryPath, bootWallMillis));
+    }
+
+    /**
+     * The production endpoint source (v4.2.4, audits M-1 and V4-1),
+     * over {@code procRoot} (the real /proc in production, a stand-in
+     * tree in the harness): no record is no endpoint; an unreadable
+     * record, or one whose node process is gone
+     * ({@link NodeRpcEndpoint#staleReason}), fails the round before
+     * any request is sent.
+     */
+    static EndpointSource recordSource(final java.io.File recordFile,
+                                       final java.io.File procRoot,
+                                       final String nodeBinaryPath,
+                                       final java.util.function.LongSupplier
+                                               bootWallMillis) {
+        return () -> {
+            final NodeRpcEndpoint ep;
+            try {
+                ep = NodeRpcEndpoint.read(recordFile);
+            } catch (IOException | IllegalArgumentException e) {
+                throw new RpcException("node RPC endpoint record"
+                        + " unreadable: " + e.getMessage(), e);
+            }
+            if (ep == null) {
+                return null;
+            }
+            String stale = ep.staleReason(procRoot, nodeBinaryPath,
+                    bootWallMillis.getAsLong());
+            if (stale != null) {
+                throw new RpcException("node RPC endpoint record is stale ("
+                        + stale + "); nothing adopted");
+            }
+            return ep;
+        };
+    }
+
+    /** Test seam: a gated client over an injected transport. */
+    RpcClient(Transport transport, EndpointSource source) {
+        this.transport = transport;
+        this.endpointSource = source;
+        this.observationDeadlineMs = OBSERVATION_DEADLINE_MS;
+    }
+
     /** Test seam with an explicit observation deadline, so the
      *  harness can exercise the deadline path without waiting 20 s. */
     RpcClient(Transport transport, long observationDeadlineMs) {
-        this.endpoint = "(injected transport)";
         this.transport = transport;
+        this.endpointSource = null;
         this.observationDeadlineMs = observationDeadlineMs;
     }
 
@@ -232,6 +309,13 @@ public final class RpcClient {
     }
 
     synchronized Object call(String method, List<Object> params) throws RpcException {
+        return call(null, method, params);
+    }
+
+    /** One call; {@code ep} is the verified endpoint for the HTTP
+     *  transport (an injected transport ignores it). */
+    synchronized Object call(NodeRpcEndpoint ep, String method,
+                             List<Object> params) throws RpcException {
         AttemptGate gate = this.attemptGate;
         if (gate != null) {
             gate.beforeAttempt(method);
@@ -244,7 +328,15 @@ public final class RpcClient {
         req.put("params", params);
         byte[] body = Json.canonicalBytes(req);
         try {
-            byte[] raw = (transport != null) ? transport.post(body) : httpPost(body, method);
+            final byte[] raw;
+            if (transport != null) {
+                raw = transport.post(body);
+            } else if (ep != null) {
+                raw = httpPost(ep.url(), body, method);
+            } else {
+                throw new RpcException(method
+                        + ": no verified node endpoint for this call");
+            }
             checkDeadline(method);
             if (raw.length > MAX_RESPONSE_BYTES) {
                 throw new RpcException(method + ": response exceeds "
@@ -301,11 +393,12 @@ public final class RpcClient {
      *  so a slow-drip endpoint is cut off at the deadline itself —
      *  by the per-read socket timeout and by the in-loop deadline
      *  check plus disconnect in readCapped. */
-    private byte[] httpPost(byte[] body, String method) throws RpcException {
+    private byte[] httpPost(String url, byte[] body, String method)
+            throws RpcException {
         final long deadlineNanos = callDeadlineNanos();
         HttpURLConnection conn = null;
         try {
-            conn = (HttpURLConnection) new URL(endpoint).openConnection();
+            conn = (HttpURLConnection) new URL(url).openConnection();
             conn.setConnectTimeout((int) Math.min(CONNECT_TIMEOUT_MS,
                     remainingMs(deadlineNanos, method)));
             conn.setReadTimeout((int) Math.min(READ_TIMEOUT_MS,
@@ -647,7 +740,16 @@ public final class RpcClient {
             beginRound();
         }
         try {
-            return fetchObservationRound();
+            // v4.2.4 (audit M-1): the round's endpoint first — the
+            // node's recorded address, answering with the node's
+            // recorded identity — and only then the reads, all sent
+            // to that address. A failure here adopts nothing.
+            NodeRpcEndpoint ep = verifiedEndpoint();
+            NodeObservation out = fetchObservationRound(ep);
+            if (ep != null) {
+                out.localPeerId = ep.peerId;
+            }
+            return out;
         } catch (IllegalArgumentException e) {
             // Final check round 4 (I-13): the result-shape
             // checks (Json.asObject / asString / asBool on a
@@ -666,21 +768,48 @@ public final class RpcClient {
         }
     }
 
-    private NodeObservation fetchObservationRound()
+    /**
+     * The endpoint this round may use (v4.2.4, audit M-1): for a
+     * gated client, the current record — none fails the round closed
+     * — after its address has answered system_localPeerId with the
+     * recorded identity; null for the harness's ungated seams. The
+     * identity call is an ordinary call: the attempt gate charges it
+     * to the round like every other.
+     */
+    private NodeRpcEndpoint verifiedEndpoint() throws RpcException {
+        if (endpointSource == null) {
+            return null;
+        }
+        NodeRpcEndpoint ep = endpointSource.current();
+        if (ep == null) {
+            throw new RpcException("node RPC endpoint not recorded: the"
+                    + " node is not running, or has not reported its"
+                    + " endpoint and identity yet");
+        }
+        Object id = call(ep, "system_localPeerId", params());
+        if (!(id instanceof String) || !ep.peerId.equals(id)) {
+            throw new RpcException("system_localPeerId: the endpoint at "
+                    + ep.host + ":" + ep.port + " does not answer with the"
+                    + " identity the node reported; nothing adopted");
+        }
+        return ep;
+    }
+
+    private NodeObservation fetchObservationRound(NodeRpcEndpoint ep)
             throws RpcException, InconsistentObservation {
-        Map<String, Object> sync1 = Json.asObject(call("system_syncState", params()));
+        Map<String, Object> sync1 = Json.asObject(call(ep, "system_syncState", params()));
         long currentBlock = strictJsonBlockNumber(
                 sync1.get("currentBlock"), "system_syncState.currentBlock");
         long highestBlock = strictJsonBlockNumber(
                 sync1.get("highestBlock"), "system_syncState.highestBlock");
 
-        String bestHashHex = Json.asString(call("chain_getBlockHash", params(currentBlock)));
+        String bestHashHex = Json.asString(call(ep, "chain_getBlockHash", params(currentBlock)));
         byte[] bestHash = strictHash32(bestHashHex, "chain_getBlockHash");
 
-        String finalizedHashHex = Json.asString(call("chain_getFinalizedHead", params()));
+        String finalizedHashHex = Json.asString(call(ep, "chain_getFinalizedHead", params()));
         strictHash32(finalizedHashHex, "chain_getFinalizedHead");
         Map<String, Object> header = Json.asObject(
-                call("chain_getHeader", params(finalizedHashHex)));
+                call(ep, "chain_getHeader", params(finalizedHashHex)));
         long finalizedNumber = parseHexBlockNumber(
                 Json.asString(header.get("number")));
         if (finalizedNumber > currentBlock) {
@@ -693,11 +822,11 @@ public final class RpcClient {
                             + " ahead of best block " + currentBlock);
         }
 
-        Map<String, Object> health = Json.asObject(call("system_health", params()));
+        Map<String, Object> health = Json.asObject(call(ep, "system_health", params()));
         int peers = strictPeerCount(health.get("peers"));
         boolean syncing = Json.asBool(health.get("isSyncing"));
 
-        Map<String, Object> sync2 = Json.asObject(call("system_syncState", params()));
+        Map<String, Object> sync2 = Json.asObject(call(ep, "system_syncState", params()));
         long currentBlock2 = strictJsonBlockNumber(
                 sync2.get("currentBlock"), "system_syncState.currentBlock");
         if (currentBlock2 != currentBlock) {
@@ -720,7 +849,12 @@ public final class RpcClient {
         return out;
     }
 
+    /** The node's peer ID: for a gated client, the recorded identity
+     *  once its address has answered with it (v4.2.4, audit M-1). */
     public String fetchLocalPeerId() throws RpcException {
+        if (endpointSource != null) {
+            return verifiedEndpoint().peerId;
+        }
         try {
             return Json.asString(call("system_localPeerId", params()));
         } catch (IllegalArgumentException e) {
