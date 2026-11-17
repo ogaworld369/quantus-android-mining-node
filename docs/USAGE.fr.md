@@ -72,11 +72,12 @@ Pour obtenir un Inner Hash :
 
 - Sur un PC, exécutez la commande du nœud officiel `quantus-node key quantus --scheme wormhole`. Elle affiche trois valeurs : l'**Address** (où iront les récompenses), l'**Inner Hash** (la valeur dont cette application a besoin) et une **Secret phrase** (votre sauvegarde — conservez-la en lieu sûr, hors ligne).
 - Si vous utilisez déjà le portefeuille officiel, vous pouvez dériver les mêmes valeurs depuis sa phrase de récupération : ajoutez `--words` à la même commande et saisissez la phrase lorsqu'elle est demandée — sur le PC, jamais dans cette application. Avec la même phrase de récupération, les récompenses apparaissent automatiquement dans ce portefeuille.
+- Ou, dans l'application officielle du portefeuille Quantus, ouvrez le menu du **Encrypted Account** et choisissez **Inner Hash** : l'application affiche directement l'Inner Hash de ce compte, et les récompenses seront versées à cet Encrypted Account. Aucun PC n'est nécessaire, et la phrase de récupération ne quitte jamais l'application du portefeuille.
 
 Ensuite, dans l'application :
 
 1. Ouvrez **Réglages → Minage** et collez la valeur de l'**Inner Hash** (de la forme `0x` suivi de 64 chiffres hexadécimaux). Ne saisissez que l'Inner Hash — jamais une phrase de récupération ni une clé secrète : l'Inner Hash est inscrit dans chaque bloc produit par cet appareil et devient public.
-2. L'application affiche l'adresse de récompenses que le nœud signale pour votre Inner Hash. Comparez-la à l'**Address** donnée par l'outil avant de vous y fier.
+2. L'application affiche l'adresse de récompenses que le nœud signale pour votre Inner Hash. Comparez-la à l'adresse de la même source — l'**Address** donnée par l'outil, ou le **Encrypted Account** dans l'application du portefeuille — avant de vous y fier.
 3. Activez le minage, puis redémarrez le nœud (Arrêter → Démarrer). Les réglages de minage s'appliquent au prochain démarrage du nœud.
 
 **Vérifiez soigneusement l'Inner Hash avant d'enregistrer.** S'il est faux, les récompenses seront versées à cette mauvaise destination et ne pourront pas être récupérées. La valeur enregistrée reste uniquement sur cet appareil ; l'application ne l'affiche jamais à l'écran, dans les journaux ni dans les textes partagés.
