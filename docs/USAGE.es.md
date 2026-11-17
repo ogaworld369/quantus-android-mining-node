@@ -72,11 +72,12 @@ Para obtener un Inner Hash:
 
 - En un PC, ejecuta el comando del nodo oficial `quantus-node key quantus --scheme wormhole`. Muestra tres valores: la **Address** (a dónde irán las recompensas), el **Inner Hash** (el valor que necesita esta aplicación) y una **Secret phrase** (tu copia de seguridad: guárdala en un lugar seguro, sin conexión).
 - Si ya usas la billetera oficial, puedes derivar los mismos valores desde su frase semilla: añade `--words` al mismo comando e introduce la frase cuando se te pida — en el PC, nunca en esta aplicación. Con la misma frase semilla, las recompensas aparecen automáticamente en esa billetera.
+- O, en la aplicación oficial de la billetera Quantus, abre el menú de la **Encrypted Account** y elige **Inner Hash**: la aplicación muestra directamente el Inner Hash de esa cuenta, y las recompensas se pagarán a esa Encrypted Account. No necesitas un PC, y la frase semilla nunca sale de la aplicación de la billetera.
 
 Después, en la aplicación:
 
 1. Abre **Ajustes → Minería** y pega el valor del **Inner Hash** (tiene la forma de `0x` seguido de 64 dígitos hexadecimales). Introduce solo el Inner Hash — nunca una frase semilla ni una clave secreta: el Inner Hash se escribe en cada bloque que produce este dispositivo y se hace público.
-2. La aplicación muestra la dirección de recompensas que el nodo informa para tu Inner Hash. Compárala con la **Address** de la herramienta antes de confiar en ella.
+2. La aplicación muestra la dirección de recompensas que el nodo informa para tu Inner Hash. Compárala con la dirección de la misma fuente — la **Address** de la herramienta, o la **Encrypted Account** en la aplicación de la billetera — antes de confiar en ella.
 3. Activa la minería y reinicia el nodo (Detener → Iniciar). Los ajustes de minería se aplican desde el siguiente inicio del nodo.
 
 **Comprueba el Inner Hash con cuidado antes de guardar.** Si es incorrecto, las recompensas se pagarán a ese destino erróneo y no podrán recuperarse. El valor guardado permanece solo en este dispositivo; la aplicación nunca lo muestra en pantalla, en registros ni en textos compartidos.
