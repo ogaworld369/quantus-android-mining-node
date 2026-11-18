@@ -10,7 +10,7 @@ The design concept is to make the node's pulse visible: live block/peer visualiz
 
 | | |
 |---|---|
-| Current release | **v4.2.4** (versionCode 70), published 2026-11-17 — [release page](https://github.com/ogaworld369/quantus-android-mining-node/releases/tag/v4.2.4) |
+| Current release | **v4.2.5** (versionCode 71), published 2026-11-18 — [release page](https://github.com/ogaworld369/quantus-android-mining-node/releases/tag/v4.2.5) |
 | First public release | v0.1.0, published 2026-11-04 |
 | Download | Signed APK from [GitHub Releases](https://github.com/ogaworld369/quantus-android-mining-node/releases) |
 | Requirements | Android 12 or later, arm64 device |
@@ -24,6 +24,10 @@ The design concept is to make the node's pulse visible: live block/peer visualiz
 - **It is** a full node for Quantus mainnet: it syncs, verifies every block itself, and relays data to peers. With mining switched on (v4.0.0, opt-in and off by default), the same node also validates and mines for the user's own rewards address.
 - **It is not** a wallet. It never handles wallet seed phrases and cannot spend funds. The one mining value it can hold is the rewards inner hash the user pastes in — a preimage that is published in block headers when mining and controls no assets by itself (see "Security first" below).
 - **New in v3.0 — activity recording (DePIN), built in.** Opt-in and off by default. With it on, the app keeps a signed record of the node's uptime and relay work, which you can export as a proof bundle file whenever you choose.
+
+## What's in v4.2.5
+
+- **Mining is faster: the bundled miner now hashes in batches.** The miner's proof-of-work engine processes four nonces at a time in a transposed layout that reuses one hashing setup across the batch — measured on a Pixel 9a at **436,642 hashes/s per thread against 357,195 for the previous engine (about 1.22x)**. The batched engine is plain Rust with no unsafe code, is differentially tested against the previous engine and the reference implementation, and returns exactly the same results; SIMD variants (NEON, SVE2) and profile-guided builds were measured on the same device and were not adopted. The bundled node binary is unchanged, there are no feature or permission changes, and mining stays opt-in and off by default. Details: [CHANGELOG.md](CHANGELOG.md), [docs/BUILD-miner.md](docs/BUILD-miner.md).
 
 ## What's in v4.2.4
 
@@ -90,7 +94,7 @@ Details and the full version history: [CHANGELOG.md](CHANGELOG.md).
 
 ## Download
 
-Get the signed APK from [GitHub Releases](https://github.com/ogaworld369/quantus-android-mining-node/releases). The current release is [v4.2.4](https://github.com/ogaworld369/quantus-android-mining-node/releases/tag/v4.2.4); its APK size and SHA-256 are listed on the release page (and in the release records in [docs/RELEASE.md](docs/RELEASE.md)), so you can verify your download. v4.2.4 installs over v4.2.3 keeping settings and records.
+Get the signed APK from [GitHub Releases](https://github.com/ogaworld369/quantus-android-mining-node/releases). The current release is [v4.2.5](https://github.com/ogaworld369/quantus-android-mining-node/releases/tag/v4.2.5); its APK size and SHA-256 are listed on the release page (and in the release records in [docs/RELEASE.md](docs/RELEASE.md)), so you can verify your download. v4.2.5 installs over v4.2.4 keeping settings and records.
 
 ## Usage
 
@@ -98,7 +102,7 @@ New to the app? Start with the Usage Guide — available in all 9 languages the 
 
 ## Status
 
-- Publicly released since 2026-11-04; the current release is v4.2.4 (above). Per-version details live in the [CHANGELOG](CHANGELOG.md), not here.
+- Publicly released since 2026-11-04; the current release is v4.2.5 (above). Per-version details live in the [CHANGELOG](CHANGELOG.md), not here.
 - Still being watched on the reference device: the remaining on-device checks — where the pruned database size plateaus, and battery/heat over long uptimes.
 - Release gates: [docs/RELEASE.md](docs/RELEASE.md). Design: [docs/DESIGN.md](docs/DESIGN.md).
 

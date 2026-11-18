@@ -2,7 +2,7 @@
 
 Created: 2026-11-03. By the owner's decision, a public release (APK distribution via GitHub Release) is performed only after passing the following gates. Items are of two kinds: **blocking** items, which must pass before anything is published, and **tracked** items (long-running measurements and standing checks, marked as such), which are recorded and reviewed at each release but do not by themselves hold a release back. (Until 2026-11-16 this page stated that nothing is published while any item is unpassed; in practice the tracked items stayed open across v0.1.0-v4.2.1, and the wording now matches the practice.)
 
-Current status: v4.2.4 (versionCode 70), published 2026-11-17, is the current release. The per-release records - what changed, the APK size and SHA-256, and what was verified before publication - are in the [CHANGELOG](../CHANGELOG.md) (newest first) and in the Gate 6 list below. Until v4.2.1 this paragraph carried the full narrative record of every release; that text remains in this file's git history.
+Current status: v4.2.5 (versionCode 71), published 2026-11-18, is the current release. The per-release records - what changed, the APK size and SHA-256, and what was verified before publication - are in the [CHANGELOG](../CHANGELOG.md) (newest first) and in the Gate 6 list below. Until v4.2.1 this paragraph carried the full narrative record of every release; that text remains in this file's git history.
 
 ## Gate 1: Real-device verification (Pixel 9a / GrapheneOS)
 
